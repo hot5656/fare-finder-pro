@@ -74,3 +74,47 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+## Environment variables (Supabase)
+
+`.env` needs two copies of each Supabase value — one without a `VITE_`
+prefix, one with:
+
+```
+SUPABASE_PROJECT_ID="..."
+SUPABASE_PUBLISHABLE_KEY="..."
+SUPABASE_URL="..."
+
+VITE_SUPABASE_PROJECT_ID="..."
+VITE_SUPABASE_PUBLISHABLE_KEY="..."
+VITE_SUPABASE_URL="..."
+```
+
+**Why two sets:** this app runs on both the server (SSR / server functions,
+via Nitro/Node) and the browser (client bundle, via Vite). Vite only
+inlines env vars prefixed with `VITE_` into the browser bundle — anything
+without that prefix stays in `process.env` and is only readable
+server-side. This is a Vite security boundary: it stops server-only
+secrets from silently leaking into client-side JS. Since
+`src/integrations/supabase/client.ts` runs in both environments, it needs
+a `VITE_`-prefixed copy for the browser and a plain copy for SSR:
+
+```ts
+const SUPABASE_URL = import.meta.env['VITE_SUPABASE_URL'] || process.env['SUPABASE_URL'];
+```
+
+**Both sets must point to the same Supabase project.** If they diverge
+(e.g. one pair references a different `SUPABASE_PROJECT_ID` than the
+other), the browser will authenticate against a different project than
+the server expects, and sign-in will fail even for accounts that exist —
+symptoms look like "wrong password" but are actually a project mismatch.
+
+`VITE_SUPABASE_PUBLISHABLE_KEY` is Supabase's public/anon-equivalent API
+key (new naming for what used to be called the `anon key`). It's meant to
+be exposed in client-side code — access control is enforced by Supabase
+Row Level Security (RLS) policies, not by keeping this key secret. Never
+put a `service_role`/`secret` key in a `VITE_`-prefixed variable — that
+one bypasses RLS and must stay server-only.
+
+Changing `.env` requires restarting the dev server (`npm run dev`) — Vite
+only reads env files at startup, not via HMR.
