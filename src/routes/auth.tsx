@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { APP_NAME, hasAppAccess } from "@/integrations/supabase/app-scope";
 import { SiteHeader } from "@/components/SiteHeader";
 
 export const Route = createFileRoute("/auth")({
@@ -39,9 +40,19 @@ function AuthPage() {
     setNotice(null);
 
     if (mode === "sign-in") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         setError(error.message);
+        setLoading(false);
+        return;
+      }
+      if (!hasAppAccess(data.user?.app_metadata)) {
+        // Correct password, but this account was never registered for this
+        // app specifically — reject here rather than auto-joining. Joining
+        // only happens through the explicit sign-up flow below (matched
+        // password or a verified password reset), never just by signing in.
+        await supabase.auth.signOut();
+        setError("Invalid login credentials");
         setLoading(false);
         return;
       }
@@ -52,13 +63,52 @@ function AuthPage() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: window.location.origin },
+      options: {
+        emailRedirectTo: window.location.origin,
+        data: { app: APP_NAME },
+      },
     });
-    setLoading(false);
-    if (error) {
+
+    // Whether a duplicate email surfaces as an explicit error or as a
+    // silently-obfuscated "success" depends on this shared project's Email
+    // Enumeration Protection setting — handle both signals.
+    const alreadyRegistered =
+      error?.code === "user_already_exists" ||
+      (!error && !!data.user && data.user.identities?.length === 0);
+
+    if (error && !alreadyRegistered) {
+      setLoading(false);
       setError(error.message);
       return;
     }
+
+    if (alreadyRegistered) {
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (!signInError && signInData.user) {
+        await supabase.auth.updateUser({ data: { app: APP_NAME } });
+        await supabase.auth.refreshSession();
+        setLoading(false);
+        navigate({ to: "/dashboard" });
+        return;
+      }
+      // Password didn't match the existing account — only a click on the
+      // emailed link can change it, never an unauthenticated guess.
+      await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset`,
+      });
+      setLoading(false);
+      setNotice(
+        "此 email 已有帳號。我們已寄送一封密碼重設信，請至信箱點擊連結設定密碼以啟用本服務。" +
+          "注意：重設後的新密碼將同步成為您在所有共用此帳號系統之服務的登入密碼。",
+      );
+      setMode("sign-in");
+      return;
+    }
+
+    setLoading(false);
     if (!data.session) {
       setNotice("Check your email to confirm your account, then sign in. 請到信箱收確認信。");
       setMode("sign-in");
