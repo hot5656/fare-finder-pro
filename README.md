@@ -187,7 +187,7 @@ WHERE tgrelid = 'auth.users'::regclass AND NOT tgisinternal;
 - 自己的登入頁自己判斷 `apps` 陣列裡有沒有那個名稱
 - **不需要**再建立任何新的 migration / trigger
 
-**這個 repo 選的是「嚴格隔離」設計**（登入頁只認已經標記過的帳號，密碼對但沒標記一律拒絕；要加入某個 app,只能透過那個 app 自己的註冊流程,見上面「Redirect URLs」章節前後的討論）——這是一個刻意的選擇,不是這個機制唯一的用法。新 app 如果想要「密碼對就自動加入」這種比較寬鬆的行為，技術上也做得到（差別只在登入頁要不要在 `apps` 沒命中時呼叫 `updateUser({ data: { app } })` 自動補標記），但要清楚意識到那樣做，任何知道某帳號密碼的人都能讓那個帳號自動取得你的 app 的存取權——這正是這個 repo 特意不採用的原因。
+**所有共用這個 Supabase 專案的 app，一律採用「嚴格隔離」設計**（登入頁只認已經標記過的帳號，密碼對但沒標記一律拒絕；要加入某個 app,只能透過那個 app 自己的註冊流程,見上面「Redirect URLs」章節前後的討論）。不要實作「密碼對就自動加入」（在登入頁 `apps` 沒命中時自動呼叫 `updateUser({ data: { app } })` 補標記）——這會讓任何知道某帳號密碼的人，都能讓那個帳號自動取得你的 app 的存取權。新 app 一律沿用同一種規則，不要各自發明變體。
 
 **不要修改**：`public.handle_new_user()` / `public.profiles`（`on_auth_user_created` trigger）是另一個既有 app 的員工資料表，跟這個機制完全獨立、無關,新 app 也不應該去動它。
 
