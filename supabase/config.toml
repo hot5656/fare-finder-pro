@@ -1,1 +1,4 @@
 project_id = "luugfvsrawnuzwpjvddt"
+
+[api]
+schemas = ["public", "flight", "graphql_public"]

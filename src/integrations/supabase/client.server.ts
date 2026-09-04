@@ -43,7 +43,10 @@ function createSupabaseAdminClient() {
     throw new Error(message);
   }
 
-  return createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  return createClient<Database, 'flight'>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    db: {
+      schema: 'flight',
+    },
     global: {
       fetch: createSupabaseFetch(SUPABASE_SERVICE_ROLE_KEY),
     },

@@ -79,6 +79,15 @@ npm run dev
 
 本機（`.env`）跟 Vercel（Project Settings → Environment Variables）**要設定完全一樣的變數**，沒有差別——本機開發跟正式部署走的是同一套讀取邏輯，缺一個都會壞。
 
+### `.env` 是怎麼被讀取的
+
+專案本身**沒有任何一行程式碼**決定要讀 `.env`——這是兩個底層工具各自內建的預設慣例，這個 repo 只是照著預設值走，沒有客製化過：
+
+- **前端 `VITE_*` 變數（`import.meta.env`）**：`vite.config.ts` 透過 `@lovable.dev/vite-tanstack-config` 這個 wrapper 呼叫 Vite 官方的 `loadEnv(mode, process.cwd(), "VITE_")`。Vite 內建的 `loadEnv()` 寫死了要找 `.env` / `.env.local` / `.env.[mode]` / `.env.[mode].local` 這幾個檔名（專案根目錄下）——只要是 Vite 專案就是這個慣例。
+- **伺服器端不帶前綴的變數（`process.env`，SSR / middleware 用，見 `src/integrations/supabase/client.server.ts`、`auth-middleware.ts`）**：由 TanStack Start 的伺服器建置目標 **Nitro** 負責，dev 模式下預設也是讀 `.env` / `.env.local`，用 `dotenv` 套件寫進真正的 `process.env`。
+
+兩邊剛好都預設抓 `.env`，所以本機開發只需要維護一份 `.env` 檔案即可同時餵給前端跟伺服器端程式碼。
+
 ### 需要哪些變數
 
 | 變數名稱 | 誰會讀 | 用來做什麼 | 值哪裡拿 |
@@ -111,6 +120,45 @@ npm run dev
 Vercel Dashboard → 專案 → **Settings** → **Environment Variables**，把上面表格的 5 個變數逐一加入（或用 CLI：`vercel env add VITE_SUPABASE_URL`）。改完環境變數要**重新部署**（`vercel --prod` 或在 Dashboard 點 Redeploy）才會生效，跟本機改 `.env` 要重啟 dev server 是同一個道理。
 
 修改本機 `.env` 之後也需要重啟 dev server（`npm run dev`）——Vite 只在啟動時讀取 env 檔案，不支援 HMR 熱更新。
+
+### Redirect URLs（驗證信連結導向白名單）
+
+**Authentication → URL Configuration** 這頁的 **Site URL** 跟 **Redirect URLs**，決定使用者點了驗證信/密碼重設信裡的連結之後，最終會被導去哪個網址。這跟用哪家 SMTP、哪個寄信方案（內建 / Resend SMTP / Send Email Hook）都無關，是所有寄信方式共用的同一層機制，設錯的話驗證信連結永遠導不回正確的地方。
+
+**運作機制：**
+
+`src/routes/auth.tsx` 裡呼叫 `signUp()` 時：
+```ts
+options: { emailRedirectTo: window.location.origin }
+```
+`window.location.origin` 是「使用者按下註冊那一刻，瀏覽器網址列的 origin」——不是寫死的，是動態抓的。這個值會直接塞進 Supabase 產生的驗證信連結（`redirect_to` 參數）裡。
+
+Supabase 收到這個值後只做一件事：**比對白名單**：
+
+- 這個網址等於 **Site URL**，或有被 **Redirect URLs** 清單裡的某一條規則匹配到 → 照這個網址做成信件連結，使用者點了就導去那裡。
+- 兩者都沒匹配到 → **沒收、丟棄**這個網址，強制改用 **Site URL** 當導向目的地（不會報錯，是靜默降級）。
+
+也就是說：同一支 app、不同網址觸發註冊（本機 / 正式站 / Vercel preview），會產生內容不同的驗證信連結，是前端動態抓網址造成的，不是 Supabase 自己判斷的；Supabase 只負責擋掉不在白名單裡的目的地。
+
+**目前正式配置：**
+
+```
+Site URL: https://fare-finder-pro.vercel.app
+
+Redirect URLs:
+https://fare-finder-pro.vercel.app/**
+https://fare-finder-pro-*-roberts-projects-2b1cd09b.vercel.app/**
+http://localhost:8080/**
+```
+
+| 設定 | 涵蓋場景 | 為什麼需要 |
+|---|---|---|
+| `Site URL: https://fare-finder-pro.vercel.app` | 正式站主網域 + 保底目的地 | 唯一的「預設/保底」網址；沒有明確匹配到任何 Redirect URLs 時，一律退回這裡 |
+| `https://fare-finder-pro.vercel.app/**` | 正式站上任何路徑觸發的驗證 | 只設 Site URL 本身不涵蓋「帶路徑或參數」的情況（例如 `/dashboard`、`?ref=xxx`），`/**` 萬用字元讓同網域下任何路徑都算合法目的地 |
+| `https://fare-finder-pro-*-roberts-projects-2b1cd09b.vercel.app/**` | Vercel 每次 PR / 分支自動產生的 preview 網址（如 `fare-finder-2r1ppz0jz-roberts-projects-2b1cd09b.vercel.app`） | 這些網址每次部署都不同、帶隨機 hash，不可能一條一條加；用 `*` 卡住中間隨機那段，讓任何 preview 部署上測註冊流程都能正常導回同一個 preview |
+| `http://localhost:8080/**` | 本機開發測試（`npm run dev` 實際跑的 port） | 讓本機開發也能完整測完整個註冊/驗證流程，不用每次都部署到 Vercel 才能測；是 **8080**，不是 Lovable 預覽環境殘留的 **3000**（那個 port 跟這個專案的 vite dev server 無關） |
+
+**常見症狀**：Site URL/Redirect URLs 沒設對時，驗證信連結點下去會出現 `#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired`，或是明明驗證成功卻被導回一個打不開的網址（例如導回 `localhost:3000`，但使用者電腦上根本沒在跑那個 port）。
 
 ### 驗證信 / SMTP
 
@@ -180,8 +228,7 @@ Sender:   noreply@yourdomain.com  (必須是在 Resend 驗證過的網域)
 
 6. **順便確認 Redirect URL**
    - **Authentication** → **URL Configuration**
-   - Site URL 設成 `http://localhost:8080`（開發環境），正式上線後加正式網域
-   - Redirect URLs 也要加上，確保 `emailRedirectTo` 能正確跳轉
+   - 詳見下方「[Redirect URLs（驗證信連結導向白名單）](#redirect-urls驗證信連結導向白名單)」章節
 
 > **注意：** 上面第 4 步的傳統 SMTP 表單（填 host/port/user/password）目前只開放給
 > **Pro 方案**。免費方案（Free tier）在 Supabase Dashboard 的 SMTP 設定頁只會看到
