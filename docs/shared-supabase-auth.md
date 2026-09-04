@@ -33,6 +33,18 @@ WHERE tgrelid = 'auth.users'::regclass AND NOT tgisinternal;
 
 參考實作（`fare-finder-pro` repo）：`src/integrations/supabase/app-scope.ts`（`APP_NAME` 常數）、`src/routes/auth.tsx`、`src/routes/_authenticated/route.tsx`。
 
+### Claude Code 要怎麼看到 `fare-finder-pro` 這個 repo？
+
+新 app 的 Claude Code session 預設只看得到自己的工作目錄，不會自動知道 `fare-finder-pro` repo 在哪、也不會主動去讀別的專案。三種取得方式：
+
+1. **同機器直接用絕對路徑讀**（最簡單，前提是兩個 repo 剛好都 checkout 在同一台機器上）：Read 工具可以讀機器上任何路徑，不限於目前工作目錄。例如：
+   ```
+   /Users/gaoyiping/work/claude/fare-finder-pro
+   ```
+   換一台機器就不適用。
+2. **GitHub（`hot5656/fare-finder-pro`）**：如果是 private repo 且該機器 `gh` CLI 已登入並有存取權，可以 `git clone` 下來或用 `gh api` 讀；若之後改成 public，也可以直接用 WebFetch 抓 GitHub raw 內容。
+3. **不依賴跨 repo 讀取**（最穩，優先採用）：上面「運作原理」已經把核心邏輯完整寫出來，新 app 照著寫即可實作，不需要真的讀到 `fare-finder-pro` 的原始碼。`src/routes/auth.tsx` 等只是「參考實作在哪」的附註。唯一真正必須查的權威來源是**資料庫本身**（上面「權威來源」那條 `pg_trigger` SQL）——不管在哪台機器、哪個 repo，只要連的是同一個 Supabase 專案就查得到。
+
 ## 隔離規則：統一走嚴格隔離
 
 所有共用這個 Supabase 專案的 app，一律採用**嚴格隔離**：登入頁只認已經標記過的帳號，密碼對但沒標記一律拒絕；要加入某個 app，只能透過那個 app 自己的註冊流程。
