@@ -51,9 +51,24 @@ WHERE tgrelid = 'auth.users'::regclass AND NOT tgisinternal;
 
 不要實作「密碼對就自動加入」（在登入頁 `apps` 沒命中時自動呼叫 `updateUser({ data: { app } })` 補標記）——這會讓任何知道某帳號密碼的人，都能讓那個帳號自動取得你的 app 的存取權。所有 app 統一用同一種規則，行為才可預期。
 
+### 加入某個 app 的兩種合法路徑
+
+「只能透過那個 app 自己的註冊流程加入」實際上有兩種合法實作方式，差別在誰觸發：
+
+1. **使用者自己走 signup**：email 已被別的 app 註冊時，導去密碼重設流程，使用者驗證過信箱身份、設定新密碼後才補標記。`fare-finder-pro` 的 `src/routes/auth/index.tsx`、`src/routes/auth/reset.tsx` 走的是這條。
+2. **管理員在自己 app 後台建帳號時撞到既有帳號**：`auth.admin.createUser()` 對已存在的 email 一定會失敗（`auth.users` 的 email 在整個 project 是唯一的），這時改成「掛靠既有身份」——不建立新帳號、不改密碼，只幫既有帳號補上這個 app 需要的資料，並把自己的 app 名稱**合併**進 `app_metadata.apps`（用 spread 保留其他 app 既有的標記，不要整個覆寫掉）。參考實作：`web_project_management` repo 的 `app/(protected)/users/new/actions.ts` 的 `linkExistingAccountToThisApp()`。
+
+兩種都合法，因為都是「透過某個 app 自己的流程、且由使用者本人或管理員明確採取了一個動作才加入」，跟登入頁「密碼對就自動加入」（上面明文禁止的作法）性質不同。
+
 ## 不要動的東西
 
-`public.handle_new_user()` / `public.profiles`（`on_auth_user_created` trigger）是另一個既有 app 的員工資料表，跟這個機制完全獨立、無關，新 app 不應該去動它。
+`public.handle_new_user()` / `public.profiles`（`on_auth_user_created` trigger）是另一個既有 app（`project-management`）的員工資料表，**不要去編輯它的程式碼**。
+
+### 但它不是「跟這個機制無關」——同一張表上的 trigger 彼此看不到對方
+
+`auth.users` 上任何一個 trigger，不管是哪個 app 建的，都會對**所有共用這個 project 的 app** 的 signup 觸發，不是只有建立它的那個 app。這不是假設性風險——`project-management` app 就真的中過這一槍：它的 `handle_new_user()` 原本沒有做 app 過濾，對每一筆從 flight（`fare-finder-pro`）註冊的帳號都無條件建立一筆 `public.profiles`、白佔一個員編，導致 flight 的帳號雖然被 `hasAppAccess()` 正確擋在登入頁外，卻還是污染了 project-management 的使用者管理清單、看起來像個正常員工。後來用 `supabase/migrations/20260906000001_scope_handle_new_user_to_app.sql` 修掉（在 `raw_app_meta_data.apps` 沒有含自己 app 名稱時，直接 `return new` 跳過 insert）；完整經過記在 `web_project_management` repo 的 `docs/migrations_overview.md` Phase 7。
+
+**如果你自己的 app 也要在 `auth.users` 上掛 provisioning trigger**（建 profile、發通知、消耗序號/員編等任何有副作用的動作）：動手前一定要先判斷 `new.raw_app_meta_data -> 'apps'` 有沒有含自己的 app 名稱，沒有就直接 `return new`、完全跳過副作用。不要假設「別的 app 建的帳號不會經過我的 trigger」——只要共用同一個 `auth.users`，就一定會經過。
 
 ## 幫「已有真實使用者」的舊 app 套用這套規則
 
