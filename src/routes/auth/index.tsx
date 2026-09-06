@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { APP_NAME, hasAppAccess } from "@/integrations/supabase/app-scope";
 import { SiteHeader } from "@/components/SiteHeader";
 
-export const Route = createFileRoute("/auth")({
+export const Route = createFileRoute("/auth/")({
   head: () => ({
     meta: [
       { title: "Sign in — Flight Price Notifier" },

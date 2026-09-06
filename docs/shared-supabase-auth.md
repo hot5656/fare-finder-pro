@@ -31,7 +31,7 @@ WHERE tgrelid = 'auth.users'::regclass AND NOT tgisinternal;
 - 自己的登入頁自己判斷 `apps` 陣列裡有沒有那個名稱
 - **不需要**再建立任何新的 migration / trigger
 
-參考實作（`fare-finder-pro` repo）：`src/integrations/supabase/app-scope.ts`（`APP_NAME` 常數）、`src/routes/auth.tsx`、`src/routes/_authenticated/route.tsx`。
+參考實作（`fare-finder-pro` repo）：`src/integrations/supabase/app-scope.ts`（`APP_NAME` 常數）、`src/routes/auth/index.tsx`、`src/routes/_authenticated/route.tsx`。
 
 ### Claude Code 要怎麼看到 `fare-finder-pro` 這個 repo？
 
@@ -43,7 +43,7 @@ WHERE tgrelid = 'auth.users'::regclass AND NOT tgisinternal;
    ```
    換一台機器就不適用。
 2. **GitHub（`hot5656/fare-finder-pro`）**：如果是 private repo 且該機器 `gh` CLI 已登入並有存取權，可以 `git clone` 下來或用 `gh api` 讀；若之後改成 public，也可以直接用 WebFetch 抓 GitHub raw 內容。
-3. **不依賴跨 repo 讀取**（最穩，優先採用）：上面「運作原理」已經把核心邏輯完整寫出來，新 app 照著寫即可實作，不需要真的讀到 `fare-finder-pro` 的原始碼。`src/routes/auth.tsx` 等只是「參考實作在哪」的附註。唯一真正必須查的權威來源是**資料庫本身**（上面「權威來源」那條 `pg_trigger` SQL）——不管在哪台機器、哪個 repo，只要連的是同一個 Supabase 專案就查得到。
+3. **不依賴跨 repo 讀取**（最穩，優先採用）：上面「運作原理」已經把核心邏輯完整寫出來，新 app 照著寫即可實作，不需要真的讀到 `fare-finder-pro` 的原始碼。`src/routes/auth/index.tsx` 等只是「參考實作在哪」的附註。唯一真正必須查的權威來源是**資料庫本身**（上面「權威來源」那條 `pg_trigger` SQL）——不管在哪台機器、哪個 repo，只要連的是同一個 Supabase 專案就查得到。
 
 ## 隔離規則：統一走嚴格隔離
 

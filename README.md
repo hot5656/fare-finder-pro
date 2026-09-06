@@ -127,7 +127,7 @@ Vercel Dashboard → 專案 → **Settings** → **Environment Variables**，把
 
 **運作機制：**
 
-`src/routes/auth.tsx` 裡呼叫 `signUp()` 時：
+`src/routes/auth/index.tsx` 裡呼叫 `signUp()` 時：
 ```ts
 options: { emailRedirectTo: window.location.origin }
 ```
@@ -179,7 +179,7 @@ WHERE tgrelid = 'auth.users'::regclass AND NOT tgisinternal;
 
 1. 前端呼叫 `supabase.auth.signUp()` 或 `supabase.auth.updateUser()` 時，帶上 `options: { data: { app: '<你的 app 名稱>' } }`。
 2. 這個 trigger 會把 `raw_user_meta_data.app` 這個（使用者可自行修改的）暫存值，promote 進 `raw_app_meta_data.apps`（一個去重的 JSON 陣列，`app_metadata` 使用者端無法竄改）。
-3. 每個 app 自己的登入邏輯，檢查 `user.app_metadata.apps` 裡有沒有包含**自己的 app 名稱**（字串必須跟自己傳的完全一致，且不能跟其他 app 撞名）。這個 repo 的參考實作在 `src/routes/auth.tsx`（`APP_NAME` 常數定義在 `src/integrations/supabase/app-scope.ts`）跟 `src/routes/_authenticated/route.tsx`。
+3. 每個 app 自己的登入邏輯，檢查 `user.app_metadata.apps` 裡有沒有包含**自己的 app 名稱**（字串必須跟自己傳的完全一致，且不能跟其他 app 撞名）。這個 repo 的參考實作在 `src/routes/auth/index.tsx`（`APP_NAME` 常數定義在 `src/integrations/supabase/app-scope.ts`）跟 `src/routes/_authenticated/route.tsx`。
 
 **這個 trigger 完全通用、不用改就能給新 app 用**——它不檢查 app 名稱是什麼字串，純粹「有傳就記錄」。新 app 只要：
 
@@ -214,7 +214,7 @@ WHERE tgrelid = 'auth.users'::regclass AND NOT tgisinternal;
 
 ### 驗證信 / SMTP
 
-這個 app 使用 Supabase 內建的 email/password 驗證（`src/routes/auth.tsx` 裡的 `signUp` / `signInWithPassword`），會寄出帳號驗證信跟密碼重設信。這些信實際從哪裡寄出，取決於這個 Supabase 專案是怎麼建立的：
+這個 app 使用 Supabase 內建的 email/password 驗證（`src/routes/auth/index.tsx` 裡的 `signUp` / `signInWithPassword`），會寄出帳號驗證信跟密碼重設信。這些信實際從哪裡寄出，取決於這個 Supabase 專案是怎麼建立的：
 
 - **透過 Lovable Cloud 建立的專案**：寄信會走 Lovable 自己的預設寄件通道,而不是 Supabase 內建的 SMTP。要用自訂寄件網域（例如 `noreply@yourdomain.com`）,需要在 Lovable 那邊設定（Email Domain 設定）,不是在 Supabase 裡設。
 - **獨立的 Supabase 專案**（直接在 supabase.com 開的,沒有連結 Lovable）：Lovable 完全看不到、也管不到這個專案。寄信行為會回到 Supabase 原生預設——如果沒設自訂 SMTP,就是用 Supabase 內建的寄件服務,這個內建服務有嚴格的流量限制,只適合測試,不適合正式環境使用。
