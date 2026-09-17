@@ -31,7 +31,101 @@ export type Database = {
   }
   flight: {
     Tables: {
-      [_ in never]: never
+      notification_history: {
+        Row: {
+          currency: string
+          id: string
+          price: number
+          route: string
+          sent_at: string
+          user_id: string
+        }
+        Insert: {
+          currency: string
+          id?: string
+          price: number
+          route: string
+          sent_at?: string
+          user_id: string
+        }
+        Update: {
+          currency?: string
+          id?: string
+          price?: number
+          route?: string
+          sent_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      routes: {
+        Row: {
+          destination: string
+          display_name: string
+          origin: string
+          plan_name: string
+          route: string | null
+        }
+        Insert: {
+          destination: string
+          display_name: string
+          origin: string
+          plan_name: string
+          route?: string | null
+        }
+        Update: {
+          destination?: string
+          display_name?: string
+          origin?: string
+          plan_name?: string
+          route?: string | null
+        }
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          created_at: string
+          currency: string
+          email: string
+          id: string
+          plan_name: string
+          route: string
+          target_price: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          email: string
+          id?: string
+          plan_name: string
+          route: string
+          target_price: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          email?: string
+          id?: string
+          plan_name?: string
+          route?: string
+          target_price?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_plan_name_fkey"
+            columns: ["plan_name"]
+            isOneToOne: false
+            referencedRelation: "routes"
+            referencedColumns: ["plan_name"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -166,6 +260,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  flight: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
