@@ -21,7 +21,7 @@ with no payment gate (`subscription_status` and the paywall are M2).
 | Manual parser invoke with service-role key | ✅ | `{"routes":2,"matches":1}` |
 | Email arrives (NT$ headline, 約 US$, target, 立即訂購) | ✅ | in Gmail inbox, subject `✈️ 台北 → 東京 降價通知！NT$6,556 已達標` |
 | Re-alert on big drop (≥20% or ≥NT$2,000) | ✅ | raised last history price to 9,500 → fresh email at 6,556 + new history row |
-| Dedup blocks repeat | 🟡 | consistent with data and thresholds; the "skipped (deduped)" log line itself was never seen |
+| Dedup blocks repeat | ✅ | 16:00 UTC tick on 09-18: both functions returned 200 (a match was handed off), but no new history row and no new email, since the fare equalled the last alerted price within 24h. The "skipped (deduped)" console line itself was never seen |
 | USD-fetch-fails → TWD-only handoff (H3) | 🟡 | verified in code only |
 | Below-target subscriber excluded (H5) | 🟡 | verified in code only (`target_price >= cheapest`) |
 
