@@ -62,6 +62,9 @@ export type Database = {
         Row: {
           destination: string
           display_name: string
+          last_checked_at: string | null
+          last_price: number | null
+          last_price_currency: string | null
           origin: string
           plan_name: string
           route: string | null
@@ -69,6 +72,9 @@ export type Database = {
         Insert: {
           destination: string
           display_name: string
+          last_checked_at?: string | null
+          last_price?: number | null
+          last_price_currency?: string | null
           origin: string
           plan_name: string
           route?: string | null
@@ -76,6 +82,9 @@ export type Database = {
         Update: {
           destination?: string
           display_name?: string
+          last_checked_at?: string | null
+          last_price?: number | null
+          last_price_currency?: string | null
           origin?: string
           plan_name?: string
           route?: string | null

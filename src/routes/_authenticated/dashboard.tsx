@@ -181,6 +181,15 @@ function PlanCard({
           目前目標：NT${Number(subscription.target_price).toLocaleString()}
         </p>
       )}
+      {route.last_price != null && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          最後查詢：{route.last_price_currency === "TWD" ? "NT$" : `${route.last_price_currency} `}
+          {Number(route.last_price).toLocaleString()}
+          {route.last_checked_at && (
+            <> ‧ {new Date(route.last_checked_at).toLocaleString("zh-TW")}</>
+          )}
+        </p>
+      )}
       {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
     </div>
   );

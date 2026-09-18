@@ -124,6 +124,18 @@ Deno.serve(async (req) => {
     }
     console.log(`${route.route} ${month} cheapest ${cheapest.price} TWD`);
 
+    const { error: lastPriceError } = await admin
+      .from("routes")
+      .update({
+        last_price: cheapest.price,
+        last_price_currency: cheapest.currency,
+        last_checked_at: new Date().toISOString(),
+      })
+      .eq("plan_name", route.plan_name);
+    if (lastPriceError) {
+      console.error(`failed to record last_price for ${route.route}`, lastPriceError);
+    }
+
     const cheapestUsd = await fetchCheapest(route.origin, route.destination, month, "USD").catch(
       (e) => {
         console.error(`USD fare fetch failed for ${route.route}`, e);
