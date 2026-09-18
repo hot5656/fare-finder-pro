@@ -9,9 +9,10 @@
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically by
 // the Supabase Edge Functions runtime.
 //
-// Deployed with --no-verify-jwt: the platform does not gate this endpoint,
-// so the Authorization check below is the only thing stopping a random
-// caller from spamming emails.
+// Deployed with verify_jwt = true (see supabase/config.toml), so the gateway
+// rejects requests without a valid JWT. That accepts any project JWT (e.g. the
+// anon key), so the exact service-role check below is what actually stops a
+// random caller from spamming emails.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@4.0.0";

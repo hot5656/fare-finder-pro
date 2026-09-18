@@ -9,9 +9,10 @@
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically by
 // the Supabase Edge Functions runtime.
 //
-// Deployed with --no-verify-jwt: the platform does not gate this endpoint,
-// so the Authorization check below is the only thing stopping a random
-// caller from triggering a scrape.
+// Deployed with verify_jwt = true (see supabase/config.toml), so the gateway
+// rejects requests without a valid JWT. That accepts any project JWT (e.g. the
+// anon key), so the exact service-role check below is what actually stops a
+// random caller from triggering a scrape.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -83,10 +84,9 @@ async function fetchCheapest(
 
 function nextMonth(): string {
   const now = new Date();
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth() + 1; // next month, 1-indexed already since getUTCMonth is 0-indexed for current month
-  const rolled = m > 12 ? { y: y + 1, m: 1 } : { y, m };
-  return `${rolled.y}-${String(rolled.m).padStart(2, "0")}`;
+  // Date.UTC rolls month 12 over into January of the next year for us.
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 Deno.serve(async (req) => {
