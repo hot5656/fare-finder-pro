@@ -71,6 +71,7 @@ function bookingUrl(match: Match): string {
 function renderEmail(match: Match): { subject: string; html: string; text: string } {
   const label = PLAN_LABELS[match.plan_name] ?? match.route;
   const price = Math.round(match.cheapest.price).toLocaleString();
+  const target = Math.round(match.target_price).toLocaleString();
   const usdLine = match.cheapest_usd
     ? `<p style="color:#666;font-size:14px;">約 US$${Math.round(match.cheapest_usd.price).toLocaleString()}</p>`
     : "";
@@ -84,6 +85,7 @@ function renderEmail(match: Match): { subject: string; html: string; text: strin
       <h2>${subject}</h2>
       <p style="font-size:22px;font-weight:700;margin:12px 0 0;">NT$${price}</p>
       ${usdLine}
+      <p style="color:#666;font-size:13px;margin-top:4px;">你的目標價：NT$${target}</p>
       <p style="margin-top:16px;">
         <a href="${url}"
            style="display:inline-block;padding:12px 20px;background:#7c3aed;color:#fff;
@@ -93,7 +95,7 @@ function renderEmail(match: Match): { subject: string; html: string; text: strin
       </p>
     </div>
   `;
-  const text = `${subject}\nNT$${price}${usdText}\n立即訂購: ${url}`;
+  const text = `${subject}\nNT$${price}${usdText}\n你的目標價：NT$${target}\n立即訂購: ${url}`;
 
   return { subject, html, text };
 }
