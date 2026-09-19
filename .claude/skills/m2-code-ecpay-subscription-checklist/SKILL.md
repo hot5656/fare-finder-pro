@@ -56,7 +56,7 @@ Run each check and report. Ask the student for: the Supabase **project ref**, th
   ```
 
 ### Section B — Callbacks verify CMV + flip to active
-> **No card handy? Verify the callback path with a validly-signed synthetic callback (same-day).** The real cashier needs a human (card + OTP), but B2/B3 (and D3's grace case) can be proven **without a card** by POSTing a callback you sign yourself with the real ECPay secrets — `RtnCode=1`, `CustomField1=<email>`, `CustomField2=<route>`, **including the empty `CustomField3=&CustomField4=`**, a real `CheckMacValue` (no `SimulatePaid`) — to `flight-ecpay-return`, then assert the row flips to `active`. This catches CMV/empty-field/idempotency bugs early. It's a **backend** proof only (no cashier UI / `OrderResultURL`), so still do **one** real stage test-card run before signing off. The stage HashKey/HashIV are public, so the same trick works for `flight-ecpay-period` (`RtnCode=1` renewal / `RtnCode=0` failure) — see G1/G2.
+> **No card handy? Verify the callback path with a validly-signed synthetic callback (same-day).** The real cashier needs a human (card + OTP), but B2/B3 (and D3a's grace case) can be proven **without a card** by POSTing a callback you sign yourself with the real ECPay secrets — `RtnCode=1`, `CustomField1=<email>`, `CustomField2=<route>`, **including the empty `CustomField3=&CustomField4=`**, a real `CheckMacValue` (no `SimulatePaid`) — to `flight-ecpay-return`, then assert the row flips to `active`. This catches CMV/empty-field/idempotency bugs early. It's a **backend** proof only (no cashier UI / `OrderResultURL`), so still do **one** real stage test-card run before signing off. The stage HashKey/HashIV are public, so the same trick works for `flight-ecpay-period` (`RtnCode=1` renewal / `RtnCode=0` failure) — see G1/G2.
 
 - **B1** All three ECPay-facing functions exist, are active, and have **`verify_jwt = false`** (ECPay sends no JWT): `supabase functions list --output json` → `flight-ecpay-return`, `flight-ecpay-period`, `flight-ecpay-result` all `ACTIVE` with `verify_jwt=false`. Smoke test — a forged body must be *rejected by the function*, not the gateway:
   ```bash
@@ -90,10 +90,12 @@ Run each check and report. Ask the student for: the Supabase **project ref**, th
   The body is `{"routes":N,"matches":N}`. Assert on **`matches`**: with one `active` and one `pending_payment` subscriber on routes whose targets are both met, expect **1**, not 2. (Don't rely on "no new email" — the M1 dedup can hide a wrongly-included subscriber.) If you trigger it from SQL instead of `curl`, use `net.http_post(..., timeout_milliseconds := 60000)` and read `net._http_response`, see *Triggering `flight-parser` from SQL* above.
 - **D1** The now-`active` row (target above live fare) **is** matched + emailed when the parser runs → fare email arrives (via `flight-notification`, per M1).
 - **D2** A `pending_payment` (unpaid) row is NOT matched/emailed. Confirms payment gates alerts.
-- **D3** A `cancelled` row with a **future** `current_period_end` **IS** still matched (grace). A `cancelled` row with a **past** `current_period_end` is NOT, and gets flipped to `expired` on that run — the run's log shows `expired 1 subscription(s)`, one **"ended"** email arrives, and a **second** parser run sends nothing more:
+- **D3a** *(cancelled, before expiry — still alerted)* This is the paid-through month a user is owed after cancelling. Right after E1, the `cancelled` row with a **future** `current_period_end` is **served**: the parser's `matches` includes it **and the fare email actually arrives** (a new `flight.notification_history` row is written for that user + route). "Matched" alone is not proof — the email is the deliverable. Use a target above the live fare. **Dedup can hide this** (within 24 h of an earlier alert for the same route the email is skipped): use M1's big-drop trick — raise that user+route's latest `notification_history.price` (e.g. to 9,500) so the live fare is ≥20 % / ≥NT$2,000 below it, run the parser, then **restore the original price**. The subject is the fare alert (`降價通知！NT$… 已達標`), not the cancel email from E1.
+- **D3b** *(cancelled, after expiry — ended)* A `cancelled` row with a **past** `current_period_end` is NOT served, and is flipped to `expired` on that run — the run's log shows `expired 1 subscription(s)`, **one "ended" email** arrives, no fare email follows, and a **second** parser run sends nothing more:
   ```sql
   select subscription_status, current_period_end from flight.subscriptions where email = '<...>' and route = 'TPE-TYO';
   ```
+  (D3a and D3b are the two sides of `current_period_end`: run D3a first, then back-date the same row for D3b — and write down / restore what you back-date.)
 - **D4** *(renewals that silently stopped)* An `active` row whose `current_period_end` is more than `RENEWAL_GRACE_DAYS` (7) in the past — what a series ECPay auto-terminated after 6 failed charges looks like — is flipped to `expired` by the parser (with a "payment lapsed" email) and no longer matched. Back-date a test row to confirm; **write down / restore any row you back-date.**
 
 ### Section E — Cancellation (an API call you make; grace, not instant expiry)
@@ -127,7 +129,7 @@ This is the Supabase-specific check that replaces "the browser has no AWS creden
 Both are driven by `flight-ecpay-period` and `flight-parser`; both must be **once-only**. You can drive `flight-ecpay-period` without ECPay by POSTing a **self-signed** `PeriodReturnURL` body (public stage HashKey/HashIV, same CMV algorithm, keep empty `CustomField3=&CustomField4=`) for a real `MerchantTradeNo` of an `active` test row.
 - **G1** *(payment failed)* Send a signed `RtnCode=0` callback → `1|OK`, the row stays `active`, `payment_failed_at` is set, **one** `payment_failed` email arrives. Send the **same failure again** → `1|OK`, `payment_failed_at` unchanged, **no second email** (only one `flight-status-notification` call in the edge logs).
 - **G2** *(recovery)* Send a signed `RtnCode=1` callback → `payment_failed_at` is cleared and `current_period_end` refreshed; no email.
-- **G3** *(expired, once)* Covered by D3/D4: each row that flips to `expired` produces exactly one email; a second parser run produces none.
+- **G3** *(expired, once)* Covered by D3b/D4: each row that flips to `expired` produces exactly one email; a second parser run produces none.
 
 ## Reporting
 
@@ -143,7 +145,8 @@ Both are driven by `flight-ecpay-period` and `flight-parser`; both must be **onc
 | C2 four explicit event branches, unknown → 400, no bearer → 401 | ✅/❌ | no fallthrough |
 | D0 parser gate grace-aware | ✅/❌ | the gate itself |
 | D1/D2 active emailed / pending_payment not | ✅/❌ | gating proof |
-| D3 cancelled-in-grace emailed; grace-expired flipped + one email | ✅/❌ | grace period |
+| D3a cancelled **before** expiry: matched **and fare email arrives** | ✅/❌ | grace period — the email, not just `matches` |
+| D3b cancelled **after** expiry: flipped to expired, one "ended" email, no fare email, 2nd run silent | ✅/❌ | grace ends |
 | D4 active row with renewals long overdue → expired | ✅/❌ | the case ECPay never reports |
 | E1 cancel → cancelled (NOT expired) + email | ✅/❌ | API call, grace not instant |
 | E2 cancelled-in-grace can update target | ✅/❌ | in-place, no re-pay |

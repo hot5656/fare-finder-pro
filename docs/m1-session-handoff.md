@@ -319,8 +319,9 @@ It lived in the session scratchpad and is not in the repo.
    read `expired` and `matches` should be 0. Then, if wanted, the daily-period
    renewal test and a re-subscribe run.
 2. ~~Fold the "differs from the skill" notes back into the M2 skills.~~ Done
-   (2026-09-19): the main skill, its checklist (new C2, D4, F1b and a Section G
-   for the lifecycle emails) and the prerequisites skill were corrected and
+   (2026-09-19): the main skill, its checklist (new C2, D4, F1b, a Section G
+   for the lifecycle emails, and D3 split into D3a "cancelled before expiry: fare
+   email actually arrives" / D3b "after expiry: ended") and the prerequisites skill were corrected and
    extended; the stale `m2-ecpay-subscription` pointer is fixed.
 3. **Before any real money:** M2 runs entirely on the shared **stage** merchant.
    Going live means a real MerchantID/HashKey/HashIV, `ECPAY_ENV=prod`, a real
