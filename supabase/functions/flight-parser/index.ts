@@ -105,6 +105,15 @@ Deno.serve(async (req) => {
     return Response.json({ error: routesError.message }, { status: 500 });
   }
 
+  // M2 paywall. First retire cancelled rows whose paid period has lapsed...
+  const nowIso = new Date().toISOString();
+  const { error: expireError } = await admin
+    .from("subscriptions")
+    .update({ subscription_status: "expired" })
+    .eq("subscription_status", "cancelled")
+    .lt("current_period_end", nowIso);
+  if (expireError) console.error("failed to expire lapsed cancelled rows", expireError);
+
   const month = nextMonth();
   const matches: Array<{
     user_id: string;
@@ -143,10 +152,15 @@ Deno.serve(async (req) => {
       },
     );
 
+    // ...then only serve paying users: active, or cancelled but still inside
+    // the period they paid for. pending_payment / expired are never emailed.
     const { data: subs, error: subsError } = await admin
       .from("subscriptions")
       .select("*")
-      .eq("route", route.route);
+      .eq("route", route.route)
+      .or(
+        `subscription_status.eq.active,and(subscription_status.eq.cancelled,current_period_end.gte.${nowIso})`,
+      );
     if (subsError) {
       console.error(`failed to load subscriptions for ${route.route}`, subsError);
       continue;

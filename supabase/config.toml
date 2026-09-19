@@ -23,3 +23,45 @@ entrypoint = "./functions/flight-notification/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/flight-notification/*.html" ]
+
+# M2: called by the signed-in user with their own JWT.
+[functions.flight-subscribe]
+enabled = true
+verify_jwt = true
+import_map = "./functions/flight-subscribe/deno.json"
+entrypoint = "./functions/flight-subscribe/index.ts"
+
+# M2: called by the signed-in user with their own JWT.
+[functions.flight-cancel-subscription]
+enabled = true
+verify_jwt = true
+import_map = "./functions/flight-cancel-subscription/deno.json"
+entrypoint = "./functions/flight-cancel-subscription/index.ts"
+
+# M2: service-role bearer only (checked inside the function).
+[functions.flight-status-notification]
+enabled = true
+verify_jwt = true
+import_map = "./functions/flight-status-notification/deno.json"
+entrypoint = "./functions/flight-status-notification/index.ts"
+
+# M2: called by ECPay servers, which send no JWT. CheckMacValue is the auth.
+[functions.flight-ecpay-return]
+enabled = true
+verify_jwt = false
+import_map = "./functions/flight-ecpay-return/deno.json"
+entrypoint = "./functions/flight-ecpay-return/index.ts"
+
+# M2: called by ECPay servers, which send no JWT. CheckMacValue is the auth.
+[functions.flight-ecpay-period]
+enabled = true
+verify_jwt = false
+import_map = "./functions/flight-ecpay-period/deno.json"
+entrypoint = "./functions/flight-ecpay-period/index.ts"
+
+# M2: ECPay redirects the user's browser here with a POST; no JWT.
+[functions.flight-ecpay-result]
+enabled = true
+verify_jwt = false
+import_map = "./functions/flight-ecpay-result/deno.json"
+entrypoint = "./functions/flight-ecpay-result/index.ts"

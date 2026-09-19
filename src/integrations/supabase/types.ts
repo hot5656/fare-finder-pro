@@ -95,10 +95,13 @@ export type Database = {
         Row: {
           created_at: string
           currency: string
+          current_period_end: string | null
           email: string
           id: string
+          merchant_trade_no: string | null
           plan_name: string
           route: string
+          subscription_status: string
           target_price: number
           updated_at: string
           user_id: string
@@ -106,10 +109,13 @@ export type Database = {
         Insert: {
           created_at?: string
           currency?: string
+          current_period_end?: string | null
           email: string
           id?: string
+          merchant_trade_no?: string | null
           plan_name: string
           route: string
+          subscription_status?: string
           target_price: number
           updated_at?: string
           user_id: string
@@ -117,10 +123,13 @@ export type Database = {
         Update: {
           created_at?: string
           currency?: string
+          current_period_end?: string | null
           email?: string
           id?: string
+          merchant_trade_no?: string | null
           plan_name?: string
           route?: string
+          subscription_status?: string
           target_price?: number
           updated_at?: string
           user_id?: string

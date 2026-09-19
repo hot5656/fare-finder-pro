@@ -1,18 +1,43 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
+  // ECPay's browser redirect lands here as /dashboard?purchase=success|failed
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { purchase?: "success" | "failed" | undefined } => {
+    const purchase = search["purchase"];
+    return { purchase: purchase === "success" || purchase === "failed" ? purchase : undefined };
+  },
   component: DashboardPage,
 });
+
+// Subscribe / cancel go through Edge Functions (M2): the browser can no longer
+// write flight.subscriptions itself.
+async function callFunction(slug: string, body: unknown): Promise<Response> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return fetch(`${import.meta.env['VITE_SUPABASE_URL']}/functions/v1/${slug}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session?.access_token ?? ""}`,
+      apikey: import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'],
+    },
+    body: JSON.stringify(body),
+  });
+}
 
 type Route_ = Tables<"routes">;
 type Subscription = Tables<"subscriptions">;
 
 function DashboardPage() {
   const { user } = Route.useRouteContext();
+  const { purchase } = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -35,6 +60,13 @@ function DashboardPage() {
       if (error) throw error;
       return data as Subscription[];
     },
+    // Right after paying, the ECPay callback may land a few seconds after the
+    // browser does: keep refreshing until nothing is pending_payment.
+    refetchInterval: (query) =>
+      purchase === "success" &&
+      query.state.data?.some((s) => s.subscription_status === "pending_payment")
+        ? 3000
+        : false,
   });
 
   async function handleSignOut() {
@@ -73,13 +105,22 @@ function DashboardPage() {
           Signed in as <span className="text-foreground">{user.email}</span>
         </p>
 
+        {purchase === "success" && (
+          <p className="mt-6 rounded-lg bg-primary/10 px-4 py-3 text-sm text-primary">
+            付款完成，訂閱正在生效中… / Payment received — activating your subscription.
+          </p>
+        )}
+        {purchase === "failed" && (
+          <p className="mt-6 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            付款未完成，你可以在下方點「完成付款」重試。 / Payment didn't go through — use “完成付款” to retry.
+          </p>
+        )}
+
         <div className="mt-10 grid gap-6 sm:grid-cols-2">
           {routesQuery.data?.map((route) => (
             <PlanCard
               key={route.plan_name}
               route={route}
-              userId={user.id}
-              email={user.email ?? ""}
               subscription={subscriptionsQuery.data?.find((s) => s.plan_name === route.plan_name)}
               onSubscribed={invalidateSubscriptions}
             />
@@ -96,24 +137,30 @@ function DashboardPage() {
   );
 }
 
+const fmtDate = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString("zh-TW") : "";
+
 function PlanCard({
   route,
-  userId,
-  email,
   subscription,
   onSubscribed,
 }: {
   route: Route_;
-  userId: string;
-  email: string;
   subscription: Subscription | undefined;
   onSubscribed: () => void;
 }) {
   const [targetPrice, setTargetPrice] = useState(
     subscription ? String(subscription.target_price) : "",
   );
+  // The subscription can arrive after first render (fresh load, post-payment
+  // redirect); pick up its saved target when it does.
+  useEffect(() => {
+    if (subscription) setTargetPrice(String(subscription.target_price));
+  }, [subscription?.target_price]);
   const [saving, setSaving] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const status = subscription?.subscription_status;
 
   async function handleSubscribe() {
     const parsed = Number(targetPrice);
@@ -124,18 +171,21 @@ function PlanCard({
     setError(null);
     setSaving(true);
     try {
-      const { error: upsertError } = await supabase.from("subscriptions").upsert(
-        {
-          user_id: userId,
-          email,
-          plan_name: route.plan_name,
-          route: route.route ?? `${route.origin}-${route.destination}`,
-          target_price: parsed,
-          currency: "TWD",
-        },
-        { onConflict: "user_id,route" },
-      );
-      if (upsertError) throw upsertError;
+      const res = await callFunction("flight-subscribe", {
+        plan_name: route.plan_name,
+        target_price: parsed,
+      });
+      // text/html -> a checkout form: hand the whole page to ECPay's cashier.
+      // application/json -> an in-place update (already paid): just refresh.
+      if ((res.headers.get("content-type") ?? "").includes("text/html")) {
+        const html = await res.text();
+        document.open();
+        document.write(html);
+        document.close();
+        return;
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "subscribe failed");
       onSubscribed();
     } catch (e) {
       setError(e instanceof Error ? e.message : "訂閱失敗，請再試一次 / Subscribe failed");
@@ -144,13 +194,48 @@ function PlanCard({
     }
   }
 
+  async function handleCancel() {
+    setError(null);
+    setSaving(true);
+    try {
+      const res = await callFunction("flight-cancel-subscription", { plan_name: route.plan_name });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "cancel failed");
+      setConfirmingCancel(false);
+      onSubscribed();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "取消失敗，請再試一次 / Cancel failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const badge =
+    status === "active"
+      ? "已訂閱（有效）"
+      : status === "pending_payment"
+        ? "未完成付款"
+        : status === "cancelled"
+          ? `已取消 · 有效至 ${fmtDate(subscription!.current_period_end)}`
+          : status === "expired"
+            ? "已結束"
+            : null;
+  const actionLabel =
+    status === "pending_payment"
+      ? "完成付款"
+      : status === "expired"
+        ? "重新訂閱"
+        : status === "active" || status === "cancelled"
+          ? "更新目標價"
+          : "開始追蹤";
+
   return (
     <div className="rounded-2xl border border-border bg-card p-6">
       <div className="flex items-start justify-between">
         <h2 className="text-lg font-bold text-card-foreground">{route.display_name}</h2>
-        {subscription && (
+        {badge && (
           <span className="rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">
-            已訂閱
+            {badge}
           </span>
         )}
       </div>
@@ -172,7 +257,7 @@ function PlanCard({
           disabled={saving}
           className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50"
         >
-          {saving ? "..." : subscription ? "更新目標價" : "開始追蹤"}
+          {saving ? "..." : actionLabel}
         </button>
       </div>
 
@@ -180,6 +265,28 @@ function PlanCard({
         <p className="mt-2 text-xs text-muted-foreground">
           目前目標：NT${Number(subscription.target_price).toLocaleString()}
         </p>
+      )}
+      {status === "active" && (
+        <div className="mt-2">
+          {confirmingCancel ? (
+            <span className="text-xs text-muted-foreground">
+              確定要取消訂閱？已付款的期間內仍會收到通知。{" "}
+              <button onClick={handleCancel} disabled={saving} className="font-semibold text-destructive underline">
+                確定取消
+              </button>{" "}
+              <button onClick={() => setConfirmingCancel(false)} className="underline">
+                保留
+              </button>
+            </span>
+          ) : (
+            <button
+              onClick={() => setConfirmingCancel(true)}
+              className="text-xs text-muted-foreground underline hover:text-foreground"
+            >
+              取消訂閱
+            </button>
+          )}
+        </div>
       )}
       {route.last_price != null && (
         <p className="mt-2 text-xs text-muted-foreground">
