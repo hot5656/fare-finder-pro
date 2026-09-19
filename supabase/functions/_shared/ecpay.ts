@@ -133,10 +133,12 @@ export const fail = (reason: string) =>
 // Fire-and-forget hand-off to flight-status-notification (same pattern as
 // flight-parser -> flight-notification).
 export function sendStatusEmail(payload: {
-  event_type: "welcome" | "cancel";
+  event_type: "welcome" | "cancel" | "expired" | "payment_failed";
   email: string;
   route: string;
   current_period_end?: string | null;
+  // "expired" only: why the service ended.
+  reason?: "period_ended" | "payment_lapsed";
 }) {
   const p = fetch(fnUrl("flight-status-notification"), {
     method: "POST",

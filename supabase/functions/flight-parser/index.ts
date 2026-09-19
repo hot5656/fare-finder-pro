@@ -22,6 +22,9 @@ const TRAVELPAYOUTS_TOKEN = Deno.env.get("TRAVELPAYOUTS_TOKEN") as string;
 
 const UA = "Mozilla/5.0 (compatible; flight-notifier/1.0)"; // some hosts behind Cloudflare 403 the default UA
 const BATCH = 25;
+// An `active` row whose current_period_end is this many days past with no
+// renewal is treated as lapsed (ECPay retries failed charges over several days).
+const RENEWAL_GRACE_DAYS = 7;
 
 type Cheapest = {
   price: number;
@@ -105,14 +108,50 @@ Deno.serve(async (req) => {
     return Response.json({ error: routesError.message }, { status: 500 });
   }
 
-  // M2 paywall. First retire cancelled rows whose paid period has lapsed...
+  // M2 paywall. First retire subscriptions whose paid period has run out, and
+  // tell each user once. Each update returns only the rows it actually flipped,
+  // so a row can only ever trigger one "expired" email.
   const nowIso = new Date().toISOString();
-  const { error: expireError } = await admin
+  const lapsedBefore = new Date(Date.now() - RENEWAL_GRACE_DAYS * 86_400_000).toISOString();
+  const expiredRows: Array<{ email: string; route: string; reason: "period_ended" | "payment_lapsed" }> = [];
+
+  // 1) cancelled, and the period they paid for is over.
+  const { data: endedCancelled, error: cancelledError } = await admin
     .from("subscriptions")
-    .update({ subscription_status: "expired" })
+    .update({ subscription_status: "expired", updated_at: nowIso })
     .eq("subscription_status", "cancelled")
-    .lt("current_period_end", nowIso);
-  if (expireError) console.error("failed to expire lapsed cancelled rows", expireError);
+    .lt("current_period_end", nowIso)
+    .select("email, route");
+  if (cancelledError) console.error("failed to expire lapsed cancelled rows", cancelledError);
+  for (const r of endedCancelled ?? []) expiredRows.push({ ...r, reason: "period_ended" });
+
+  // 2) still `active`, but renewals stopped arriving. ECPay gives up after 6
+  // consecutive failed charges without telling us, so the only signal is a
+  // current_period_end that passed a while ago with no renewal to move it.
+  const { data: endedActive, error: activeError } = await admin
+    .from("subscriptions")
+    .update({ subscription_status: "expired", updated_at: nowIso })
+    .eq("subscription_status", "active")
+    .lt("current_period_end", lapsedBefore)
+    .select("email, route");
+  if (activeError) console.error("failed to expire lapsed active rows", activeError);
+  for (const r of endedActive ?? []) expiredRows.push({ ...r, reason: "payment_lapsed" });
+
+  for (const r of expiredRows) {
+    // Fire-and-forget; waitUntil lets it finish after we return. A failure here
+    // is only logged: the row is already expired, so there is no retry.
+    const p = fetch(`${SUPABASE_URL}/functions/v1/flight-status-notification`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ event_type: "expired", ...r }),
+    }).catch((e) => console.error(`expired email dispatch failed for ${r.route}`, e));
+    // deno-lint-ignore no-explicit-any
+    (globalThis as any).EdgeRuntime?.waitUntil?.(p);
+  }
+  if (expiredRows.length) console.log(`expired ${expiredRows.length} subscription(s)`);
 
   const month = nextMonth();
   const matches: Array<{

@@ -1,9 +1,13 @@
-// flight-status-notification: subscribe / unsubscribe emails, routed by
-// `event_type` ("welcome" | "cancel"). One function for both — like M1's single
-// flight-notification. Only called by flight-ecpay-return and
-// flight-cancel-subscription, never scheduled.
+// flight-status-notification: subscription lifecycle emails, routed by
+// `event_type` ("welcome" | "cancel" | "expired" | "payment_failed"). One
+// function for all of them — like M1's single flight-notification. Called by
+// flight-ecpay-return (welcome), flight-cancel-subscription (cancel),
+// flight-ecpay-period (payment_failed, expired) and flight-parser (expired);
+// never scheduled itself.
 //
-// Body: { event_type, email, route, current_period_end? }
+// Body: { event_type, email, route, current_period_end?, reason? }
+//   reason ("expired" only): "period_ended" (a cancelled subscription ran out)
+//   or "payment_lapsed" (renewals stopped succeeding).
 //
 // verify_jwt = true, and the exact service-role bearer check below is what
 // actually keeps random callers from sending email through us.
@@ -15,15 +19,21 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") as string;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") as string;
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") as string;
 const ECPAY_AMOUNT = Deno.env.get("ECPAY_AMOUNT");
+// Only used to build a 重新訂閱 link. Unset -> the email just has no link
+// (better than a localhost link in a real inbox).
+const SITE_URL = Deno.env.get("SITE_URL")?.replace(/\/$/, "");
 
 const SENDER = "Flight Price Notifier <noreply@roberthut.com>"; // same as flight-notification
 const resend = new Resend(RESEND_API_KEY);
 
+const EVENT_TYPES = ["welcome", "cancel", "expired", "payment_failed"] as const;
+
 type Payload = {
-  event_type: "welcome" | "cancel";
+  event_type: (typeof EVENT_TYPES)[number];
   email: string;
   route: string;
   current_period_end?: string | null;
+  reason?: "period_ended" | "payment_lapsed";
 };
 
 const fmtDate = (iso?: string | null) =>
@@ -45,11 +55,31 @@ function render(p: Payload, label: string): { subject: string; html: string; tex
       until ? `目前的服務期間至 ${until}。` : "",
     ].filter(Boolean));
   }
-  return wrap(`已取消 ${label} 的降價通知訂閱`, [
-    "我們已停止之後的扣款，不會再向你收費。",
-    until ? `你已付款的期間內仍會收到通知，直到 ${until}。` : "",
-    "想再回來，隨時可以重新訂閱。",
-  ].filter(Boolean));
+
+  if (p.event_type === "cancel") {
+    return wrap(`已取消 ${label} 的降價通知訂閱`, [
+      "我們已停止之後的扣款，不會再向你收費。",
+      until ? `你已付款的期間內仍會收到通知，直到 ${until}。` : "",
+      "想再回來，隨時可以重新訂閱。",
+    ].filter(Boolean));
+  }
+
+  if (p.event_type === "payment_failed") {
+    return wrap(`⚠️ ${label} 本期扣款失敗`, [
+      `我們嘗試向你的信用卡收取 ${label} 降價通知的月費，但這次扣款沒有成功。`,
+      "系統會自動再試幾次。請確認信用卡的額度與有效期限，必要時聯絡發卡銀行。",
+      "如果持續失敗，訂閱會結束，降價通知也會停止，屆時我們會再寄信告訴你。",
+    ]);
+  }
+
+  // expired
+  const resubscribe = SITE_URL ? `想繼續收到通知，隨時可以到 ${SITE_URL}/dashboard 重新訂閱。` : "想繼續收到通知，隨時可以重新訂閱。";
+  return wrap(`${label} 降價通知已結束`, [
+    p.reason === "payment_lapsed"
+      ? `因為多次扣款未成功，你的 ${label} 訂閱已結束，我們不會再寄降價通知。`
+      : `你的 ${label} 訂閱期間已結束，我們不會再寄降價通知，也不會再向你收費。`,
+    resubscribe,
+  ]);
 }
 
 Deno.serve(async (req) => {
@@ -58,8 +88,11 @@ Deno.serve(async (req) => {
   }
 
   const payload = (await req.json()) as Payload;
-  if (!payload?.email || !payload.route || !["welcome", "cancel"].includes(payload.event_type)) {
-    return Response.json({ error: "event_type (welcome|cancel), email and route are required" }, { status: 400 });
+  if (!payload?.email || !payload.route || !EVENT_TYPES.includes(payload.event_type)) {
+    return Response.json(
+      { error: `event_type (${EVENT_TYPES.join("|")}), email and route are required` },
+      { status: 400 },
+    );
   }
 
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { db: { schema: "flight" } });
