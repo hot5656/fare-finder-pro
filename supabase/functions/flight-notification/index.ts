@@ -51,6 +51,7 @@ type Match = {
 const PLAN_LABELS: Record<string, string> = {
   tokyo: "台北 → 東京",
   seoul: "台北 → 首爾",
+  london: "台北 → 倫敦",
 };
 
 function shouldSend(newPrice: number, last: { price: number; sent_at: string } | null): boolean {
