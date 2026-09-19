@@ -1,6 +1,7 @@
 # M1 Flight Price Checker — Session Handoff
 
-Updated 2026-09-18 (supersedes the 2026-09-17 version, which described a
+Updated 2026-09-19 (adds the M2 ECPay paywall — see "M2 status" and "Lessons
+learned" below; supersedes the 2026-09-17 version, which described a
 half-built state that no longer applies).
 
 ## Where things stand
@@ -8,8 +9,9 @@ half-built state that no longer applies).
 M1 is **built, deployed and verified end-to-end** against the shared Supabase
 project (`luugfvsrawnuzwpjvddt`, "demo_app"). The verification checklist is
 `.claude/skills/m1-code-flight-price-checker-checklist/SKILL.md`; it was run on
-2026-09-18. Subscribe → 30-min scheduled fetch → deduplicated email all work,
-with no payment gate (`subscription_status` and the paywall are M2).
+2026-09-18. Subscribe → 30-min scheduled fetch → deduplicated email all work.
+M1 shipped with no payment gate; **M2 (2026-09-19) added the paywall on top**,
+so today only paying (or cancelled-but-paid-through) subscribers are alerted.
 
 | Area | Status | Evidence |
 |---|---|---|
@@ -25,6 +27,59 @@ with no payment gate (`subscription_status` and the paywall are M2).
 | USD-fetch-fails → TWD-only handoff (H3) | 🟡 | verified in code only |
 | Below-target subscriber excluded (H5) | ✅ | 2026-09-19 04:16 UTC: a Seoul test subscription (target NT$4,000 vs fare NT$5,127) was created via the UI, then the parser was run. No `TPE-SEL` history row and no email, so it was excluded (a wrongly matched Seoul sub has no dedup history and would have been emailed). Test row deleted afterwards |
 
+## M2 status — ECPay 定期定額 paywall (2026-09-19)
+
+Built and deployed on ECPay's **stage** shared test merchant (`3002607`);
+everything below was exercised against the real stage cashier with the stage
+test card, except the rows marked 🟡. Skill:
+`.claude/skills/m2-code-ecpay-subscription/SKILL.md`.
+
+Lifecycle: `pending_payment → active → cancelled (grace, still alerted) →
+expired`. Only the verified ECPay callbacks write `active`.
+
+| Area | Status | Evidence |
+|---|---|---|
+| Migration: `subscription_status`, `merchant_trade_no` (unique), `current_period_end`; client writes removed | ✅ | columns present; only `select own subscriptions` policy left; `authenticated` has SELECT only. Not tried: a self-activation attempt from the browser console |
+| `flight-subscribe` → ECPay cashier | ✅ | text/html form; cashier showed NT$300, "每 1 個月扣 1 次", order `FPMU8DUXVA5K5Z3B`. The cashier accepting the form is itself the CheckMacValue check |
+| First charge → `flight-ecpay-return` | ✅ | one ECPay call, 200 `text/plain`, no retries; row `active`, `current_period_end` +1 month |
+| `flight-ecpay-result` browser redirect | ✅ | 302 → `/dashboard?purchase=success`; card flipped to 已訂閱（有效） |
+| Welcome email (`flight-status-notification`) | ✅ | function returned 200 right after activation (it returns 502 if Resend rejects the send). Inbox delivery not opened/confirmed; the cancel email's log line `cancel email sent to kyp001@gmail.com` was seen |
+| Forged callback rejected | ✅ | curl with bad CMV to return/period → `0|CheckMacValue error` (proves reachable without JWT and CMV enforced) |
+| Paywall gate in `flight-parser` | ✅ | parser returned `{"routes":3,"matches":1}`: London (`pending_payment`, target met) excluded, Tokyo (`active`) matched. Pre-M2 this would have been 2 |
+| Cancel → `flight-cancel-subscription` | ✅ | ECPay `RtnCode=1 停用成功`; row `cancelled`, `current_period_end` kept; card 已取消 · 有效至 2026/10/19; cancel email sent |
+| Cancelled-in-grace still alerted | ✅ | parser `matches: 1` while `cancelled` with a future period end |
+| Grace lapse → lazily `expired` | 🟡 pending | see "Test data left behind" — the 13:00 UTC cron tick should flip it; not yet observed |
+| Renewal callback `flight-ecpay-period` | 🟡 | deployed; forged-CMV path verified; a real renewal not exercised. To test: temporarily set `PeriodType=D, Frequency=1, ExecTimes=2` in `flight-subscribe`, pay the first period, check the logs the next day, then revert to `M` |
+| Re-subscribe from `expired`; Seoul / London checkout | 🟡 | not exercised (code path shared with the Tokyo run) |
+
+**Test data left behind (2026-09-19):**
+- `TPE-TYO` (user kyp001@gmail.com) is `cancelled` with `current_period_end`
+  **back-dated to 2026-09-18 12:54:04Z** (originally 2026-10-19 12:50:18Z) to
+  test the lapse. The next `flight-parser` run should set it to `expired` and
+  report `matches: 0`. If you'd rather undo it: set `current_period_end` back to
+  `2026-10-19 12:50:18.189+00`. (Same lesson as the 09-17 history row: if you
+  back-date to test, write it down.)
+- `TPE-LON` is `pending_payment`, no checkout ever started. It is the old M1
+  row; the migration flipped **both** pre-existing M1 rows to `pending_payment`
+  by design (they stop being alerted until the user pays).
+- The stage order `FPMU8DUXVA5K5Z3B` lives in ECPay's shared stage backoffice
+  (already cancelled). Nothing real was charged.
+
+**Where M2 differs from the skill as written** (fold these back into the skill):
+- Edge Function URLs are the function slug — `/functions/v1/flight-ecpay-return`,
+  not `/functions/v1/ecpay-return`; cancel is `/functions/v1/flight-cancel-subscription`,
+  not `/cancel`.
+- Post-payment redirect goes to `/dashboard?purchase=…` (this app has no `/app`).
+- The migration also `revoke insert, update … from authenticated` (not just
+  `drop policy`) and adds a unique index on `merchant_trade_no`.
+- Cancel only treats ECPay `90100150` (order not found) as "fine, cancel
+  locally"; any other rejection returns 502 and leaves the row alone, so nobody
+  keeps being charged with alerts switched off.
+- The status email is handed off with `EdgeRuntime.waitUntil` so the request
+  isn't cut off after we reply `1|OK`.
+- `flight-subscribe` derives `route` from `flight.routes` and `email`/`user_id`
+  from the JWT — never from the request body.
+
 ## Project / environment facts (don't re-derive these)
 
 - **Shared multi-app Supabase project.** Other apps' migrations live in the
@@ -37,15 +92,29 @@ with no payment gate (`subscription_status` and the paywall are M2).
 - **Migrations in this repo**: `20260904120000_flight_app_scoped_auth`,
   `20260917071738_flight_m1_schema`, `20260917140000_flight_schema_grants`,
   `20260917150000_flight_pg_cron`, `20260918030000_flight_routes_last_price`,
-  `20260918030100_flight_routes_update_grant`.
+  `20260918030100_flight_routes_update_grant`,
+  `20260919130000_flight_route_london`,
+  `20260919140000_flight_m2_payment_columns` (M2).
 - **Deploying functions**: `supabase functions deploy <name> --use-api`
-  (no Docker needed). `supabase/config.toml` must keep `verify_jwt = true`
-  for both flight functions. The gateway accepts any project JWT (e.g. the
-  anon key), so the exact service-role bearer check inside each function is
-  what actually protects them — keep both.
+  (no Docker needed). `supabase/config.toml` keeps `verify_jwt = true` for
+  `flight-parser`, `flight-notification`, `flight-status-notification`
+  (service-role bearer, checked inside), and `flight-subscribe` /
+  `flight-cancel-subscription` (the signed-in user's own JWT). The gateway
+  accepts any project JWT (e.g. the anon key), so the exact in-function check
+  is what actually protects the service-role ones — keep both. **Exception:
+  `flight-ecpay-return`, `flight-ecpay-period`, `flight-ecpay-result` are
+  `verify_jwt = false`** (ECPay sends no JWT); deploy those with
+  `--no-verify-jwt` too so the flag can't drift from config.toml.
+- **Shared code**: `supabase/functions/_shared/ecpay.ts` (CheckMacValue,
+  checkout form, `1|OK`, status-email hand-off) is imported by the M2
+  functions via `../_shared/ecpay.ts`; `--use-api` bundles it fine.
 - **Secrets set remotely**: `RESEND_API_KEY`, `SEND_EMAIL_HOOK_SECRET`,
-  `TRAVELPAYOUTS_TOKEN`, plus auto-injected `SUPABASE_*`. Local `.env` does
-  not (and should not) contain Travelpayouts/Resend keys.
+  `TRAVELPAYOUTS_TOKEN`, `ECPAY_MERCHANT_ID` / `ECPAY_HASH_KEY` /
+  `ECPAY_HASH_IV` / `ECPAY_ENV` (`stage`) / `ECPAY_AMOUNT` (`300`), plus
+  auto-injected `SUPABASE_*`. Optional `SITE_URL` (where ECPay's browser
+  redirect lands) is **not set** and defaults to `http://localhost:8080`; set
+  it once there is a deployed front-end. Local `.env` does not (and should
+  not) contain Travelpayouts/Resend/ECPay keys.
 - **Cron**: job `flight-price-check` posts to `flight-parser` using the
   service-role key stored in Supabase Vault as `flight_service_role_key`.
   A cron run status of `succeeded` only means the HTTP request was enqueued —
@@ -80,9 +149,14 @@ with no payment gate (`subscription_status` and the paywall are M2).
 
 ## Known issues / open items
 
-- **`flight.subscriptions.updated_at` never updates** — no trigger and the
-  client doesn't send it, so it stays at the creation time. Add a
-  `before update` trigger (or send it in the upsert) if it matters.
+- **`flight.subscriptions.updated_at` has no trigger.** Since M2 every write
+  goes through an Edge Function and `flight-subscribe`, `flight-cancel-subscription`
+  and the ECPay callbacks set it explicitly, so it now moves. The parser's lazy
+  `cancelled → expired` update does not. A `before update` trigger would cover
+  everything if it ever matters.
+- **`flight-notification` (v5) and `send-email` (v7) were deployed by something
+  other than the M2 work** — their version numbers moved during the M2 session.
+  Not investigated; if behaviour changes unexpectedly, check who deployed them.
 - **Resolved (not a bug): the 09-17 history row's `sent_at` is 2 hours off.**
   The row reads 12:47:44Z but that email actually went out at 14:47:44Z. At
   2026-09-18 14:10 UTC an earlier session ran
@@ -101,9 +175,94 @@ with no payment gate (`subscription_status` and the paywall are M2).
 - `notification_history` shows "RLS enabled, no policy" — intentional
   lockdown (service role only), not a bug.
 
+## Lessons learned (M2 session, 2026-09-19)
+
+**ECPay / Edge Functions**
+- **ECPay's servers send no JWT, so the callback functions must be
+  `verify_jwt = false`.** The skill never says so. With the default (`true`) the
+  gateway 401s every callback and you'd never see one arrive. The CheckMacValue
+  is the authentication. Smoke test after deploying: POST a forged body — you
+  should get `0|CheckMacValue error` (HTTP 200), not a 401.
+- **A function's URL is its slug** (`flight-ecpay-return`), so the URLs handed to
+  ECPay (`ReturnURL`, `PeriodReturnURL`, `OrderResultURL`) must use the full
+  slugs.
+- **The cashier accepting your form is the CheckMacValue test.** A wrong hash
+  or bad param makes the stage cashier show an error instead of the order page,
+  so no separate CMV unit test was needed. Our first attempt was accepted.
+- **Stage cashier walkthrough** (browser-drivable): `立即付款` → an "you're in
+  the test environment" modal (close it) → click `立即付款` again → "確定使用信用卡"
+  modal (`確定`) → ECPay's simulated 3D page: `取得OTP服務密碼` shows the OTP
+  (`1234`), enter it, `送出` → ECPay POSTs the browser to `OrderResultURL`.
+  Card `4311-9522-2222-2222`, 12/30, CVV 222; cardholder name/phone required
+  (any test values). Use generic test details, not the user's.
+- **Reply plain-text `1|OK`; keep empty-string fields in the CheckMacValue.**
+  Both were built in from the start and worked first time.
+- **Send follow-up email with `EdgeRuntime.waitUntil`**, not a bare
+  fire-and-forget `fetch`, otherwise the runtime can end the request after the
+  response is returned.
+- **Can't typecheck Edge Functions locally** (no `deno` installed here). The
+  deploy is the compile check — all seven deployed cleanly first time. Front-end
+  code is checked with `npx tsc --noEmit -p .` (strict: bracket-access
+  `import.meta.env['…']`, `| undefined` on optional search params).
+
+**Testing / operations**
+- **`pg_net` times out after 5 s by default.** Triggering `flight-parser` from
+  SQL with `net.http_post(...)` shows `Timeout of 5000 ms reached` in
+  `net._http_response` because the parser takes a few seconds — just over
+  that limit — so you never see its response. Pass
+  `timeout_milliseconds := 60000`, then read `net._http_response` for the real
+  `{"routes":3,"matches":N}`. `matches` is the cleanest paywall test: compare it
+  to the number of paying subscribers whose target is met.
+- **Reading logs via the Supabase MCP `query_logs`:** `function_edge_logs`
+  carries request path / status / auth (`log_attributes[...]`);
+  `function_logs` carries the `console.log` output in `event_message`. There is
+  no `body` field. `function_logs` occasionally returns "Backend error" —
+  retry once, don't loop.
+- **`supabase secrets list` prints a `value` field** (SHA-256 digests, not
+  plaintext). Don't paste that output anywhere; use `--output json` and print
+  names only.
+- **`supabase db query` sometimes hangs** for minutes after working earlier.
+  Retry, or use the Supabase MCP `execute_sql` for reads. The write pattern
+  (`db query --file`, then `migration repair --status applied`) worked.
+- **Auto-mode blocks production DDL, deploys and manual parser runs.** The
+  migration and all function deploys had to be run by the user with `!`.
+  Plan for that when building a milestone: write everything first, hand over
+  one copy-paste block, then verify.
+- **chrome-devtools:** a stale automation Chrome (`pid` from
+  `ps -eo pid,etime,command | grep chrome-devtools-mcp/chrome-profile`) held the
+  profile lock; the user approved `kill`. After that the fresh browser was
+  **signed out** — the "logins persist" assumption did not hold this time, so
+  the user had to sign in again in the tool's window.
+- **Emails send from `noreply@roberthut.com`**, and M1's alerts have reached
+  kyp001@gmail.com. The skill's "Resend sandbox only reaches your own address"
+  warning is still the safe assumption for any other recipient — test M2 emails
+  to yourself.
+
+**Design**
+- **Dedup can mask a paywall test.** London's target was met but dedup would have
+  blocked its email anyway, so "no new history row" proved nothing. Assert on the
+  parser's own `matches` count instead.
+- **After moving writes behind Edge Functions, remember the UI reads.** The
+  dashboard still reads `flight.subscriptions` directly (SELECT policy kept) and
+  only *writes* through `flight-subscribe` / `flight-cancel-subscription`.
+- **Front-end contract:** `flight-subscribe` returns `text/html` (a checkout
+  form → `document.write` it) or `application/json` (in-place target-price
+  update). Branch on `Content-Type`. Card state initialised from a not-yet-loaded
+  query rendered a blank input after the payment redirect — fixed with a
+  `useEffect` that syncs the saved target.
+
 ## Next
 
-Per the skill's own "Next step": M1 is done (subscribe + scheduled fetch +
-deduped email, no payment gate). Load `m2-ecpay-subscription` for the paywall
-(adjust it if it still assumes DynamoDB/Lambda — this whole build stayed
-Supabase-only, no AWS).
+1. **Finish the 🟡 items above.** First the lapse check: after the 13:00 UTC
+   cron tick (or a parser run with `timeout_milliseconds := 60000`), Tokyo should
+   read `expired` and `matches` should be 0. Then, if wanted, the daily-period
+   renewal test and a re-subscribe run.
+2. Fold the "differs from the skill" notes above back into
+   `m2-code-ecpay-subscription` (and its `-checklist`), and correct the
+   prerequisites skill's pointer to `m2-ecpay-subscription`
+   (the real name is `m2-code-ecpay-subscription`).
+3. **Before any real money:** M2 runs entirely on the shared **stage** merchant.
+   Going live means a real MerchantID/HashKey/HashIV, `ECPAY_ENV=prod`, a real
+   `SITE_URL`, and a deployed front-end that is the final code (the Vercel site
+   is not yet). Per the skill, that is M3 ("啟動 M3", own domain / go-live) —
+   check whether the M3 skill still assumes the AWS version first.
