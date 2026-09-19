@@ -83,11 +83,16 @@ with no payment gate (`subscription_status` and the paywall are M2).
 - **`flight.subscriptions.updated_at` never updates** — no trigger and the
   client doesn't send it, so it stays at the creation time. Add a
   `before update` trigger (or send it in the upsert) if it matters.
-- **Unexplained**: the 09-17 history row's `sent_at` (12:47:44Z) is 2 hours
-  earlier than that email's actual send time in Gmail (14:47:44Z). It was
-  probably hand-edited in an earlier session. Related: the 13:00 UTC tick on
-  09-18 should have re-sent (24h floor passed by the row's clock) but didn't;
-  needs the `flight-notification` console logs to explain.
+- **Resolved (not a bug): the 09-17 history row's `sent_at` is 2 hours off.**
+  The row reads 12:47:44Z but that email actually went out at 14:47:44Z. At
+  2026-09-18 14:10 UTC an earlier session ran
+  `update flight.notification_history set sent_at = sent_at - interval '2 hours'`
+  on that row to clear the 24h dedup window, so the new "你的目標價" line could
+  be tested by email (the 14:14 UTC email). This also explains why the
+  13:00/13:30/14:00 UTC ticks on 09-18 did not re-send: the row still read
+  14:47 then (~22h old), so dedup correctly blocked them. The row was left
+  back-dated; it is no longer the latest row, so it has no effect on dedup.
+  Lesson: if you back-date history rows to test, note it here or restore them.
 - Dashboard console shows 2 minor a11y warnings (target-price inputs have no
   label association / no `id` or `name`).
 - Supabase advisor notes `flight.tag_app_metadata_on_signup()` (an M0 auth
