@@ -15,7 +15,7 @@ with no payment gate (`subscription_status` and the paywall are M2).
 |---|---|---|
 | Schema, RLS, seeded routes, no `subscription_status` | ✅ | `flight.routes`, `subscriptions`, `notification_history` |
 | RLS cross-user write blocked / read scoped | ✅ | tested in a rolled-back transaction: 42501, other user sees 0 rows |
-| Subscribe UI (write + subscribed state) | ✅ | `POST /rest/v1/subscriptions?on_conflict=user_id,route` → 200 from `localhost:8080`; 已訂閱 badge + 更新目標價 |
+| Subscribe UI (write + subscribed state) | ✅ | `POST /rest/v1/subscriptions?on_conflict=user_id,route` from `localhost:8080`: 200 on update (更新目標價), 201 on insert (開始追蹤); 已訂閱 badge shown |
 | `flight-parser` / `flight-notification` deployed | ✅ | v3 each, `verify_jwt = true`; no-bearer calls → 401 |
 | `pg_cron` job `flight-price-check` (`*/30 * * * *`) | ✅ | fires every tick; `routes.last_checked_at` refreshes |
 | Manual parser invoke with service-role key | ✅ | `{"routes":2,"matches":1}` |
@@ -23,7 +23,7 @@ with no payment gate (`subscription_status` and the paywall are M2).
 | Re-alert on big drop (≥20% or ≥NT$2,000) | ✅ | raised last history price to 9,500 → fresh email at 6,556 + new history row |
 | Dedup blocks repeat | ✅ | 16:00 UTC tick on 09-18: both functions returned 200 (a match was handed off), but no new history row and no new email, since the fare equalled the last alerted price within 24h. The "skipped (deduped)" console line itself was never seen |
 | USD-fetch-fails → TWD-only handoff (H3) | 🟡 | verified in code only |
-| Below-target subscriber excluded (H5) | 🟡 | verified in code only (`target_price >= cheapest`) |
+| Below-target subscriber excluded (H5) | ✅ | 2026-09-19 04:16 UTC: a Seoul test subscription (target NT$4,000 vs fare NT$5,127) was created via the UI, then the parser was run. No `TPE-SEL` history row and no email, so it was excluded (a wrongly matched Seoul sub has no dedup history and would have been emailed). Test row deleted afterwards |
 
 ## Project / environment facts (don't re-derive these)
 
