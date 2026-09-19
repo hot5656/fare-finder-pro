@@ -39,11 +39,11 @@ expired`. Only the verified ECPay callbacks write `active`.
 
 | Area | Status | Evidence |
 |---|---|---|
-| Migration: `subscription_status`, `merchant_trade_no` (unique), `current_period_end`; client writes removed | ✅ | columns present; only `select own subscriptions` policy left; `authenticated` has SELECT only. Not tried: a self-activation attempt from the browser console |
+| Migration: `subscription_status`, `merchant_trade_no` (unique), `current_period_end`; client writes removed | ✅ | columns present; only `select own subscriptions` policy left; `authenticated` has SELECT only. Self-activation attempted as the signed-in user (checklist run F1): `update` **and** `insert` both `42501 permission denied`; own-row `select` still works |
 | `flight-subscribe` → ECPay cashier | ✅ | text/html form; cashier showed NT$300, "每 1 個月扣 1 次", order `FPMU8DUXVA5K5Z3B`. The cashier accepting the form is itself the CheckMacValue check |
 | First charge → `flight-ecpay-return` | ✅ | one ECPay call, 200 `text/plain`, no retries; row `active`, `current_period_end` +1 month |
 | `flight-ecpay-result` browser redirect | ✅ | 302 → `/dashboard?purchase=success`; card flipped to 已訂閱（有效） |
-| Welcome email (`flight-status-notification`) | ✅ | function returned 200 right after activation (it returns 502 if Resend rejects the send). Inbox delivery not opened/confirmed; the cancel email's log line `cancel email sent to kyp001@gmail.com` was seen |
+| Welcome email (`flight-status-notification`) | ✅ | function returned 200 right after activation (it returns 502 if Resend rejects the send). Arrival confirmed in the Gmail inbox during the checklist run (subject `✈️ 訂閱成功！台北 → 東京 降價通知已開始`) |
 | Forged callback rejected | ✅ | curl with bad CMV to return/period → `0|CheckMacValue error` (proves reachable without JWT and CMV enforced) |
 | Paywall gate in `flight-parser` | ✅ | parser returned `{"routes":3,"matches":1}`: London (`pending_payment`, target met) excluded, Tokyo (`active`) matched. Pre-M2 this would have been 2 |
 | Cancel → `flight-cancel-subscription` | ✅ | ECPay `RtnCode=1 停用成功`; row `cancelled`, `current_period_end` kept; card 已取消 · 有效至 2026/10/19; cancel email sent |
@@ -53,24 +53,33 @@ expired`. Only the verified ECPay callbacks write `active`.
 | `expired` email (follow-up) | ✅ | Tokyo back-dated past its period end → log `expired 1 subscription(s)` + `expired email sent to kyp001@gmail.com`; row `expired`; a second parser run sent nothing (no `flight-status-notification` call, `matches: 0`) |
 | `payment_failed` email (follow-up) | ✅ | self-signed `RtnCode=0` callback → `payment_failed email sent`, `payment_failed_at` set, row stays `active`; identical 2nd failure → `1|OK`, flag unchanged, **no 2nd email** (only one status-notification call) |
 | Renewal callback `flight-ecpay-period` | 🟡 partly | success path exercised with a **self-signed** `RtnCode=1` callback (CMV verified, `current_period_end` refreshed, `payment_failed_at` cleared). Not yet seen: a real renewal from ECPay's scheduler. To test: temporarily set `PeriodType=D, Frequency=1, ExecTimes=2` in `flight-subscribe`, pay the first period, check the logs the next day, then revert to `M` |
-| Re-subscribe from `expired`; Seoul / London checkout | 🟡 | not exercised (code path shared with the Tokyo run) |
+| Re-subscribe from `expired` | ✅ | checklist run: Tokyo `expired` → 重新訂閱 → a **new** trade no (`FPMU8GFF402A0U33`, old was `FPMU8DUXVA5K5Z3B`) → stage payment → `active`, welcome email |
+| Seoul / London checkout | ✅ | follow-up run (~22:50 local): London 完成付款 (existing `pending_payment`, order `FPMU8I5Y0K3J125F`) and Seoul 開始追蹤 (a **new** row, target 6,000, order `FPMU8I7IZE1L0Z63`) each paid with the stage card → `CMV verified` → `activated … until 2026-10-19` → `welcome email sent` (`TPE-LON` / `TPE-SEL`), rows `active`, cards 已訂閱（有效） on `?purchase=success`. Parser then `{"routes":3,"matches":2}` (Tokyo `expired` excluded) and each route got its fare-alert history row (London NT$20,345, Seoul NT$5,127, both 14:51Z). So there was no route-specific problem, including for London, which was added later by a migration |
 
-**Test data left behind (2026-09-19):**
-- `TPE-TYO` (user kyp001@gmail.com) is now `expired`. Its `current_period_end`
-  is still the **back-dated 2026-09-18 12:54:04Z** (originally 2026-10-19
-  12:50:18Z) that was used to test the lapse — the cron tick did the flip.
-  (Same lesson as the 09-17 history row: if you back-date to test, write it
-  down.)
-- After the follow-up tests (13:3x UTC): the Tokyo row was put back to `expired`
-  (period end still back-dated), the history row raised to 9,500 was restored to
-  6,556, and `payment_failed_at` is null. Left behind on purpose: one **new**
-  `TPE-TYO` history row (NT$6,579, 13:35 UTC) from the fare-alert test. Three
-  real emails went to kyp001@gmail.com (fare alert, expired, payment failed).
-- `TPE-LON` is `pending_payment`, no checkout ever started. It is the old M1
-  row; the migration flipped **both** pre-existing M1 rows to `pending_payment`
-  by design (they stop being alerted until the user pays).
-- The stage order `FPMU8DUXVA5K5Z3B` lives in ECPay's shared stage backoffice
-  (already cancelled). Nothing real was charged.
+**Test data left behind (state after the London/Seoul follow-up, ~22:55 local / 14:55 UTC, 2026-09-19):**
+- `TPE-TYO` (user kyp001@gmail.com): **`active` on the B4 daily test order**
+  `FPMU8IP18O712217` (re-subscribed at 2026-09-19 15:04Z, `target_price` 8000,
+  `current_period_end` 2026-10-19 15:04Z, `payment_failed_at` null). Before that
+  it was `expired` on an intentionally back-dated row (`FPMU8GFF402A0U33`, period
+  end 2026-09-11) — that order is cancelled at ECPay.
+- `TPE-LON` and `TPE-SEL` are now **genuinely `active`** (both paid with the stage
+  card): London target 22000, trade no `FPMU8I5Y0K3J125F`, period end
+  2026-10-19 14:49Z; Seoul target 6000, trade no `FPMU8I7IZE1L0Z63`, period end
+  2026-10-19 14:50Z. They were **not** cancelled, so the parser keeps serving them
+  every 30 minutes (real fare alerts to kyp001@gmail.com on a big drop) and ECPay's
+  stage scheduler will try to charge them monthly. Cancel via the dashboard (E1) if
+  the test data should go away; a `cancelled` row is still alerted until its
+  `current_period_end`.
+- (The migration flipped **both** pre-existing M1 rows, Tokyo and London, to
+  `pending_payment` by design; Seoul had no row until the follow-up run.)
+- `flight.notification_history`: every price I raised for the dedup workaround
+  (ids `096c300a…`, `9d03e8cd…`, earlier `6a254506…`, and London's `557f89c6…`
+  raised to 30,000) was restored. Rows left on purpose because real emails went
+  out: `TPE-TYO` NT$6,579 (13:35Z), NT$6,579 (14:02Z), NT$6,610 (14:04Z);
+  `TPE-SEL` NT$5,127 and `TPE-LON` NT$20,345 (both 14:51Z).
+- Stage orders: `FPMU8DUXVA5K5Z3B` and `FPMU8GFF402A0U33` (Tokyo) are cancelled;
+  `FPMU8I5Y0K3J125F` (London) and `FPMU8I7IZE1L0Z63` (Seoul) are **active** in
+  ECPay's shared stage backoffice. Nothing real was charged.
 
 **Where M2 differs from the skill as written** (folded back into all three `m2-code-ecpay-subscription*` skills on 2026-09-19, so the skills now match the build):
 - Edge Function URLs are the function slug — `/functions/v1/flight-ecpay-return`,
@@ -86,6 +95,60 @@ expired`. Only the verified ECPay callbacks write `active`.
   isn't cut off after we reply `1|OK`.
 - `flight-subscribe` derives `route` from `flight.routes` and `email`/`user_id`
   from the JWT — never from the request body.
+
+### M2 checklist run — full pass (`m2-code-ecpay-subscription-checklist`, 2026-09-19 evening)
+
+Run end to end on the stage merchant with the real cashier for B3. **20 of 21
+checks ✅, B4 ⚠️.** Verdict per the skill: all ✅ except the time-gated B4, so
+M2 counts as passed and READY for M3, with B4 still to be done.
+
+| Check | Result | Evidence |
+|---|---|---|
+| A1/A2/A3 secrets, checkout form, pending row | ✅ | five `ECPAY_*` present (`SITE_URL` unset); `text/html`, cashier URL + `CheckMacValue` + `PeriodType=M`, `PeriodAmount = TotalAmount = 300`, full-slug `ReturnURL`/`PeriodReturnURL`/`OrderResultURL`. A client-sent wrong `route` was ignored (`CustomField2` stayed `TPE-LON`) |
+| B1 three ECPay functions `verify_jwt=false`; forged body | ✅ | all three `False`; forged → `0|CheckMacValue error`, not 401 |
+| B2 CMV + `SimulatePaid` guard | ✅ | logs `CMV mismatch FAKE1`; a signed `SimulatePaid=1` callback → `CMV verified`, `1|OK`, London **stayed `pending_payment`** |
+| B3 real payment → `active` | ✅ | `activated FPMU8GFF402A0U33 until 2026-10-19`, row `active` |
+| B4 real renewal from ECPay's scheduler | ⚠️ | needs the next-day `PeriodType=D` test (below); only the self-signed path was exercised |
+| B5 `ecpay-result` 302 | ✅ | curl → `302` to `http://localhost:8080/dashboard?purchase=success`; the real payment landed there too |
+| C0/C1/C2 status function | ✅ | welcome email logged; `bogus` event with the service-role bearer → 400 (`event_type (welcome|cancel|expired|payment_failed)…`); no bearer → 401 |
+| D0/D1/D2 parser gate | ✅ | `matches: 1` (Tokyo active in, London pending-but-target-met out); Tokyo got a new history row |
+| **D3a** cancelled **before** expiry → fare email | ✅ | `cancelled`, future end → `matches: 1`, new history NT$6,610 (14:04Z) |
+| **D3b** cancelled **after** expiry | ✅ | → `expired`, `matches: 0`, one "ended" email, second parser run silent |
+| D4 `active` but renewals overdue > 7 days | ✅ | back-dated 8 days → `expired`, one "payment lapsed" email |
+| E1/E2/E3 cancel, in-place target update, lifecycle | ✅ | `ECPay cancel … RtnCode=1 停用成功`, `cancel email sent`; target 8000→8500 with no navigation, still `cancelled`, same trade no; `expired → active → cancelled → expired` all walked |
+| F1/F1b/F2 RLS + grants | ✅ | as the signed-in user `update`/`insert` → `42501`; `authenticated` has SELECT only; own-row `select` works |
+| G1/G2/G3 once-only lifecycle emails | ✅ | two identical failures → **one** `payment_failed`; `RtnCode=1` clears `payment_failed_at`; only **3** `flight-status-notification` calls in the whole window (expired, payment_failed, expired) |
+
+**Inbox verification (Gmail, from two screenshots the user supplied).** Every
+email lines up with a log line (mailbox time is UTC+8): 10:01 PM 訂閱成功
+(`welcome` 14:01Z) · 10:02 PM 降價 NT$6,579 (D1) · 10:03 PM 已取消 (E1) · 10:04 PM
+降價 NT$6,610 (D3a) · 10:04 PM 已結束 (D3b) · 10:05 PM ⚠️ 本期扣款失敗 (G1) ·
+10:06 PM 已結束 (D4). Gmail groups by subject, so the thread counts include the
+earlier session's emails: welcome 2, cancel 2, NT$6,579 alert 2, payment failed 2,
+ended 3, NT$6,610 alert 1 — each run contributed exactly one of each, so nothing
+was double-sent. **Both "ended" wordings were seen in full:** "訂閱期間已結束…也不會
+再向你收費" (`period_ended`) and "因為多次扣款未成功…訂閱已結束" (`payment_lapsed`),
+sender `noreply@roberthut.com`, no resubscribe link because `SITE_URL` is unset.
+
+**Not verified:** the full bodies of the cancel / payment-failed / fare emails (only
+the subjects and snippets were seen); the stage 廠商後台 showing the cancelled series
+as terminated (evidence is ECPay's `RtnCode=1`). The **welcome** email body *was*
+seen in full (the user pasted it: title, greeting, 每月扣款 NT$300, 服務期間至
+2026/10/19 — it matches the template). (Seoul and London checkout, listed here
+earlier, was done in a follow-up — see the status table.)
+
+**B4 — STARTED 2026-09-19 15:04Z (23:04 local); result pending.** `flight-subscribe`
+was deployed with `PeriodType=D, Frequency=1, ExecTimes=2` (a temporary edit to
+`_shared/ecpay.ts`, reverted in the repo right away — **repo = monthly, remote =
+daily until redeployed**). The returned form was checked (`PeriodType=D`,
+`ExecTimes=2`, 300) and the cashier showed 每 1 日扣 1 次; Tokyo's order
+`FPMU8IP18O712217` paid its first period → `CMV verified`, `activated`, welcome
+email. **To finish:** from ~2026-09-20, read the `flight-ecpay-period` logs
+(expect `CMV verified: period FPMU8IP18O712217 RtnCode=1 TotalSuccessTimes=2 …
+SimulatePaid=0`, replied `1|OK`; ECPay's time of day is unknown, so look mid-day and
+evening). If nothing arrives by ~09-21, the stage scheduler probably doesn't fire —
+record B4 as not verifiable on stage. **Then redeploy from the repo to restore
+monthly: `supabase functions deploy flight-subscribe --use-api`.**
 
 ### M2 follow-up: lifecycle emails (2026-09-19 — deployed and verified)
 
@@ -200,6 +263,10 @@ It lived in the session scratchpad and is not in the repo.
 
 ## Known issues / open items
 
+- **The welcome email hard-codes "每月扣款 NT$…".** `flight-status-notification`
+  fills in the amount from `ECPAY_AMOUNT` but not the billing period, so the B4
+  daily test order's welcome email also said 每月. Correct while production stays
+  monthly; if other periods are ever offered, pass the period in from the checkout.
 - **`flight.subscriptions.updated_at` has no trigger.** Since M2 every write
   goes through an Edge Function and `flight-subscribe`, `flight-cancel-subscription`
   and the ECPay callbacks set it explicitly, so it now moves. The parser's lazy
@@ -284,6 +351,13 @@ It lived in the session scratchpad and is not in the repo.
   profile lock; the user approved `kill`. After that the fresh browser was
   **signed out** — the "logins persist" assumption did not hold this time, so
   the user had to sign in again in the tool's window.
+- **Gmail can make an identical email look blank.** Three welcome emails with the
+  same subject and body land in one conversation, and Gmail folds the repeated
+  body of the newest one behind a `•••` button, so it *looks* empty (the earlier
+  copies' snippets still show the text). It is not a send bug — click `•••` or
+  "Show original". It only shows when the same person gets identical emails in one
+  thread (e.g. re-subscribing to the same route); different routes have different
+  subjects.
 - **Emails send from `noreply@roberthut.com`**, and M1's alerts have reached
   kyp001@gmail.com. The skill's "Resend sandbox only reaches your own address"
   warning is still the safe assumption for any other recipient — test M2 emails
@@ -299,7 +373,26 @@ It lived in the session scratchpad and is not in the repo.
   failure / repeat-failure through `flight-ecpay-period` without waiting for
   ECPay's scheduler.
 
+- **Act as the signed-in user from the dev server.** In `evaluate_script`,
+  `await import('/src/integrations/supabase/client.ts')` gives the app's own
+  Supabase client (already holding the user's session), so RLS checks (F1/F2) and
+  calls to `flight-subscribe` need no token juggling. `import.meta` is not
+  available inside `evaluate_script`; read the URL/key off the client instead.
+- **Drive the stage cashier by element id.** After opening the 信用卡 tab the
+  fields are `CCpart1`–`CCpart4`, `creditMM`, `creditYY`, `CreditBackThree`,
+  `CCHolderTemp`, `CellPhoneCheck`, `EmailTemp`, `Address`; set them with the
+  native value setter plus `input`/`change` events (a plain `.value =` isn't
+  picked up). `wait_for` on the cashier text timed out once even though the page
+  had loaded — check `location.href` before assuming the click failed.
+- **Send a signed `SimulatePaid=1` first-charge callback** (the sibling of the
+  `flight-ecpay-period` script) to test the guard without the stage 後台: it must
+  reply `1|OK` and leave the row `pending_payment`.
+
 **Design**
+- **The dedup workaround must target the *latest* history row.** Every fare email
+  writes a new latest row, so raise `price` on the newest `notification_history`
+  row for that user+route each time (I had to look the id up again between D1 and
+  D3a), and restore each one afterwards.
 - **Dedup can mask a paywall test.** London's target was met but dedup would have
   blocked its email anyway, so "no new history row" proved nothing. Assert on the
   parser's own `matches` count instead.
@@ -314,10 +407,11 @@ It lived in the session scratchpad and is not in the repo.
 
 ## Next
 
-1. **Finish the 🟡 items above.** First the lapse check: after the 13:00 UTC
-   cron tick (or a parser run with `timeout_milliseconds := 60000`), Tokyo should
-   read `expired` and `matches` should be 0. Then, if wanted, the daily-period
-   renewal test and a re-subscribe run.
+1. **B4 — the real renewal.** The one open M2 check; started 2026-09-19 23:04
+   local (see "M2 checklist run" above): read the `flight-ecpay-period` logs from
+   09-20 on, then **redeploy `flight-subscribe` from the repo to restore monthly
+   billing**. The lapse check, the re-subscribe
+   path and Seoul / London checkout are done.
 2. ~~Fold the "differs from the skill" notes back into the M2 skills.~~ Done
    (2026-09-19): the main skill, its checklist (new C2, D4, F1b, a Section G
    for the lifecycle emails, and D3 split into D3a "cancelled before expiry: fare
