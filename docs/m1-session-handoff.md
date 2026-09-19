@@ -48,17 +48,24 @@ expired`. Only the verified ECPay callbacks write `active`.
 | Paywall gate in `flight-parser` | ✅ | parser returned `{"routes":3,"matches":1}`: London (`pending_payment`, target met) excluded, Tokyo (`active`) matched. Pre-M2 this would have been 2 |
 | Cancel → `flight-cancel-subscription` | ✅ | ECPay `RtnCode=1 停用成功`; row `cancelled`, `current_period_end` kept; card 已取消 · 有效至 2026/10/19; cancel email sent |
 | Cancelled-in-grace still alerted | ✅ | parser `matches: 1` while `cancelled` with a future period end |
-| Grace lapse → lazily `expired` | 🟡 pending | see "Test data left behind" — the 13:00 UTC cron tick should flip it; not yet observed |
-| Renewal callback `flight-ecpay-period` | 🟡 | deployed; forged-CMV path verified; a real renewal not exercised. To test: temporarily set `PeriodType=D, Frequency=1, ExecTimes=2` in `flight-subscribe`, pay the first period, check the logs the next day, then revert to `M` |
+| Grace lapse → lazily `expired` | ✅ | Tokyo was back-dated to a past `current_period_end`; the 13:00 UTC cron tick flipped it `cancelled → expired` (read back at 13:13 UTC) |
+| Fare-alert email for a paying user, after the M2 + follow-up parser | ✅ | Tokyo `cancelled` with a future period end, last history price raised to 9,500 → parser `matches: 1`, new history row (NT$6,579), no dedup skip, no error |
+| `expired` email (follow-up) | ✅ | Tokyo back-dated past its period end → log `expired 1 subscription(s)` + `expired email sent to kyp001@gmail.com`; row `expired`; a second parser run sent nothing (no `flight-status-notification` call, `matches: 0`) |
+| `payment_failed` email (follow-up) | ✅ | self-signed `RtnCode=0` callback → `payment_failed email sent`, `payment_failed_at` set, row stays `active`; identical 2nd failure → `1|OK`, flag unchanged, **no 2nd email** (only one status-notification call) |
+| Renewal callback `flight-ecpay-period` | 🟡 partly | success path exercised with a **self-signed** `RtnCode=1` callback (CMV verified, `current_period_end` refreshed, `payment_failed_at` cleared). Not yet seen: a real renewal from ECPay's scheduler. To test: temporarily set `PeriodType=D, Frequency=1, ExecTimes=2` in `flight-subscribe`, pay the first period, check the logs the next day, then revert to `M` |
 | Re-subscribe from `expired`; Seoul / London checkout | 🟡 | not exercised (code path shared with the Tokyo run) |
 
 **Test data left behind (2026-09-19):**
-- `TPE-TYO` (user kyp001@gmail.com) is `cancelled` with `current_period_end`
-  **back-dated to 2026-09-18 12:54:04Z** (originally 2026-10-19 12:50:18Z) to
-  test the lapse. The next `flight-parser` run should set it to `expired` and
-  report `matches: 0`. If you'd rather undo it: set `current_period_end` back to
-  `2026-10-19 12:50:18.189+00`. (Same lesson as the 09-17 history row: if you
-  back-date to test, write it down.)
+- `TPE-TYO` (user kyp001@gmail.com) is now `expired`. Its `current_period_end`
+  is still the **back-dated 2026-09-18 12:54:04Z** (originally 2026-10-19
+  12:50:18Z) that was used to test the lapse — the cron tick did the flip.
+  (Same lesson as the 09-17 history row: if you back-date to test, write it
+  down.)
+- After the follow-up tests (13:3x UTC): the Tokyo row was put back to `expired`
+  (period end still back-dated), the history row raised to 9,500 was restored to
+  6,556, and `payment_failed_at` is null. Left behind on purpose: one **new**
+  `TPE-TYO` history row (NT$6,579, 13:35 UTC) from the fare-alert test. Three
+  real emails went to kyp001@gmail.com (fare alert, expired, payment failed).
 - `TPE-LON` is `pending_payment`, no checkout ever started. It is the old M1
   row; the migration flipped **both** pre-existing M1 rows to `pending_payment`
   by design (they stop being alerted until the user pays).
@@ -79,6 +86,50 @@ expired`. Only the verified ECPay callbacks write `active`.
   isn't cut off after we reply `1|OK`.
 - `flight-subscribe` derives `route` from `flight.routes` and `email`/`user_id`
   from the JWT — never from the request body.
+
+### M2 follow-up: lifecycle emails (2026-09-19 — deployed and verified)
+
+Until now users only got `welcome` and `cancel` emails: nothing when a
+cancelled subscription ran out, and nothing when a renewal charge failed.
+`flight-status-notification` now also handles two more `event_type`s:
+
+- **`expired`** — with `reason` `period_ended` (cancelled and the paid month is
+  over) or `payment_lapsed` (renewals stopped). Sent by `flight-parser` at the
+  moment it flips the row, and by `flight-ecpay-period` if ECPay reports every
+  scheduled execution used. Each `update … returning` only returns rows it
+  actually flipped, so a row emails **once**. Includes a 重新訂閱 link only if the
+  `SITE_URL` secret is set (never a localhost link).
+- **`payment_failed`** — sent by `flight-ecpay-period` on the **first** failed
+  renewal of a cycle. ECPay calls back on every retry (up to 6), so a new column
+  `payment_failed_at` (migration `20260919150000_flight_payment_failed_at`)
+  makes it once-only (`update … where payment_failed_at is null`); a successful
+  renewal clears it.
+
+**Decision beyond the request — please sanity-check:** `flight-ecpay-period`
+originally only expired a row when ECPay's `TotalSuccessTimes >= ExecTimes`.
+ECPay actually terminates after **6 consecutive failures** with far fewer
+successes, so such a row would have stayed `active` forever and kept being
+alerted. `flight-parser` now also expires an `active` row whose
+`current_period_end` is more than `RENEWAL_GRACE_DAYS` (7) past with no
+renewal, emailing it `payment_lapsed`. Change the constant if ECPay's retry
+window turns out to be longer.
+
+**Deployed 2026-09-19 (by the user, migration first):** migration
+`20260919150000_flight_payment_failed_at` applied and registered;
+`flight-status-notification` v2, `flight-parser` v6, `flight-ecpay-period` v2
+(`--no-verify-jwt`). `flight-subscribe`, `flight-cancel-subscription` and
+`flight-ecpay-return` were not redeployed (only a type in `_shared/ecpay.ts`
+changed). Order matters: the renewal success path writes `payment_failed_at`,
+so the column must exist before `flight-ecpay-period` is deployed.
+
+**How the follow-up was tested** (order C → A → B, all on the one Tokyo row,
+restored afterwards): C = fare alert (raise last history price, run parser),
+A = expiry (back-date `current_period_end`, run parser twice), B = failed /
+successful renewals via a self-signed callback. The signer is a ~40-line Node
+script that reimplements the CheckMacValue with the **public** stage
+HashKey/HashIV and POSTs to `flight-ecpay-period`; a validly-signed callback for
+an unknown trade number returns `1|OK`, a forged one `0|CheckMacValue error`.
+It lived in the session scratchpad and is not in the repo.
 
 ## Project / environment facts (don't re-derive these)
 
@@ -237,6 +288,16 @@ expired`. Only the verified ECPay callbacks write `active`.
   kyp001@gmail.com. The skill's "Resend sandbox only reaches your own address"
   warning is still the safe assumption for any other recipient — test M2 emails
   to yourself.
+
+- **Logs lag by a minute or so.** A `query_logs` run right after the action can
+  return nothing (or miss the newest lines) even though the function ran, so
+  "no email line" is not evidence of "no email" until later lines from the same
+  window have appeared. Cross-check with the DB (`payment_failed_at`,
+  `net._http_response`) and re-query once.
+- **Self-sign ECPay callbacks to test the handlers.** The stage HashKey/HashIV are
+  public, so a script can produce a valid `CheckMacValue` and drive success /
+  failure / repeat-failure through `flight-ecpay-period` without waiting for
+  ECPay's scheduler.
 
 **Design**
 - **Dedup can mask a paywall test.** London's target was met but dedup would have
