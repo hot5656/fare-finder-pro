@@ -72,7 +72,7 @@ expired`. Only the verified ECPay callbacks write `active`.
 - The stage order `FPMU8DUXVA5K5Z3B` lives in ECPay's shared stage backoffice
   (already cancelled). Nothing real was charged.
 
-**Where M2 differs from the skill as written** (fold these back into the skill):
+**Where M2 differs from the skill as written** (folded back into all three `m2-code-ecpay-subscription*` skills on 2026-09-19, so the skills now match the build):
 - Edge Function URLs are the function slug — `/functions/v1/flight-ecpay-return`,
   not `/functions/v1/ecpay-return`; cancel is `/functions/v1/flight-cancel-subscription`,
   not `/cancel`.
@@ -318,10 +318,10 @@ It lived in the session scratchpad and is not in the repo.
    cron tick (or a parser run with `timeout_milliseconds := 60000`), Tokyo should
    read `expired` and `matches` should be 0. Then, if wanted, the daily-period
    renewal test and a re-subscribe run.
-2. Fold the "differs from the skill" notes above back into
-   `m2-code-ecpay-subscription` (and its `-checklist`), and correct the
-   prerequisites skill's pointer to `m2-ecpay-subscription`
-   (the real name is `m2-code-ecpay-subscription`).
+2. ~~Fold the "differs from the skill" notes back into the M2 skills.~~ Done
+   (2026-09-19): the main skill, its checklist (new C2, D4, F1b and a Section G
+   for the lifecycle emails) and the prerequisites skill were corrected and
+   extended; the stale `m2-ecpay-subscription` pointer is fixed.
 3. **Before any real money:** M2 runs entirely on the shared **stage** merchant.
    Going live means a real MerchantID/HashKey/HashIV, `ECPAY_ENV=prod`, a real
    `SITE_URL`, and a deployed front-end that is the final code (the Vercel site
