@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+        "mcp__claude_ai_Supabase__query_logs",
+        "Bash(supabase db query --linked --file supabase/migrations/*)",
+        "Bash(supabase migration repair --status applied *)",
+        "Bash(supabase functions deploy flight-notification --use-api)"
+    ]
+  }
+}
