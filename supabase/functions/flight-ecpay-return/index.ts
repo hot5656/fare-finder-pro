@@ -72,6 +72,8 @@ Deno.serve(async (req) => {
     .update({
       subscription_status: "active",
       current_period_end: periodEnd.toISOString(),
+      // The first charge is charge #1, so flight-ecpay-period's renewal #2 is new.
+      total_success_times: 1,
       updated_at: new Date().toISOString(),
     })
     .eq("id", row.id)

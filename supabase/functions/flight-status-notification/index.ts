@@ -1,11 +1,12 @@
 // flight-status-notification: subscription lifecycle emails, routed by
-// `event_type` ("welcome" | "cancel" | "expired" | "payment_failed"). One
-// function for all of them — like M1's single flight-notification. Called by
+// `event_type` ("welcome" | "cancel" | "expired" | "payment_failed" | "renewed").
+// One function for all of them — like M1's single flight-notification. Called by
 // flight-ecpay-return (welcome), flight-cancel-subscription (cancel),
-// flight-ecpay-period (payment_failed, expired) and flight-parser (expired);
-// never scheduled itself.
+// flight-ecpay-period (renewed, payment_failed, expired) and flight-parser
+// (expired); never scheduled itself.
 //
-// Body: { event_type, email, route, current_period_end?, reason? }
+// Body: { event_type, email, route, current_period_end?, reason?, amount?, charge_no? }
+//   amount / charge_no ("renewed" only): what was charged and which charge it was.
 //   reason ("expired" only): "period_ended" (a cancelled subscription ran out)
 //   or "payment_lapsed" (renewals stopped succeeding).
 //
@@ -26,7 +27,7 @@ const SITE_URL = Deno.env.get("SITE_URL")?.replace(/\/$/, "");
 const SENDER = "Flight Price Notifier <noreply@roberthut.com>"; // same as flight-notification
 const resend = new Resend(RESEND_API_KEY);
 
-const EVENT_TYPES = ["welcome", "cancel", "expired", "payment_failed"] as const;
+const EVENT_TYPES = ["welcome", "cancel", "expired", "payment_failed", "renewed"] as const;
 
 type Payload = {
   event_type: (typeof EVENT_TYPES)[number];
@@ -34,6 +35,8 @@ type Payload = {
   route: string;
   current_period_end?: string | null;
   reason?: "period_ended" | "payment_lapsed";
+  amount?: number;
+  charge_no?: number;
 };
 
 const fmtDate = (iso?: string | null) =>
@@ -70,6 +73,17 @@ function render(p: Payload, label: string): { subject: string; html: string; tex
       "系統會自動再試幾次。請確認信用卡的額度與有效期限，必要時聯絡發卡銀行。",
       "如果持續失敗，訂閱會結束，降價通知也會停止，屆時我們會再寄信告訴你。",
     ]);
+  }
+
+  if (p.event_type === "renewed") {
+    const money = Number(p.amount) > 0 ? Number(p.amount) : Number(ECPAY_AMOUNT);
+    const amt = money > 0 ? `NT$${Math.round(money).toLocaleString()}` : "";
+    return wrap(`✅ ${label} 本期已扣款${amt ? ` ${amt}` : ""}`, [
+      `你的 ${label} 降價通知訂閱已續訂${p.charge_no ? `（第 ${p.charge_no} 期）` : ""}。`,
+      amt ? `本期已從你的信用卡扣款 ${amt}（信用卡定期定額）。` : "本期已從你的信用卡扣款（信用卡定期定額）。",
+      until ? `服務期間延長至 ${until}。` : "",
+      "不想繼續的話，可隨時取消；取消後，已付款的期間內仍會收到通知。",
+    ].filter(Boolean));
   }
 
   // expired

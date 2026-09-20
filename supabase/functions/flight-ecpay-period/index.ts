@@ -1,6 +1,7 @@
 // flight-ecpay-period: ECPay's PeriodReturnURL — the 2nd charge onward.
-// Verified CheckMacValue + RtnCode "1" keeps the row active and pushes
-// current_period_end out by one period. A failed charge does NOT expire the
+// Verified CheckMacValue + RtnCode "1" keeps the row active, pushes
+// current_period_end out by one period and emails a "renewal charged" notice
+// (once per charge, see below). A failed charge does NOT expire the
 // row: ECPay retries and auto-terminates the series after 6 consecutive
 // failures. Instead the user gets a one-time "payment failed" email, and
 // flight-parser expires the row (with an "expired" email) if no renewal ever
@@ -10,6 +11,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
+  ECPAY_AMOUNT,
   ECPAY_MERCHANT_ID,
   fail,
   ok,
@@ -63,20 +65,55 @@ Deno.serve(async (req) => {
     // resets the "payment failed" flag so the next bad cycle emails again.
     const periodEnd = new Date();
     periodEnd.setMonth(periodEnd.getMonth() + 1);
-    const { error: updateError } = await admin
+
+    // ECPay resends this callback until it gets `1|OK`, so "email on every
+    // success" would double-send. TotalSuccessTimes is the running count of
+    // successful charges: only a callback whose count is larger than the one we
+    // last stored is a NEW charge. The guard is part of the update itself, so
+    // "is this new?" and "record it" are one atomic step even if two copies race.
+    const chargeNo = Number(p.TotalSuccessTimes);
+    const haveCount = Number.isFinite(chargeNo) && chargeNo > 0;
+
+    let update = admin
       .from("subscriptions")
       .update({
         subscription_status: "active",
         current_period_end: periodEnd.toISOString(),
         payment_failed_at: null,
+        // undefined is dropped from the payload: without a usable count we leave
+        // the stored one alone.
+        total_success_times: haveCount ? chargeNo : undefined,
         updated_at: new Date().toISOString(),
       })
       .eq("id", row.id)
       .in("subscription_status", ["active", "pending_payment"]);
+    if (haveCount) update = update.or(`total_success_times.is.null,total_success_times.lt.${chargeNo}`);
+
+    const { data: renewed, error: updateError } = await update
+      .select("email, route, current_period_end")
+      .maybeSingle();
     if (updateError) {
       console.error("renewal update failed", updateError);
       return fail("update error");
     }
+    if (!haveCount) {
+      // Can't tell a new charge from a resend, so don't risk a duplicate email.
+      console.error(`renewal ${p.MerchantTradeNo}: no usable TotalSuccessTimes (${p.TotalSuccessTimes}), period extended without an email`);
+      return ok();
+    }
+    if (!renewed) {
+      console.log(`renewal ${p.MerchantTradeNo} charge #${chargeNo} already processed, no email`);
+      return ok();
+    }
+
+    sendStatusEmail({
+      event_type: "renewed",
+      email: renewed.email,
+      route: renewed.route,
+      current_period_end: renewed.current_period_end,
+      amount: Number(p.Amount || p.amount) || ECPAY_AMOUNT,
+      charge_no: chargeNo,
+    });
     return ok();
   }
 

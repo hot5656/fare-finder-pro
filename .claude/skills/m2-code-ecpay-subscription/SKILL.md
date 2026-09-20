@@ -13,12 +13,12 @@ Turns the working **free** notifier (M1, Supabase version) into a **paid** servi
 2. **A new `flight-subscribe` Edge Function replaces M1's direct client-side `upsert`.** This is the one real architecture change M2 forces on the M1 design: once the row carries `subscription_status` — actual proof of payment — the browser can no longer be allowed to write it directly (M1's RLS let a signed-in user `upsert` their own row freely, which was fine when the row was just a target-price preference). `flight-subscribe` now writes `subscription_status = pending_payment` and builds the ECPay recurring-checkout form (signed with a **CheckMacValue**), returning its auto-submit HTML so the browser POSTs the user to ECPay's cashier to pay.
 3. **Two callback Edge Functions** that **verify the CheckMacValue** (the SOURCE OF TRUTH for paid status) and flip the row's `subscription_status`:
    - **`flight-ecpay-return`** — receives the **first** authorization result (paid at checkout) → `active`.
-   - **`flight-ecpay-period`** — receives **every subsequent monthly** authorization result → keeps `active` and refreshes `current_period_end`. A **failed** charge does not expire the row: the user gets a one-time `payment_failed` email, and the row only ends if ECPay reports the run is over (see Step 4 and Step 5 for the case ECPay never tells you about).
+   - **`flight-ecpay-period`** — receives **every subsequent monthly** authorization result → keeps `active`, refreshes `current_period_end` and sends the user a **"renewal charged"** email (`renewed`, once per charge). A **failed** charge does not expire the row: the user gets a one-time `payment_failed` email, and the row only ends if ECPay reports the run is over (see Step 4 and Step 5 for the case ECPay never tells you about).
    - both **call `flight-status-notification` directly** (same fire-and-forget HTTP pattern M1 uses between `flight-parser` and `flight-notification` — no queue): `flight-ecpay-return` sends `{ event_type: "welcome", ... }`; `flight-ecpay-period` sends `"payment_failed"` / `"expired"`.
    - **ECPay's servers (and the user's browser, for `flight-ecpay-result`) call these with no Supabase JWT, so all three ECPay-facing functions must be deployed with `verify_jwt = false`** — the CheckMacValue is their authentication. With the default (`true`) the gateway 401s every callback and you never see one arrive (Step 4).
 4. A **`flight-cancel-subscription`** Edge Function that calls ECPay's **`CreditCardPeriodAction` `Action=Cancel`** to stop future charges, flips the row to `cancelled` (grace period, not instantly `expired`), and calls `flight-status-notification` with `{event_type:"cancel", ...}`.
 
-> **One notification function, routed by `event_type`.** Subscribe and unsubscribe emails both flow through the **same** `flight-status-notification` Edge Function — every caller passes an `event_type` (`"welcome"` / `"cancel"` / `"expired"` / `"payment_failed"`) and the one function branches on it to render the right email. (Don't build two notification functions — same principle as M1's single `flight-notification`.)
+> **One notification function, routed by `event_type`.** Subscribe and unsubscribe emails both flow through the **same** `flight-status-notification` Edge Function — every caller passes an `event_type` (`"welcome"` / `"cancel"` / `"expired"` / `"payment_failed"` / `"renewed"`) and the one function branches on it to render the right email. (Don't build two notification functions — same principle as M1's single `flight-notification`.)
 5. **`flight-parser` (M1.2) gains a grace-aware `active`-or-`cancelled` filter** in its `select`, and lazily retires lapsed rows (emailing each user once). *This* is what makes only paying users get alerts.
 
 End state: a test payment flips a row `pending_payment → active` (and it starts getting alerts); cancelling flips it to `cancelled` (still alerted through the paid period, then lazily `expired` with an "ended" email). A failed renewal emails the user once. A `pending_payment` (unpaid) row is never emailed.
@@ -44,7 +44,7 @@ End state: a test payment flips a row `pending_payment → active` (and it start
                             · 302 redirect to <site>/dashboard?purchase=success|failed（用你 App 登入後的頁面；不可指向前端靜態路由）
 之後（第 2 期起，每月自動扣款）
    └─ PeriodReturnURL ──▶ flight-ecpay-period (Edge Function)
-                           · 驗 CMV；續扣成功 → 維持 active + 刷新 current_period_end + 清掉 payment_failed_at
+                           · 驗 CMV；續扣成功 → 維持 active + 刷新 current_period_end + 清掉 payment_failed_at + 寄 renewed（本期已扣款；用 total_success_times 確保每次扣款只寄一封）
                            · 續扣失敗 → 維持 active；每個週期只在「第一次」失敗寄一封 payment_failed（payment_failed_at 去重）
                            · 用完所有期數 → expired（寄 expired）· 回 1|OK
                            · 連續失敗 6 次 ECPay 會自動終止，但不會通知我們 → 由 flight-parser 依 current_period_end 逾期判定（Step 5）
@@ -104,7 +104,10 @@ alter table flight.subscriptions
   add column current_period_end timestamptz,
   -- set on the first failed renewal of a cycle so the "payment failed" email is once-only
   -- (ECPay calls back on every retry); cleared again on a successful renewal.
-  add column payment_failed_at timestamptz;
+  add column payment_failed_at timestamptz,
+  -- the last successful-charge count we processed (ECPay's TotalSuccessTimes), so the
+  -- "renewal charged" email is sent once per charge even though ECPay resends callbacks.
+  add column total_success_times integer;
 
 create unique index subscriptions_merchant_trade_no_key
   on flight.subscriptions (merchant_trade_no) where merchant_trade_no is not null;
@@ -167,13 +170,15 @@ The CheckMacValue algorithm, the two-callback split, and every pitfall here are 
 **`flight-ecpay-return`** (`POST /functions/v1/flight-ecpay-return` — first period, source of truth for activation):
 1. Parse the **form-urlencoded** body (ECPay callbacks are always `application/x-www-form-urlencoded`, never JSON).
 2. **Verify the CheckMacValue** over the returned fields — **keep empty-string fields in the hash** (ECPay sends and signs `CustomField3=&CustomField4=`; dropping them gives a wrong hash — the single most common ECPay bug). Also verify `MerchantID` matches `ECPAY_MERCHANT_ID`.
-3. If `RtnCode === "1"` (string!) **and** not a bare `SimulatePaid=1` test (see watch-out 7): `update flight.subscriptions set subscription_status='active', current_period_end = now() + interval '1 month' where merchant_trade_no = <MerchantTradeNo> and email = <CustomField1> and route = <CustomField2>` (the trade number pins it to *this* checkout attempt; `flight-subscribe` already stored it).
+3. If `RtnCode === "1"` (string!) **and** not a bare `SimulatePaid=1` test (see watch-out 7): `update flight.subscriptions set subscription_status='active', total_success_times = 1, current_period_end = now() + interval '1 month' where merchant_trade_no = <MerchantTradeNo> and email = <CustomField1> and route = <CustomField2>` (the trade number pins it to *this* checkout attempt; `flight-subscribe` already stored it).
 4. **Idempotency: key on `MerchantTradeNo` + "is the row already `active`?", NOT on `Gwsr`.** `Gwsr` comes back **empty** on the real 定期定額 first-period callback. If already activated for this trade-no, skip the write but still ack.
 5. On success, **call `flight-status-notification` directly** (service-role bearer, fire-and-forget — same pattern as M1's `flight-parser`→`flight-notification` handoff) with `{ event_type: "welcome", email, route }`. Register the request with `EdgeRuntime.waitUntil(...)` so the runtime doesn't cut it off once you've replied `1|OK`.
 6. Reply with the **plain-text body `1|OK`**, `Content-Type: text/plain` (anything else → ECPay resends 4× over ~20–60 min). On a verification failure reply `0|<reason>`.
 
 **`flight-ecpay-period`** (`POST /functions/v1/flight-ecpay-period` — 2nd charge onward): same verify, same `SimulatePaid` guard. Look the row up by `MerchantTradeNo`.
-- **`RtnCode=="1"`:** keep `active`, **refresh `current_period_end`** (extend by one period) and **clear `payment_failed_at`**. A renewal that lands after a cancel must not resurrect a `cancelled`/`expired` row.
+- **`RtnCode=="1"`:** keep `active`, **refresh `current_period_end`** (extend by one period), **clear `payment_failed_at`**, and email the user a `renewed` notice ("本期已扣款 NT$300，服務延長至 …"). A renewal that lands after a cancel must not resurrect a `cancelled`/`expired` row.
+  - **Once per charge:** ECPay resends the callback until it gets `1|OK`. `TotalSuccessTimes` is the running count of successful charges, so make the guard part of the update: `update … set total_success_times = N, current_period_end = …, payment_failed_at = null where id = … and status in ('active','pending_payment') and (total_success_times is null or total_success_times < N) returning email, route, current_period_end` — only the call that gets a row back sends the email; a resend gets nothing back and just acks. Without a usable `TotalSuccessTimes` you can't tell a new charge from a resend, so extend the period but **don't** email.
+  - The real callback has **no `SimulatePaid` field at all** (it reads as `undefined`), so test `=== "1"`, never a truthy check that a missing field could trip.
 - **Failure:** **don't expire on the first miss** — ECPay auto-retries and only auto-terminates after **6 consecutive failures**. Instead, send the user **one** `payment_failed` email per cycle. ECPay calls back on *every* retry, so make "first" atomic: `update … set payment_failed_at = now() where id = … and subscription_status = 'active' and payment_failed_at is null returning email, route` — only the call that gets a row back sends the email.
 - **Series over:** if ECPay reports every scheduled execution used (`TotalSuccessTimes >= ExecTimes`), flip to `expired` with `… where subscription_status <> 'expired' returning email, route` and email `expired` (`reason: "payment_lapsed"`) only if a row came back — once-only.
 - ⚠️ **What ECPay does *not* tell you:** after 6 consecutive failures it terminates the series with far fewer successes than `ExecTimes`, and sends no final callback. A row in that state would stay `active` forever. That case is caught by `flight-parser` in Step 5, not here.
@@ -271,7 +276,7 @@ curl -s -X POST "https://<ref>.supabase.co/functions/v1/flight-cancel-subscripti
 supabase functions new flight-status-notification
 ```
 
-Structurally identical to M1's `flight-notification` (verify a service-role bearer, render an email, POST to Resend) — the only difference is it branches on `event_type` instead of running fare-dedup logic (the *callers* guarantee once-only, see Steps 4–5): `welcome` (from `flight-ecpay-return`), `cancel` (from `flight-cancel-subscription`), `payment_failed` (from `flight-ecpay-period`), `expired` with `reason` `"period_ended"` | `"payment_lapsed"` (from `flight-parser` and `flight-ecpay-period`). Make each event an **explicit** branch — no "anything else is cancel" fallthrough — and validate `event_type` against the list. The `expired` email includes a 重新訂閱 link only if `SITE_URL` is set. It's called directly, never scheduled. Send with a `User-Agent` header (see the checklist's `1010` note).
+Structurally identical to M1's `flight-notification` (verify a service-role bearer, render an email, POST to Resend) — the only difference is it branches on `event_type` instead of running fare-dedup logic (the *callers* guarantee once-only, see Steps 4–5): `welcome` (from `flight-ecpay-return`), `cancel` (from `flight-cancel-subscription`), `renewed` (from `flight-ecpay-period`, with `amount` and `charge_no`), `payment_failed` (from `flight-ecpay-period`), `expired` with `reason` `"period_ended"` | `"payment_lapsed"` (from `flight-parser` and `flight-ecpay-period`). Make each event an **explicit** branch — no "anything else is cancel" fallthrough — and validate `event_type` against the list. The `expired` email includes a 重新訂閱 link only if `SITE_URL` is set. It's called directly, never scheduled. Send with a `User-Agent` header (see the checklist's `1010` note).
 
 Update the subscribed-state UI (M1's `select` from `flight.subscriptions`) to read `subscription_status` and show:
 
@@ -310,7 +315,7 @@ Update the subscribed-state UI (M1's `select` from `flight.subscriptions`) to re
 18. **`verify_jwt = false` on the three ECPay-facing functions** (`flight-ecpay-return`, `-period`, `-result`) — ECPay sends no JWT. Default `true` = the gateway 401s every callback and nothing ever activates. Smoke-test with a forged body: you want `0|CheckMacValue error`, not `401`.
 19. **Function URLs are the function slug** — `ReturnURL`/`PeriodReturnURL`/`OrderResultURL` and the front-end's calls must use the full `flight-…` names.
 20. **ECPay terminates after 6 failed charges *silently*** — no final callback. Without the parser's "active but `current_period_end` long past → expired" rule (Step 5) such a row stays `active` and keeps getting alerts for free.
-21. **Make lifecycle emails once-only at the source** — `payment_failed_at` (atomic `where … is null`) for failures; `update … returning` on the row that actually flips for `expired`. ECPay retries and the parser runs every 30 minutes, so anything weaker emails repeatedly.
+21. **Make lifecycle emails once-only at the source** — `total_success_times` (atomic `where … is null or < N`) for `renewed`; `payment_failed_at` (atomic `where … is null`) for failures; `update … returning` on the row that actually flips for `expired`. ECPay retries and the parser runs every 30 minutes, so anything weaker emails repeatedly.
 22. **`pg_net` gives up after 5 s** — triggering `flight-parser` from SQL with `net.http_post(...)` logs `Timeout of 5000 ms reached` because the parser takes a few seconds. Pass `timeout_milliseconds := 60000` and read `net._http_response` for the real `{"routes":N,"matches":N}`. `matches` is the cleanest paywall assertion: dedup can hide a wrongly-included subscriber, the count can't.
 
 ## Expected duration

@@ -17,7 +17,7 @@ ECPay ──ReturnURL/PeriodReturnURL──▶ flight-ecpay-return / flight-ecpa
 ECPay ──OrderResultURL (browser POST)──▶ flight-ecpay-result ──302──▶ Product Site
 Product Site ──POST /flight-cancel-subscription (user JWT)──▶ flight-cancel-subscription ──update──▶ flight.subscriptions
 flight-ecpay-return / -period / flight-cancel-subscription / flight-parser ──direct call──▶ flight-status-notification ──▶ Resend
-   (welcome / payment_failed / expired / cancel — each once)
+   (welcome / renewed / payment_failed / expired / cancel — each once)
 flight-parser ──grace-aware select──▶ only active/cancelled-in-grace rows get fare emails; lapsed rows → expired (+ email)
 ```
 
@@ -80,7 +80,7 @@ Run each check and report. Ask the student for: the Supabase **project ref**, th
 ### Section C — Status-change email (one function, routed by event_type)
 - **C0** The function exists: `supabase functions list` → `flight-status-notification`, `ACTIVE`. (No queue to check — confirm from `flight-ecpay-return`'s source that it calls this function directly.)
 - **C1** After B3, a **welcome** email arrives at the test inbox (`flight-ecpay-return` called `flight-status-notification` with `{event_type:"welcome"}`).
-- **C2** `flight-status-notification` handles all four event types with an **explicit branch each** (`welcome` / `cancel` / `expired` / `payment_failed`) and rejects an unknown `event_type` with 400 — there must be no "anything else is a cancel email" fallthrough. It also rejects a call without the service-role bearer (401).
+- **C2** `flight-status-notification` handles all five event types with an **explicit branch each** (`welcome` / `cancel` / `expired` / `payment_failed` / `renewed`) and rejects an unknown `event_type` with 400 — there must be no "anything else is a cancel email" fallthrough. It also rejects a call without the service-role bearer (401).
 
 ### Section D — Gating works, grace-aware (the point of M2)
 - **D0** The parser gate (Step 5) is **grace-aware**, not plain `active` — invoking `flight-parser` for a route with a `pending_payment` row whose target is met does NOT match it. Invoke it and read the JSON it returns:
@@ -128,7 +128,8 @@ This is the Supabase-specific check that replaces "the browser has no AWS creden
 ### Section G — Lifecycle emails go out once (payment failed / expired)
 Both are driven by `flight-ecpay-period` and `flight-parser`; both must be **once-only**. You can drive `flight-ecpay-period` without ECPay by POSTing a **self-signed** `PeriodReturnURL` body (public stage HashKey/HashIV, same CMV algorithm, keep empty `CustomField3=&CustomField4=`) for a real `MerchantTradeNo` of an `active` test row.
 - **G1** *(payment failed)* Send a signed `RtnCode=0` callback → `1|OK`, the row stays `active`, `payment_failed_at` is set, **one** `payment_failed` email arrives. Send the **same failure again** → `1|OK`, `payment_failed_at` unchanged, **no second email** (only one `flight-status-notification` call in the edge logs).
-- **G2** *(recovery)* Send a signed `RtnCode=1` callback → `payment_failed_at` is cleared and `current_period_end` refreshed; no email.
+- **G2** *(recovery)* Send a signed `RtnCode=1` callback → `payment_failed_at` is cleared and `current_period_end` refreshed.
+- **G4** *(renewal charged, once per charge)* A signed `RtnCode=1` callback whose `TotalSuccessTimes` is **higher than the stored `total_success_times`** → `1|OK`, `total_success_times` updated, **one** "本期已扣款" (`renewed`) email arrives with the amount and the new `current_period_end`. Send the **same callback again** → `1|OK`, no second email (the log says `already processed`, and only one `flight-status-notification` call). Then `TotalSuccessTimes` + 1 → a new email. Also confirm the first charge sets `total_success_times = 1` (`flight-ecpay-return`). A real ECPay renewal (B4) should produce the same single email.
 - **G3** *(expired, once)* Covered by D3b/D4: each row that flips to `expired` produces exactly one email; a second parser run produces none.
 
 ## Reporting
@@ -142,7 +143,7 @@ Both are driven by `flight-ecpay-period` and `flight-parser`; both must be **onc
 | B4 renewal → flight-ecpay-period (daily test) | ✅/❌/⚠️ | ⚠️ if next-day check pending |
 | B5 ecpay-result → 302 | ✅/❌ | |
 | C0/C1 status function + welcome email | ✅/❌ | event_type routing |
-| C2 four explicit event branches, unknown → 400, no bearer → 401 | ✅/❌ | no fallthrough |
+| C2 five explicit event branches, unknown → 400, no bearer → 401 | ✅/❌ | no fallthrough |
 | D0 parser gate grace-aware | ✅/❌ | the gate itself |
 | D1/D2 active emailed / pending_payment not | ✅/❌ | gating proof |
 | D3a cancelled **before** expiry: matched **and fare email arrives** | ✅/❌ | grace period — the email, not just `matches` |
@@ -155,12 +156,14 @@ Both are driven by `flight-ecpay-period` and `flight-parser`; both must be **onc
 | F1b grants: authenticated has SELECT only | ✅/❌ | |
 | F2 client can still read own status | ✅/❌ | |
 | G1/G2 payment_failed once; cleared on recovery | ✅/❌ | `payment_failed_at` |
+| G4 renewed email once per charge; resend silent; first charge sets count 1 | ✅/❌ | `total_success_times` |
 | G3 expired emailed exactly once | ✅/❌ | `update … returning` |
 
 **Verdict:**
 - All ✅ → 「M2 驗收通過 ✅ 產品會賺錢了，只有付費者收得到通知。READY for M3。跟我說『啟動 M3』來掛自己的網域、正式開張。」
 - Any ❌ → name failures + recovery:
   - **callbacks never arrive and the forged-body smoke test returns 401** → `verify_jwt` is still `true` on `flight-ecpay-return` / `-period` / `-result`. ECPay sends no JWT: set `verify_jwt = false` in `supabase/config.toml` and redeploy with `--no-verify-jwt`.
+  - **user gets several `renewed` emails for one charge** → the once-per-charge guard is missing: compare the callback's `TotalSuccessTimes` with the stored `total_success_times` **inside** the update (`where … is null or < N … returning`) and only email the call that gets a row back.
   - **user gets several `payment_failed` (or `expired`) emails** → the once-only guard is missing: `payment_failed_at` must be set with `where payment_failed_at is null … returning`, and `expired` must be sent only for rows a `update … returning` actually flipped.
   - **a subscriber whose card stopped working is still being alerted weeks later** → the parser has no "active but `current_period_end` far past → expired" rule (ECPay ends the series after 6 failures without telling you).
   - CMV reject / callback "never arrives" but 後台 shows paid → you're **dropping empty-string fields** before hashing; keep `CustomField3=`/`CustomField4=`. For a `~` in any value, check the `ecpayUrlEncode` implementation.

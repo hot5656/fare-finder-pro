@@ -104,6 +104,7 @@ export type Database = {
           route: string
           subscription_status: string
           target_price: number
+          total_success_times: number | null
           updated_at: string
           user_id: string
         }
@@ -119,6 +120,7 @@ export type Database = {
           route: string
           subscription_status?: string
           target_price: number
+          total_success_times?: number | null
           updated_at?: string
           user_id: string
         }
@@ -134,6 +136,7 @@ export type Database = {
           route?: string
           subscription_status?: string
           target_price?: number
+          total_success_times?: number | null
           updated_at?: string
           user_id?: string
         }
