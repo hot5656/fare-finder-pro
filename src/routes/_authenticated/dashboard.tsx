@@ -244,11 +244,17 @@ function PlanCard({
         )}
       </div>
 
-      <label className="mt-4 block text-sm font-medium text-muted-foreground">
+      {/* The three cards share this label text, so the id carries the plan to stay unique. */}
+      <label
+        htmlFor={`target-price-${route.plan_name}`}
+        className="mt-4 block text-sm font-medium text-muted-foreground"
+      >
         目標價 TWD / Target price
       </label>
       <div className="mt-2 flex gap-2">
         <input
+          id={`target-price-${route.plan_name}`}
+          name="target_price"
           type="number"
           min={1}
           value={targetPrice}
