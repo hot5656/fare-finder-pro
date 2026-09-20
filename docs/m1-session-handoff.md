@@ -186,10 +186,15 @@ the extended service period), from `flight-ecpay-period`.
   processed, no email`, row untouched (`updated_at` unchanged); `TotalSuccessTimes=4` →
   second email. Edge logs: three `flight-ecpay-period` calls, only **two**
   `flight-status-notification` calls. Two real emails went to kyp001@gmail.com.
+- **Confirmed in the inbox (by the user, 2026-09-20):** both 「台北 → 東京 本期已扣款」
+  emails arrived — exactly two, one per *new* charge (#3 and #4), and none for the
+  resend — and the user reports the content and layout look normal. The delivery, the
+  once-per-charge behaviour and the rendering are therefore verified end to end. (The
+  "第 3 期 / 第 4 期" in them came from self-signed test callbacks, not real charges.)
 - **Not verified:** that `flight-ecpay-return` really stores 1 on a real first charge
   (code review only — every route is already `active`, so no new checkout was made);
   the real callback's amount field name (`Amount` vs `amount`; the code falls back to
-  `ECPAY_AMOUNT`); and the emails' rendered body in the inbox (log lines only).
+  `ECPAY_AMOUNT`, so the amount shown is right either way).
 
 ### M2 follow-up: lifecycle emails (2026-09-19 — deployed and verified)
 
