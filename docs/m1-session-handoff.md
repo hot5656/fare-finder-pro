@@ -58,22 +58,19 @@ expired`. Only the verified ECPay callbacks write `active`.
 | Seoul / London checkout | ✅ | follow-up run (~22:50 local): London 完成付款 (existing `pending_payment`, order `FPMU8I5Y0K3J125F`) and Seoul 開始追蹤 (a **new** row, target 6,000, order `FPMU8I7IZE1L0Z63`) each paid with the stage card → `CMV verified` → `activated … until 2026-10-19` → `welcome email sent` (`TPE-LON` / `TPE-SEL`), rows `active`, cards 已訂閱（有效） on `?purchase=success`. Parser then `{"routes":3,"matches":2}` (Tokyo `expired` excluded) and each route got its fare-alert history row (London NT$20,345, Seoul NT$5,127, both 14:51Z). So there was no route-specific problem, including for London, which was added later by a migration |
 
 **Test data left behind (state after the London/Seoul follow-up, ~22:55 local / 14:55 UTC, 2026-09-19):**
-- `TPE-TYO` (user kyp001@gmail.com): **`active` on the B4 daily test order**
-  `FPMU8IP18O712217`, `target_price` 8000, `total_success_times` 2,
-  `current_period_end` 2026-10-19 23:57Z (set by the real renewal), `payment_failed_at`
-  null. It was a 2-charge order (`ExecTimes=2`), so ECPay's series is complete and
-  it will not charge again; the parser will retire the row 7 days after that
-  period end. (During the renewed-email test its count/period end were temporarily
-  raised to 4 / 2026-10-20 by self-signed callbacks and then put back.) The earlier
-  back-dated order `FPMU8GFF402A0U33` is cancelled at ECPay.
-- `TPE-LON` and `TPE-SEL` are now **genuinely `active`** (both paid with the stage
-  card): London target 22000, trade no `FPMU8I5Y0K3J125F`, period end
-  2026-10-19 14:49Z; Seoul target 6000, trade no `FPMU8I7IZE1L0Z63`, period end
-  2026-10-19 14:50Z. They were **not** cancelled, so the parser keeps serving them
-  every 30 minutes (real fare alerts to kyp001@gmail.com on a big drop) and ECPay's
-  stage scheduler will try to charge them monthly. Cancel via the dashboard (E1) if
-  the test data should go away; a `cancelled` row is still alerted until its
-  `current_period_end`.
+- **State after the cancel fix (2026-09-20 ~13:10 local / 05:10 UTC):**
+  `TPE-TYO` **`cancelled`** (order `FPMU8IP18O712217`, the B4 daily order that
+  ECPay had already ended; `total_success_times` 2; service until 2026-10-19 23:57Z),
+  `TPE-SEL` **`cancelled`** (order `FPMU8I7IZE1L0Z63`, ECPay `RtnCode=1 停用成功`;
+  service until 2026-10-19 14:50Z), `TPE-LON` still **`active`** on the monthly
+  order `FPMU8I5Y0K3J125F` (target 22000, period end 2026-10-19 14:49Z; ECPay's stage
+  scheduler will charge it monthly). A `cancelled` row is still alerted until its
+  `current_period_end`, then the parser retires it. Seoul was cancelled from the
+  dashboard at 05:10:40Z *not by the assistant* (the log shows the browser's CORS
+  preflight then the cancel) — presumably the user tidying up. The earlier
+  back-dated order `FPMU8GFF402A0U33` is also cancelled at ECPay. During the renewed-email
+  test Tokyo's count/period end were temporarily raised by self-signed callbacks and
+  put back.
 - (The migration flipped **both** pre-existing M1 rows, Tokyo and London, to
   `pending_payment` by design; Seoul had no row until the follow-up run.)
 - `flight.notification_history`: every price I raised for the dedup workaround
@@ -92,9 +89,10 @@ expired`. Only the verified ECPay callbacks write `active`.
 - Post-payment redirect goes to `/dashboard?purchase=…` (this app has no `/app`).
 - The migration also `revoke insert, update … from authenticated` (not just
   `drop policy`) and adds a unique index on `merchant_trade_no`.
-- Cancel only treats ECPay `90100150` (order not found) as "fine, cancel
-  locally"; any other rejection returns 502 and leaves the row alone, so nobody
-  keeps being charged with alerts switched off.
+- Cancel treats ECPay `90100150` (order not found) and `90100149` (already
+  deactivated — added 2026-09-20, see "M2 follow-up 3") as "fine, cancel locally";
+  any other rejection returns 502 and leaves the row alone, so nobody keeps being
+  charged with alerts switched off.
 - The status email is handed off with `EdgeRuntime.waitUntil` so the request
   isn't cut off after we reply `1|OK`.
 - `flight-subscribe` derives `route` from `flight.routes` and `email`/`user_id`
@@ -236,6 +234,35 @@ script that reimplements the CheckMacValue with the **public** stage
 HashKey/HashIV and POSTs to `flight-ecpay-period`; a validly-signed callback for
 an unknown trade number returns `1|OK`, a forged one `0|CheckMacValue error`.
 It lived in the session scratchpad and is not in the repo.
+
+### M2 follow-up 3: cancelling an order ECPay already ended (2026-09-20 — deployed and verified)
+
+**Symptom (reported by the user):** pressing 取消訂閱 → 確定取消 on Tokyo showed
+"ECPay could not cancel the subscription" and the row stayed `active`.
+**Cause:** ECPay answered the cancel with `RtnCode=90100149 該訂單狀態為停用中`
+(already deactivated). Tokyo was on the B4 daily order (`ExecTimes=2`), which ECPay had
+ended by itself after the 2nd charge. `flight-cancel-subscription` only tolerated
+`RtnCode=1` and `90100150`, so it 502'd. **This is not only a test artefact:** ECPay
+also ends a series on its own after 6 consecutive failures or an expired card and says
+nothing, so any such user would have been unable to cancel.
+**Fix:** a `NOTHING_TO_STOP` set (`90100150`, `90100149`) — those cancel locally; any
+other rejection is still a 502 with the row untouched. The function also returns
+ECPay's message as `detail`, and the dashboard now shows it.
+**Verified 2026-09-20 05:10Z** (function v2, deployed by the user): the retry logged
+`ECPay cancel FPMU8IP18O712217: … RtnCode=90100149` and was let through → Tokyo
+`cancelled`, service kept until 2026-10-19 23:57Z, `cancel email sent`. Before the fix
+the same call at 05:06:52Z was rejected.
+
+**Dashboard feedback (also reported by the user: hovering 確定取消 showed nothing, so it
+looked dead).** Two causes: Tailwind v4 no longer gives `<button>` a pointer cursor and
+`styles.css` had no rule for it (so *every* button showed an arrow), and 確定取消 was a
+small underlined text with no hover style and no visible busy state during the 1–3 s ECPay
+call. Fixed with a global `button:not(:disabled) { cursor: pointer }` in
+`@layer base`, and 確定取消 / 保留 rebuilt as real buttons (border, hover fill, focus
+ring, pressed state, disabled style, label switches to 取消中… while cancelling).
+Checked in the browser: cursor `pointer` on all buttons; hovering 確定取消 turns it from an
+outlined red button to a solid red one. (London's confirm prompt was opened for the check
+and closed with 保留 — London was not cancelled.)
 
 ## Project / environment facts (don't re-derive these)
 
@@ -439,6 +466,13 @@ It lived in the session scratchpad and is not in the repo.
   reply `1|OK` and leave the row `pending_payment`.
 
 **Design**
+- **Handle "ECPay already ended this order" everywhere ECPay can end it silently.**
+  A user-facing action against an order that ECPay terminated by itself (series done,
+  6 failures, expired card) must still succeed on our side; treat those codes as
+  "nothing to stop", not as failures. Same idea as the parser's lapsed-`active` rule.
+- **Tailwind v4 buttons have no pointer cursor.** Add a global rule for enabled
+  buttons, and give any destructive or slow action a hover state and a visible busy
+  state — otherwise a 1–3 s server call looks like a dead button.
 - **The dedup workaround must target the *latest* history row.** Every fare email
   writes a new latest row, so raise `price` on the newest `notification_history`
   row for that user+route each time (I had to look the id up again between D1 and
@@ -461,10 +495,10 @@ It lived in the session scratchpad and is not in the repo.
    checkout and the renewal email are done. Still unverified (small): the first-charge
    `total_success_times = 1` on a real checkout, and the real renewal callback's amount
    field name.
-2. **Decide what to do with the three live stage subscriptions** (Tokyo, London, Seoul
-   are all genuinely `active`; the parser serves them every 30 minutes and ECPay's stage
-   scheduler will charge London/Seoul monthly). Cancel from the dashboard (E1) if the test
-   data should go; a `cancelled` row is still alerted until its `current_period_end`.
+2. **Decide about London**, the only live monthly stage subscription (`active`; the
+   parser serves it every 30 minutes and ECPay's stage scheduler will charge it monthly).
+   Tokyo and Seoul are `cancelled` but still alerted until their period ends (10-19).
+   Cancel London from the dashboard if the test data should go.
 3. ~~Fold the "differs from the skill" notes back into the M2 skills.~~ Done
    (2026-09-19): the main skill, its checklist (new C2, D4, F1b, a Section G
    for the lifecycle emails, and D3 split into D3a "cancelled before expiry: fare
