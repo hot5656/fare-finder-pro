@@ -349,9 +349,14 @@ and closed with 保留 — London was not cancelled.)
   and the ECPay callbacks set it explicitly, so it now moves. The parser's lazy
   `cancelled → expired` update does not. A `before update` trigger would cover
   everything if it ever matters.
-- **`flight-notification` (v5) and `send-email` (v7) were deployed by something
-  other than the M2 work** — their version numbers moved during the M2 session.
-  Not investigated; if behaviour changes unexpectedly, check who deployed them.
+- **Resolved (false alarm, corrected 2026-09-20): `flight-notification` and
+  `send-email` were NOT redeployed.** An earlier version of this doc said their
+  version numbers (v4→v5, v6→v7) moved during the M2 session and that "something else"
+  had deployed them. Comparing the first function listing with a later one shows the
+  code hash (`ezbr_sha256`) and `updated_at` are **identical** for both — only the
+  displayed `version` went up by 1, and by 1 for every function (`flight-parser`, deployed
+  twice, went v3 → v6). So the version number is not a reliable "was it redeployed?"
+  signal; compare `ezbr_sha256` and `updated_at` instead.
 - **Resolved (not a bug): the 09-17 history row's `sent_at` is 2 hours off.**
   The row reads 12:47:44Z but that email actually went out at 14:47:44Z. At
   2026-09-18 14:10 UTC an earlier session ran
@@ -362,8 +367,11 @@ and closed with 保留 — London was not cancelled.)
   14:47 then (~22h old), so dedup correctly blocked them. The row was left
   back-dated; it is no longer the latest row, so it has no effect on dedup.
   Lesson: if you back-date history rows to test, note it here or restore them.
-- Dashboard console shows 2 minor a11y warnings (target-price inputs have no
-  label association / no `id` or `name`).
+- **Resolved (2026-09-20): the two a11y warnings on the dashboard.** The target-price
+  `<label>` now has `htmlFor` and each input has an `id` (`target-price-<plan>`, unique per
+  card because the three cards share the label text) and `name="target_price"`. Checked in
+  the browser: three unique ids, each input's accessible name is the label, clicking the
+  label focuses its input, and the console shows no warnings.
 - Supabase advisor notes `flight.tag_app_metadata_on_signup()` (an M0 auth
   trigger function) is SECURITY DEFINER and executable by `anon` /
   `authenticated`. Not part of M1; consider revoking EXECUTE.
@@ -428,6 +436,10 @@ and closed with 保留 — London was not cancelled.)
   profile lock; the user approved `kill`. After that the fresh browser was
   **signed out** — the "logins persist" assumption did not hold this time, so
   the user had to sign in again in the tool's window.
+- **Don't use the function `version` number to decide "was it redeployed?".** It can
+  shift for every function at once without any deploy (all functions went up by 1 in the
+  M2 session). Compare `ezbr_sha256` and `updated_at` from `supabase functions list
+  --output json` between two listings — same hash and time means same deploy.
 - **After a multi-line `!` block, verify every step.** The user ran only the first
   line of the migration block, so the column existed but the migration history was
   not registered; reading `supabase_migrations.schema_migrations` caught it. Same
