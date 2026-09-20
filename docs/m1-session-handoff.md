@@ -285,7 +285,8 @@ and closed with 保留 — London was not cancelled.)
   `20260919130000_flight_route_london`,
   `20260919140000_flight_m2_payment_columns` (M2),
   `20260919150000_flight_payment_failed_at`,
-  `20260920100000_flight_total_success_times`.
+  `20260920100000_flight_total_success_times`,
+  `20260920110000_flight_tag_app_metadata_hardening`.
 - **Deploying functions**: `supabase functions deploy <name> --use-api`
   (no Docker needed). `supabase/config.toml` keeps `verify_jwt = true` for
   `flight-parser`, `flight-notification`, `flight-status-notification`
@@ -372,8 +373,8 @@ and closed with 保留 — London was not cancelled.)
   card because the three cards share the label text) and `name="target_price"`. Checked in
   the browser: three unique ids, each input's accessible name is the label, clicking the
   label focuses its input, and the console shows no warnings.
-- **`flight.tag_app_metadata_on_signup()` (M0 auth trigger) — investigated 2026-09-20;
-  fix written, NOT yet applied.** Two separate points:
+- **Resolved (2026-09-20): `flight.tag_app_metadata_on_signup()` (M0 auth trigger) —
+  hardening migration applied and verified; one design caveat remains.** Two separate points:
   - *Advisor: SECURITY DEFINER, executable by `anon`/`authenticated`* (ACL `=X/postgres`
     = PUBLIC). **Not exploitable**, verified: calling it in SQL gives `trigger functions can
     only be called as triggers`, and `POST /rest/v1/rpc/tag_app_metadata_on_signup` as anon
@@ -382,8 +383,10 @@ and closed with 保留 — London was not cancelled.)
   - *The `apps` tag is client-declared, not "tamper-proof".* The trigger copies
     `raw_user_meta_data.app` (user-editable) into `app_metadata.apps` on insert **and** on
     update, so any signed-in user can add any app name to their own `apps` with
-    `updateUser({ data: { app } })` (inferred from the trigger source; not run against a real
-    account). Impact today is small: no RLS policy or non-system function in the database
+    `updateUser({ data: { app } })`. Confirmed at the database level (see the rollback test
+    below); not run through GoTrue against a real account. The tag convention is shared: the
+    owner's account carries `["fare-finder-pro","project-management","udemy-coupon"]`, so the
+    other two apps in this project use it too. Impact today is small: no RLS policy or non-system function in the database
     references `app_metadata` (checked), flight's policies use `auth.uid() = user_id`, and the
     only consumers are two front-end route guards (`hasAppAccess` in
     `_authenticated/route.tsx` and `auth/index.tsx`). Other apps' front ends are not visible
@@ -391,14 +394,21 @@ and closed with 保留 — London was not cancelled.)
   - *Done:* the misleading "tamper-proof" wording is removed from
     `src/integrations/supabase/app-scope.ts` (the M0 migration file still says it — it is
     applied history, so it is corrected by the next item instead).
-  - *To apply (by the user — production DDL):* migration
-    `20260920110000_flight_tag_app_metadata_hardening` does
-    `revoke execute … from public, anon, authenticated` (the explicit grant to
-    `supabase_auth_admin` stays) and rewrites the function's `comment on function`. Run
-    `supabase db query --linked --file supabase/migrations/20260920110000_flight_tag_app_metadata_hardening.sql`
-    then `supabase migration repair --status applied 20260920110000`, and check
-    `proacl` no longer has `=X/postgres` and that a throwaway signup / `updateUser` with
-    `data.app` still populates `raw_app_meta_data.apps` (the trigger still fires).
+  - *Applied by the user 2026-09-20 (production DDL):* migration
+    `20260920110000_flight_tag_app_metadata_hardening` — `revoke execute … from public,
+    anon, authenticated` (the explicit grant to `supabase_auth_admin` stays) and a rewritten
+    `comment on function`. Registered with `supabase migration repair` (the repair line was
+    again skipped at first and caught by reading `schema_migrations`).
+  - *Verified after applying:* `proacl` is now `{postgres=X/postgres,supabase_auth_admin=X/postgres}`
+    (no `=X/postgres`); `SECURITY DEFINER` and `search_path=""` unchanged; both triggers still
+    `enabled`; `has_function_privilege`: `supabase_auth_admin` and `postgres` true,
+    `anon` / `authenticated` / `service_role` false. **Trigger still fires** — a rollback-only
+    test (a `DO` block that updates the owner's `raw_user_meta_data.app` to `trigger-test-app`,
+    reads `raw_app_meta_data.apps`, then raises an exception so the transaction rolls back)
+    showed `apps` gain `trigger-test-app`, and a re-read afterwards confirmed nothing persisted.
+    *Limit:* the test ran as `postgres`; the connection may not `set role supabase_auth_admin`
+    (`permission denied`, before any write), so the GoTrue role's path is covered by the
+    privilege check rather than executed, and no real signup through GoTrue was done.
   - *Decision left open:* real gating (e.g. invite-only, or tagging on INSERT only) is a
     design choice, only needed if some app must restrict who can use it.
 - `notification_history` shows "RLS enabled, no policy" — intentional
@@ -462,6 +472,13 @@ and closed with 保留 — London was not cancelled.)
   profile lock; the user approved `kill`. After that the fresh browser was
   **signed out** — the "logins persist" assumption did not hold this time, so
   the user had to sign in again in the tool's window.
+- **A rollback-only test for writes to a shared table.** To check a trigger against real
+  data without leaving a trace, run a `DO` block through `execute_sql` that performs the
+  update, captures the result, then always `raise exception '…%', result`; the exception
+  rolls the whole transaction back and the message carries the answer. Re-read the row
+  afterwards to prove nothing persisted. The connection cannot `set role` to
+  `supabase_auth_admin`, so pair it with `has_function_privilege(role, fn, 'execute')` for
+  role-specific questions.
 - **Don't use the function `version` number to decide "was it redeployed?".** It can
   shift for every function at once without any deploy (all functions went up by 1 in the
   M2 session). Compare `ezbr_sha256` and `updated_at` from `supabase functions list
