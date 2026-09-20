@@ -109,7 +109,8 @@ Run each check and report. Ask the student for: the Supabase **project ref**, th
   ```sql
   select subscription_status, current_period_end from flight.subscriptions where email = '<...>' and route = 'TPE-TYO';
   ```
-  Expect `status=cancelled` with `current_period_end` set. A **cancel** email also arrives (same `flight-status-notification`, `{event_type:"cancel"}`). In the 後台 → 信用卡定期定額訂單查詢, the series shows terminated. ECPay's answer should log as `RtnCode=1 停用成功` for a real paid order. *(Stage-cancelling a never-paid synthetic order returns `90100150 不存在的訂單編號` — expected; the function should log it and still cancel locally. **Any other rejection** must return 502 and leave the row unchanged, so the user isn't charged with alerts off.)*
+  Expect `status=cancelled` with `current_period_end` set. A **cancel** email also arrives (same `flight-status-notification`, `{event_type:"cancel"}`). In the 後台 → 信用卡定期定額訂單查詢, the series shows terminated. ECPay's answer should log as `RtnCode=1 停用成功` for a real paid order. *(Stage-cancelling a never-paid synthetic order returns `90100150 不存在的訂單編號` — expected; the function should log it and still cancel locally. **Any other rejection** must return 502 and leave the row unchanged, so the user isn't charged with alerts off. The one other benign code is `90100149 該訂單狀態為停用中` — see E4.)*
+- **E4** *(cancelling an order ECPay has already ended)* An order ECPay already terminated (a `PeriodType=D, ExecTimes=2` series after its 2nd charge, or any 6-failure/expired-card termination) answers the cancel with `RtnCode=90100149 該訂單狀態為停用中`. The function must **still cancel locally**: row → `cancelled` with `current_period_end` kept, one cancel email, and the UI shows 已取消 · 有效至 …, not an error. (Before this was handled the user got "ECPay could not cancel the subscription" and stayed `active`.)
 - **E2** A `cancelled`-in-grace subscriber can **update their target price** in place (no re-payment, status stays `cancelled`) — re-call `flight-subscribe` with a new `target_price` and expect an **`application/json`** response (not an ECPay form). Confirm by query: `target_price` changed, `subscription_status` still `cancelled`, no new `pending_payment`.
 - **E3** Lifecycle end-to-end: `pending_payment → active → cancelled (grace, still alerted) → expired` (after `current_period_end` passes, via the parser). The expired row is no longer matched/emailed.
 
@@ -151,6 +152,7 @@ Both are driven by `flight-ecpay-period` and `flight-parser`; both must be **onc
 | D4 active row with renewals long overdue → expired | ✅/❌ | the case ECPay never reports |
 | E1 cancel → cancelled (NOT expired) + email | ✅/❌ | API call, grace not instant |
 | E2 cancelled-in-grace can update target | ✅/❌ | in-place, no re-pay |
+| E4 cancel on an order ECPay already ended (90100149) still cancels locally | ✅/❌ | no dead end |
 | E3 lifecycle → expired after period passes | ✅/❌ | parser lazily expires |
 | F1 RLS blocks client self-activation | ✅/❌ | **blocking** — the paywall's real gate |
 | F1b grants: authenticated has SELECT only | ✅/❌ | |
@@ -173,6 +175,7 @@ Both are driven by `flight-ecpay-period` and `flight-parser`; both must be **onc
   - **cancel expires instantly instead of granting grace** → cancel must set `cancelled` + keep `current_period_end`, and the parser must serve `cancelled`-in-grace + lazily expire. Don't set `expired` in `flight-cancel-subscription`.
   - 模擬付款 grants free access → guard `SimulatePaid` in `flight-ecpay-return`/`flight-ecpay-period`.
   - cancel does nothing → cancel is `CreditCardPeriodAction Action=Cancel` that **you** call, not an event you wait for. `90100150` on a never-paid order is expected.
+  - **user clicks 取消訂閱 and gets "ECPay could not cancel the subscription", row stays `active`** → ECPay answered `90100149 該訂單狀態為停用中` (the order was already ended) and the function 502'd it. Add the code to the "nothing left to stop" set so it cancels locally.
   - emails not arriving → Resend sandbox only reaches your own account email (verify a domain later).
   - **welcome/cancel email never arrives, log shows `403` with body `error code: 1010`** → `flight-status-notification` is POSTing to Resend **without a `User-Agent` header**, so Cloudflare bans it. Not an account/recipient issue — add a `User-Agent` header, reusing M1's `flight-notification` pattern. Distinguish from the sandbox `validation_error` 403 by the `1010` code.
   - **F1 fails (client CAN self-activate)** → the M1 `insert`/`update` RLS policies on `flight.subscriptions` were never dropped, or a new permissive policy was added since. Re-run Step 2 of the build skill's migration and re-check.

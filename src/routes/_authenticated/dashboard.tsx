@@ -159,6 +159,7 @@ function PlanCard({
   }, [subscription?.target_price]);
   const [saving, setSaving] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const status = subscription?.subscription_status;
 
@@ -197,16 +198,19 @@ function PlanCard({
   async function handleCancel() {
     setError(null);
     setSaving(true);
+    setCancelling(true);
     try {
       const res = await callFunction("flight-cancel-subscription", { plan_name: route.plan_name });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "cancel failed");
+      // Show ECPay's own reason when the function gives one, not just a generic line.
+      if (!res.ok) throw new Error(data.detail ? `${data.error}（${data.detail}）` : (data.error ?? "cancel failed"));
       setConfirmingCancel(false);
       onSubscribed();
     } catch (e) {
       setError(e instanceof Error ? e.message : "取消失敗，請再試一次 / Cancel failed");
     } finally {
       setSaving(false);
+      setCancelling(false);
     }
   }
 
@@ -269,19 +273,30 @@ function PlanCard({
       {status === "active" && (
         <div className="mt-2">
           {confirmingCancel ? (
-            <span className="text-xs text-muted-foreground">
-              確定要取消訂閱？已付款的期間內仍會收到通知。{" "}
-              <button onClick={handleCancel} disabled={saving} className="font-semibold text-destructive underline">
-                確定取消
-              </button>{" "}
-              <button onClick={() => setConfirmingCancel(false)} className="underline">
-                保留
-              </button>
-            </span>
+            <div className="text-xs text-muted-foreground">
+              <p>確定要取消訂閱？已付款的期間內仍會收到通知。</p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  onClick={handleCancel}
+                  disabled={saving}
+                  aria-busy={cancelling}
+                  className="rounded-md border border-destructive px-3 py-1.5 text-xs font-semibold text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/50 active:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {cancelling ? "取消中…" : "確定取消"}
+                </button>
+                <button
+                  onClick={() => setConfirmingCancel(false)}
+                  disabled={saving}
+                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 active:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  保留
+                </button>
+              </div>
+            </div>
           ) : (
             <button
               onClick={() => setConfirmingCancel(true)}
-              className="text-xs text-muted-foreground underline hover:text-foreground"
+              className="text-xs text-muted-foreground underline transition-colors hover:text-foreground"
             >
               取消訂閱
             </button>

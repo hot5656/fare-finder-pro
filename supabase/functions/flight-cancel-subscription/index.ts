@@ -7,7 +7,9 @@
 //   3. hand a "cancel" email to flight-status-notification
 //
 // If ECPay refuses the cancel for a real reason we return an error and leave
-// the row untouched — otherwise the user could be charged with no service.
+// the row untouched — otherwise the user could be charged with no service. But if
+// ECPay says there is nothing left to stop (see NOTHING_TO_STOP) the user must still
+// be able to cancel on our side, otherwise they are stuck `active`.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
@@ -31,9 +33,14 @@ const json = (body: unknown, status = 200) =>
     headers: { ...CORS, "Content-Type": "application/json" },
   });
 
-// ECPay: "90100150 不存在的訂單編號" = no such order. Happens for a checkout the
-// user never finished; there is nothing to stop charging, so cancel locally.
-const ORDER_NOT_FOUND = "90100150";
+// ECPay answers a cancel with these codes when there is nothing left to stop
+// charging, so we cancel locally instead of failing:
+//   90100150 不存在的訂單編號  - no such order (a checkout the user never finished)
+//   90100149 該訂單狀態為停用中 - already deactivated: ECPay ends a series by itself when
+//            every scheduled charge is done, after 6 consecutive failures, or when the
+//            card expires, and it tells us nothing when it does.
+// Any OTHER rejection is a real failure: 502, row untouched.
+const NOTHING_TO_STOP = new Set(["90100150", "90100149"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
@@ -92,7 +99,7 @@ Deno.serve(async (req) => {
     const result = new URLSearchParams(text);
     const rtnCode = result.get("RtnCode");
     console.log(`ECPay cancel ${row.merchant_trade_no}: HTTP ${res.status} RtnCode=${rtnCode} ${result.get("RtnMsg")}`);
-    if (rtnCode !== "1" && rtnCode !== ORDER_NOT_FOUND) {
+    if (rtnCode !== "1" && !NOTHING_TO_STOP.has(rtnCode ?? "")) {
       console.error("ECPay cancel rejected", text.slice(0, 300));
       return json({ error: "ECPay could not cancel the subscription", detail: result.get("RtnMsg") ?? text.slice(0, 200) }, 502);
     }
