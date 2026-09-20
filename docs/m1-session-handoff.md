@@ -409,8 +409,8 @@ and closed with 保留 — London was not cancelled.)
     *Limit:* the test ran as `postgres`; the connection may not `set role supabase_auth_admin`
     (`permission denied`, before any write), so the GoTrue role's path is covered by the
     privilege check rather than executed, and no real signup through GoTrue was done.
-  - *Decision left open:* real gating (e.g. invite-only, or tagging on INSERT only) is a
-    design choice, only needed if some app must restrict who can use it.
+  - *Decision left open:* real gating (invite-only, allowlist, tagging on INSERT only) is a
+    design choice, tracked as **B-1** in "Backlog / open decisions" below.
 - `notification_history` shows "RLS enabled, no policy" — intentional
   lockdown (service role only), not a bug.
 
@@ -549,6 +549,59 @@ and closed with 保留 — London was not cancelled.)
   query rendered a blank input after the payment redirect — fixed with a
   `useEffect` that syncs the saved target.
 
+## Backlog / open decisions
+
+Things deliberately **not** done, kept here so they can be picked up (or consciously dropped)
+later. Each has the facts as of the date, the trigger that would make it worth doing, the
+options, and how to know it is done.
+
+### B-1 — Real access control instead of the client-declared `apps` tag
+
+- **Status:** open decision, not started, nobody assigned. Recorded 2026-09-20.
+- **What we have today.** `auth.users.raw_app_meta_data.apps` is filled by the trigger
+  `flight.tag_app_metadata_on_signup()` from `raw_user_meta_data.app`, which the signed-in
+  user can edit. So any user can add any app name to their own `apps`
+  (`updateUser({ data: { app } })`); a rollback-only test showed the value being copied in.
+  It is a **self-declared tag, not a permission.** Nothing in the database authorizes on it
+  (no RLS policy or function references `app_metadata`; flight's policies use
+  `auth.uid() = user_id`); its only consumers are front-end route guards
+  (`hasAppAccess` in `_authenticated/route.tsx` and `auth/index.tsx`). The paid gate for this
+  app is `flight.subscriptions.subscription_status`, which only ECPay-verified Edge Functions
+  can write — so the tag is **not** what protects paid features.
+- **Shared-project constraint.** The project is shared: the owner's account already carries
+  `project-management` and `udemy-coupon`, so those apps use the same convention. Any change
+  to the trigger or to `apps` semantics affects them. Their front ends and any of their
+  server code are not visible from this repo — check with them before changing anything.
+- **Do this when (any one of):**
+  1. any RLS policy, SQL function or Edge Function starts using `app_metadata.apps` to
+     grant data access;
+  2. the product needs the dashboard restricted to invited/approved users (beyond
+     "has a subscription");
+  3. another app in the project needs to control who may sign up to it;
+  4. unwanted self-registration/abuse actually shows up.
+  Until one of these happens the current state is acceptable; the misleading "tamper-proof"
+  wording has already been removed (`app-scope.ts`, function comment).
+- **Options** (cheapest first):
+  1. *Do nothing, keep the comments honest.* Cost 0. This is the current state.
+  2. *Tag on INSERT only* (drop the `BEFORE UPDATE` trigger). Stops self-adding through
+     `updateUser`, but signup is still self-declared, and it **breaks the M0 flow** where an
+     existing account gains an app by `updateUser` after a recovery/matched-password sign-in.
+     Small change, but it needs another way to add an app to an existing account.
+  3. *Server-side allowlist* (preferred if real control is needed): a table, e.g.
+     `app_access(user_id, app)`, writable only by the service role / an Edge Function (after an
+     invite or a payment); guards read it instead of the client-supplied tag, and RLS can
+     join it for defence in depth. Medium effort, must be coordinated with the other apps, and
+     existing users need a one-time backfill from today's `apps`.
+  4. *Invite-only signups at the auth level* (disable public signups, invite via the admin
+     API). Little code but a product change that affects every app in the project.
+- **Done when:** a user who is not allowlisted for app X and calls
+  `updateUser({ data: { app: 'X' } })` gets **no** access to X (UI and data); existing users
+  keep access after the backfill; the other apps' sign-in/sign-up still work; and it is
+  checked with the rollback-only test technique from "Lessons learned" plus a real
+  signup/`updateUser` through GoTrue (not done for the current hardening).
+- **Related, already done:** `20260920110000_flight_tag_app_metadata_hardening` (EXECUTE
+  revoked from PUBLIC, honest function comment) and the `app-scope.ts` comment.
+
 ## Next
 
 1. **M2 has no open checks.** B4 passed, the lapse check, re-subscribe, Seoul/London
@@ -569,3 +622,6 @@ and closed with 保留 — London was not cancelled.)
    `SITE_URL`, and a deployed front-end that is the final code (the Vercel site
    is not yet). Per the skill, that is M3 ("啟動 M3", own domain / go-live) —
    check whether the M3 skill still assumes the AWS version first.
+5. **Backlog, not started:** B-1 (real app access control instead of the client-declared
+   `apps` tag) is recorded above under "Backlog / open decisions" — only worth doing if one of
+   its "do this when" conditions occurs.
