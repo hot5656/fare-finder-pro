@@ -372,9 +372,35 @@ and closed with 保留 — London was not cancelled.)
   card because the three cards share the label text) and `name="target_price"`. Checked in
   the browser: three unique ids, each input's accessible name is the label, clicking the
   label focuses its input, and the console shows no warnings.
-- Supabase advisor notes `flight.tag_app_metadata_on_signup()` (an M0 auth
-  trigger function) is SECURITY DEFINER and executable by `anon` /
-  `authenticated`. Not part of M1; consider revoking EXECUTE.
+- **`flight.tag_app_metadata_on_signup()` (M0 auth trigger) — investigated 2026-09-20;
+  fix written, NOT yet applied.** Two separate points:
+  - *Advisor: SECURITY DEFINER, executable by `anon`/`authenticated`* (ACL `=X/postgres`
+    = PUBLIC). **Not exploitable**, verified: calling it in SQL gives `trigger functions can
+    only be called as triggers`, and `POST /rest/v1/rpc/tag_app_metadata_on_signup` as anon
+    returns 404 `PGRST202` (not in the schema cache, for `flight` or `public`). So it is
+    hygiene only.
+  - *The `apps` tag is client-declared, not "tamper-proof".* The trigger copies
+    `raw_user_meta_data.app` (user-editable) into `app_metadata.apps` on insert **and** on
+    update, so any signed-in user can add any app name to their own `apps` with
+    `updateUser({ data: { app } })` (inferred from the trigger source; not run against a real
+    account). Impact today is small: no RLS policy or non-system function in the database
+    references `app_metadata` (checked), flight's policies use `auth.uid() = user_id`, and the
+    only consumers are two front-end route guards (`hasAppAccess` in
+    `_authenticated/route.tsx` and `auth/index.tsx`). Other apps' front ends are not visible
+    from here. It is a UI gate, not an authorization boundary — never key RLS on `apps`.
+  - *Done:* the misleading "tamper-proof" wording is removed from
+    `src/integrations/supabase/app-scope.ts` (the M0 migration file still says it — it is
+    applied history, so it is corrected by the next item instead).
+  - *To apply (by the user — production DDL):* migration
+    `20260920110000_flight_tag_app_metadata_hardening` does
+    `revoke execute … from public, anon, authenticated` (the explicit grant to
+    `supabase_auth_admin` stays) and rewrites the function's `comment on function`. Run
+    `supabase db query --linked --file supabase/migrations/20260920110000_flight_tag_app_metadata_hardening.sql`
+    then `supabase migration repair --status applied 20260920110000`, and check
+    `proacl` no longer has `=X/postgres` and that a throwaway signup / `updateUser` with
+    `data.app` still populates `raw_app_meta_data.apps` (the trigger still fires).
+  - *Decision left open:* real gating (e.g. invite-only, or tagging on INSERT only) is a
+    design choice, only needed if some app must restrict who can use it.
 - `notification_history` shows "RLS enabled, no policy" — intentional
   lockdown (service role only), not a bug.
 
