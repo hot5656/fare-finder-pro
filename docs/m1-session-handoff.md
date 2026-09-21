@@ -50,7 +50,7 @@ expired`. Only the verified ECPay callbacks write `active`.
 | Cancelled-in-grace still alerted | ✅ | parser `matches: 1` while `cancelled` with a future period end |
 | Grace lapse → lazily `expired` | ✅ | Tokyo was back-dated to a past `current_period_end`; the 13:00 UTC cron tick flipped it `cancelled → expired` (read back at 13:13 UTC) |
 | Fare-alert email for a paying user, after the M2 + follow-up parser | ✅ | Tokyo `cancelled` with a future period end, last history price raised to 9,500 → parser `matches: 1`, new history row (NT$6,579), no dedup skip, no error |
-| `expired` email (follow-up) | ✅ | Tokyo back-dated past its period end → log `expired 1 subscription(s)` + `expired email sent to kyp001@gmail.com`; row `expired`; a second parser run sent nothing (no `flight-status-notification` call, `matches: 0`) |
+| `expired` email (follow-up) | ✅ | Tokyo back-dated past its period end → log `expired 1 subscription(s)` + `expired email sent to k***@gmail.com`; row `expired`; a second parser run sent nothing (no `flight-status-notification` call, `matches: 0`) |
 | `payment_failed` email (follow-up) | ✅ | self-signed `RtnCode=0` callback → `payment_failed email sent`, `payment_failed_at` set, row stays `active`; identical 2nd failure → `1|OK`, flag unchanged, **no 2nd email** (only one status-notification call) |
 | Renewal callback `flight-ecpay-period` (**real ECPay scheduler**) | ✅ | B4 passed: on the daily test order `FPMU8IP18O712217` ECPay itself fired the 2nd charge at **2026-09-19 23:57:11Z** (07:57 local next morning) → `CMV verified: period … RtnCode=1 TotalSuccessTimes=2 ExecTimes=2 SimulatePaid=undefined`, HTTP 200 `1|OK`, called once with no resend; `current_period_end` refreshed, `payment_failed_at` null, no false alarm. See "B4" below for what it taught us |
 | `renewed` ("本期已扣款") email (follow-up, 2026-09-20) | ✅ | see "M2 follow-up 2" below: new charge → 1 email; identical resend → none; next charge → 1 email |
@@ -185,7 +185,7 @@ the extended service period), from `flight-ecpay-period`.
   period refreshed; the **identical** callback again → log `charge #3 already
   processed, no email`, row untouched (`updated_at` unchanged); `TotalSuccessTimes=4` →
   second email. Edge logs: three `flight-ecpay-period` calls, only **two**
-  `flight-status-notification` calls. Two real emails went to kyp001@gmail.com.
+  `flight-status-notification` calls. Two real emails went to k***@gmail.com.
 - **Confirmed in the inbox (by the user, 2026-09-20):** both 「台北 → 東京 本期已扣款」
   emails arrived — exactly two, one per *new* charge (#3 and #4), and none for the
   resend — and the user reports the content and layout look normal. The delivery, the
@@ -496,7 +496,7 @@ and closed with 保留 — London was not cancelled.)
   thread (e.g. re-subscribing to the same route); different routes have different
   subjects.
 - **Emails send from `noreply@roberthut.com`**, and M1's alerts have reached
-  kyp001@gmail.com. The skill's "Resend sandbox only reaches your own address"
+  k***@gmail.com. The skill's "Resend sandbox only reaches your own address"
   warning is still the safe assumption for any other recipient — test M2 emails
   to yourself.
 
