@@ -316,7 +316,7 @@ and closed with 保留 — London was not cancelled.)
   fixed, and verified by a real stage payment from the Vercel site (landed on
   `/dashboard?purchase=success`, `TPE-SEL` went `active`) plus curl checks
   (unlisted origin and missing `CustomField3` both 302 to the Vercel site).
-  The test row (`kyp741@gmail.com`, `TPE-SEL`, target 1000) was left `active`.
+  The test row (`k***@gmail.com`, `TPE-SEL`, target 1000) was left `active`.
   Local `.env` does not (and should
   not) contain Travelpayouts/Resend/ECPay keys.
 - **Cron**: job `flight-price-check` posts to `flight-parser` using the
