@@ -1,0 +1,648 @@
+ ▐▛███▛█   Claude Code v2.1.278
+▝▜██████▀  Sonnet 5 · Claude Pro
+  ▝▝ ▝▝    ~/work/claude/fare-finder-pro
+
+
+❯ /plan                                                                         
+  ⎿  Enabled plan mode
+
+❯ 付款後導回了 localhost： 付款完成後，頁面停在 localhost:8080/dashboard，不是  
+  Vercel 站。                                                                   
+  建議如何處理                                                                  
+
+⏺ 我先看 flight-ecpay-result 怎麼決定導回的網址。
+
+  Searched for 2 patterns, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+⏺ User approved Claude's plan
+  ⎿  Plan saved to: 
+     ~/.claude/plans/localhost-localhost-8080-dashboard-cuddly-whale.md · /plan 
+     to edit
+     Plan: 付款後導回 localhost 而不是 Vercel 站
+
+     Context
+
+     從 Vercel 站付款完成後，ECPay 把瀏覽器 POST 到 flight-ecpay-result，該函式
+     302 到 ${SITE_URL}/dashboard?purchase=…。
+
+     根因（已確認，不是 bug 而是設定缺口）： Edge secret SITE_URL
+     沒有設定（supabase secrets list 只有 ECPAY_*、RESEND、TRAVELPAYOUTS
+     等），而 supabase/functions/_shared/ecpay.ts:22 的預設值是
+     http://localhost:8080。所以不管使用者從哪個網域下單，一律被導回
+     localhost。handoff doc 第 306、114 行也記載了這個預設值，當時只在 localhost
+     測試所以沒問題。
+
+     同一個 secret 還影響 flight-status-notification（index.ts:25/90）：未設定時
+     email 不帶「重新訂閱」連結，這部分行為本來就是刻意的（不寄 localhost
+     連結）。
+
+     建議：讓函式依「下單網域」導回，SITE_URL 當 fallback
+
+     只設 SITE_URL=https://fare-finder-pro.vercel.app 最快，但會讓 localhost
+     測試也被導去 Vercel（專案規則是 Vercel 站還不是最終版），一個 secret
+     無法同時服務兩個網域。所以：
+
+     1. flight-subscribe：讀請求的 Origin header，對照白名單（http://localhost:8
+        080、https://fare-finder-pro.vercel.app、Vercel preview 網域樣式
+        https://fare-finder-pro-*.vercel.app 需先確認實際 preview
+        網域格式）。通過的話放進 ECPay 的 CustomField3（目前為空字串，見
+        _shared/ecpay.ts:44
+        註解；CustomField1=email、CustomField2=route）。不在白名單就留空。
+     2. _shared/ecpay.ts：buildCheckoutForm 多收 siteOrigin 參數寫進
+        CustomField3（仍要納入 CheckMacValue，空字串也要留）。新增共用的
+        allowedOrigin() 白名單函式，SITE_URL 保持 fallback。
+     3. flight-ecpay-result：目前只讀 RtnCode，改為同時讀 POST body 的
+        CustomField3，再驗一次白名單（這個端點沒有 JWT，body 可被偽造，否則是
+        open redirect），通過才用它，否則 fallback SITE_URL。
+     4. 設 SITE_URL secret 為正式站網域，作為 fallback，同時讓
+        flight-status-notification 的 email 帶上重新訂閱連結（supabase secrets 
+        set SITE_URL=…）。要設哪個網域由使用者決定：Vercel
+        站尚非最終版，可等上線再設。
+     5. 更新文件：docs/m1-session-handoff.md（第 114、306 行附近與 backlog）與
+        CLAUDE.md 的 ECPay 段落，說明導回網域的決定規則。
+
+     關鍵檔案
+
+     - supabase/functions/_shared/ecpay.ts（SITE_URL、checkout
+       form、CustomField）
+     - supabase/functions/flight-subscribe/index.ts（讀 Origin）
+     - supabase/functions/flight-ecpay-result/index.ts（302 目標）
+
+     部署與驗證
+
+     生產環境的 function 部署與 secret 設定在 auto mode
+     下被擋，會給你可複製貼上的 ! 指令：
+
+     supabase functions deploy flight-subscribe --use-api
+     supabase functions deploy flight-ecpay-result --use-api --no-verify-jwt
+     supabase secrets set SITE_URL=<正式站網域>   # 可延後
+
+     驗證（用 stage 商店，不動真錢）：
+     - curl flight-ecpay-result，POST
+       RtnCode=1&CustomField3=https://fare-finder-pro.vercel.app → 302 到
+       Vercel；CustomField3=https://evil.example → 302 回
+       fallback（不能跟著走）；無 CustomField3 → fallback。
+     - 從 localhost:8080 走一次完整付款 → 回 localhost；（使用者同意後）從
+       Vercel 站走一次 → 回 Vercel。
+     - 用 supabase functions list --output json 比對 ezbr_sha256/updated_at
+       確認真的重新部署。
+
+     待你決定
+
+     - 白名單要包含哪些網域（是否含 Vercel preview 網域）。
+     - 是否現在就設 SITE_URL，還是等 Vercel 站成為最終版再設。
+     - 若想要最小改動：只做第 4 步（設 SITE_URL），代價是 localhost
+       測試付款也會被導去 Vercel。
+
+  Read 2 files (ctrl+o to expand)
+
+⏺ Update(supabase/functions/_shared/ecpay.ts)
+  ⎿  Added 19 lines, removed 2 lines
+      17  export const CHECKOUT_URL = `${HOST}/Cashier/AioCheckOut/V5`;
+      18  export const PERIOD_ACTION_URL = `${HOST}/Cashier/CreditCardPer
+          iodAction`;
+      19  
+      20 -// Where ECPay's browser redirect (OrderResultURL) finally land
+         -s the user.                                                    
+      21 -// Defaults to the dev server; set SITE_URL once there's a depl
+         -oyed front-end.                                                
+      20 +// Fallback landing site for ECPay's browser redirect (OrderRes
+         +ultURL), used when                                             
+      21 +// the checkout didn't carry a usable origin. Defaults to the d
+         +ev server; set                                                 
+      22 +// SITE_URL once there's a deployed front-end.                 
+      23  export const SITE_URL = (Deno.env.get("SITE_URL") ?? "http://lo
+          calhost:8080").replace(/\/$/, "");
+      24  
+      25 +// Front-ends allowed to receive the post-payment redirect. The
+         + checkout stores                                               
+      26 +// the caller's origin in CustomField3 and flight-ecpay-result 
+         +reads it back, so                                              
+      27 +// the same allowlist gates both ends (that endpoint has no JWT
+         +: never redirect                                               
+      28 +// to an origin that isn't listed here). SITE_URL is always all
+         +owed.                                                          
+      29 +const ALLOWED_ORIGINS = new Set([                              
+      30 +  SITE_URL,                                                    
+      31 +  "http://localhost:8080",                                     
+      32 +  "https://fare-finder-pro.vercel.app",                        
+      33 +]);                                                            
+      34 +                                                               
+      35 +// Returns the origin when it is allowlisted, else "" (caller f
+         +alls back to SITE_URL).                                        
+      36 +export function allowedOrigin(origin: string | null | undefined
+         +): string {                                                    
+      37 +  const o = (origin ?? "").replace(/\/$/, "");                 
+      38 +  return ALLOWED_ORIGINS.has(o) ? o : "";                      
+      39 +}                                                              
+      40 +                                                               
+      41  const PROJECT_URL = Deno.env.get("SUPABASE_URL") as string;
+      42  export const fnUrl = (slug: string) => `${PROJECT_URL}/function
+          s/v1/${slug}`;
+      43  
+
+⏺ Update(supabase/functions/_shared/ecpay.ts)
+  ⎿  Added 2 lines
+      108    email: string;
+      109    route: string;
+      110    itemName: string;
+      111 +  // Allowlisted front-end origin to send the user back to (""
+          + -> SITE_URL).                                                
+      112 +  siteOrigin: string;                                         
+      113  }): Promise<string> {
+      114    const params: Record<string, string> = {
+      115      MerchantID: ECPAY_MERCHANT_ID,
+
+⏺ Update(supabase/functions/_shared/ecpay.ts)
+  ⎿  Added 2 lines
+      132      ExecTimes: "999", // ECPay has no "forever"; 999 is the ma
+           x
+      133      CustomField1: opts.email,
+      134      CustomField2: opts.route,
+      135 +    // ECPay echoes CustomField1-4 back in the OrderResultURL 
+          +POST.                                                         
+      136 +    CustomField3: opts.siteOrigin,                            
+      137    };
+      138    params.CheckMacValue = await checkMacValue(params);
+      139  
+
+⏺ Update(supabase/functions/flight-subscribe/index.ts)
+  ⎿  Added 2 lines
+      122      email: user.email,
+      123      route: plan.route,
+      124      itemName: `Flight Price Notifier ${plan.route} 月訂閱`,
+      125 +    // Browsers always send Origin on this cross-origin POST; 
+          +unknown -> "".                                                
+      126 +    siteOrigin: allowedOrigin(req.headers.get("Origin")),     
+      127    });
+      128    return new Response(html, {
+      129      status: 200,
+
+⏺ Update(supabase/functions/flight-subscribe/index.ts)
+  ⎿  Added 1 line, removed 1 line
+      13  // already-paid row). Only the verified ECPay callbacks write `
+          active`.
+      14  
+      15  import { createClient } from "https://esm.sh/@supabase/supabase
+          -js@2";
+      16 -import { buildCheckoutForm, ECPAY_AMOUNT, newTradeNo } from "..
+         -/_shared/ecpay.ts";                                            
+      16 +import { allowedOrigin, buildCheckoutForm, ECPAY_AMOUNT, newTra
+         +deNo } from "../_shared/ecpay.ts";                             
+      17  
+      18  const SUPABASE_URL = Deno.env.get("SUPABASE_URL") as string;
+      19  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVIC
+          E_ROLE_KEY") as string;
+
+⏺ Write(supabase/functions/flight-ecpay-result/index.ts)
+  ⎿  Added 9 lines, removed 4 lines
+       3  // serves GET, so this function's only job is to turn that POST
+           into a 302.
+       4  //
+       5  // It does no auth and never activates anything — flight-ecpay-
+          return does that.
+       6 -// ECPay's browser hit carries no JWT -> verify_jwt = false.   
+       6 +// ECPay's browser hit carries no JWT -> verify_jwt = false. Be
+         +cause the body is                                              
+       7 +// unauthenticated, the landing site (CustomField3, set by flig
+         +ht-subscribe) is                                               
+       8 +// only honoured when it is on the allowlist; otherwise we use 
+         +SITE_URL.                                                      
+       9  
+       8 -import { SITE_URL } from "../_shared/ecpay.ts";                
+      10 +import { allowedOrigin, SITE_URL } from "../_shared/ecpay.ts"; 
+      11  
+      12  Deno.serve(async (req) => {
+      13    let rtnCode = "";
+      14 +  let origin = "";                                             
+      15    if (req.method === "POST") {
+      16      try {
+      14 -      rtnCode = new URLSearchParams(await req.text()).get("RtnC
+         -ode") ?? "";                                                   
+      17 +      const form = new URLSearchParams(await req.text());      
+      18 +      rtnCode = form.get("RtnCode") ?? "";                     
+      19 +      origin = allowedOrigin(form.get("CustomField3"));        
+      20      } catch {
+      21        // fall through: treat as unknown result
+      22      }
+     ...
+      24    const outcome = rtnCode === "1" ? "success" : "failed";
+      25    return new Response(null, {
+      26      status: 302,
+      22 -    headers: { Location: `${SITE_URL}/dashboard?purchase=${outc
+         -ome}` },                                                       
+      27 +    headers: { Location: `${origin || SITE_URL}/dashboard?purch
+         +ase=${outcome}` },                                             
+      28    });
+      29  });
+  ⎿  Found 1 new diagnostic issue in 1 file (ctrl+o to expand)
+
+⏺ Deno 那筆診斷是預期內的（本機沒有 Deno，見
+  CLAUDE.md），不用處理。接著更新文件。
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ 程式碼和文件都改好了，但還沒部署。正式環境的 function 部署在 auto mode
+  下被擋，請你貼這一段執行：
+
+  ! supabase functions deploy flight-subscribe --use-api && supabase functions
+  deploy flight-ecpay-result --use-api --no-verify-jwt
+
+  根因
+
+  Edge secret SITE_URL 沒設，_shared/ecpay.ts 預設
+  http://localhost:8080，所以從哪個網域付款都會被導回 localhost。
+
+  改了什麼
+
+  - _shared/ecpay.ts：新增 allowedOrigin() 白名單（localhost:8080、https://fare-
+    finder-pro.vercel.app、SITE_URL）。buildCheckoutForm 多收 siteOrigin，寫進
+    ECPay CustomField3，原本這欄是空字串，仍納入 CheckMacValue。
+  - flight-subscribe：把請求的 Origin 過白名單後傳進去。
+  - flight-ecpay-result：讀回 CustomField3，通過白名單才導過去，否則 fallback
+    SITE_URL。這個端點沒有 JWT，body 可以偽造，所以必須再驗一次，避免變成 open
+    redirect。
+  - 文件：CLAUDE.md 和 docs/m1-session-handoff.md 已更新導回規則。
+
+  部署後怎麼驗證
+
+  1. 用 curl POST flight-ecpay-result：
+     - RtnCode=1&CustomField3=https://fare-finder-pro.vercel.app，應該 302 到
+       Vercel。
+     - CustomField3=https://evil.example，應該 302 回 SITE_URL（目前是
+       localhost）。
+  2. 從 localhost 和 Vercel 各付一次款（stage 商店），確認各自導回原站。Vercel
+     站還不是最終版，付款測試要等你同意才做。
+
+  沒做的部分
+
+  - Vercel preview 
+    網域：白名單沒有包含，只有上面那幾個網址完全比對。要加的話告訴我 preview
+    網域的格式。
+  - SITE_URL secret：沒設。它現在只是 fallback，也是 email
+    裡「重新訂閱」連結的來源。要不要現在設成 Vercel 網址由你決定。
+  - 舊的「已知落差」紀述：docs/ppt-outline.md:106、test-plan.md、test-report.md
+    還寫著「付款後會落到
+    localhost」。這是當時的測試紀錄，等部署驗證通過後再一併改比較準。
+
+✻ Churned for 1m 34s · done 10:49 PM
+
+!  supabase functions deploy flight-subscribe --use-api && supabase functions   
+  deploy flight-ecpay-result --use-api --no-verify-jwt                          
+  ⎿  Uploading asset (flight-subscribe): supabase/functions/flight-subscrib
+     e/deno.json
+     Uploading asset (flight-subscribe): supabase/functions/flight-subscrib
+     … +21 lines (ctrl+o to expand)
+
+⏺ 兩個都部署成功了。我現在用 curl 驗證重導行為（flight-ecpay-result 只回
+  302，不寫任何資料），並確認部署有生效。
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ flight-ecpay-result 的重導行為在正式環境驗證通過，五種情況的結果都符合預期：
+
+  ┌───────────────────────────────────────┬─────────────────────────────────┐
+  │               POST 內容               │              導向               │
+  ├───────────────────────────────────────┼─────────────────────────────────┤
+  │ CustomField3=https://fare-finder-pro. │ Vercel 站                       │
+  │ vercel.app                            │ /dashboard?purchase=success     │
+  ├───────────────────────────────────────┼─────────────────────────────────┤
+  │ CustomField3=http://localhost:8080    │ localhost                       │
+  ├───────────────────────────────────────┼─────────────────────────────────┤
+  │ CustomField3=https://evil.example     │ fallback（localhost），沒有跟著 │
+  │                                       │ 走                              │
+  ├───────────────────────────────────────┼─────────────────────────────────┤
+  │ CustomField3=https://fare-finder-pro. │ fallback，purchase=failed（前綴 │
+  │ vercel.app.evil.example，RtnCode=0    │ 偽造被擋，失敗結果也正確傳遞）  │
+  ├───────────────────────────────────────┼─────────────────────────────────┤
+  │ 沒有 CustomField3                     │ fallback                        │
+  └───────────────────────────────────────┴─────────────────────────────────┘
+
+  兩個 function 的 updated_at／ezbr_sha256 也都已更新。
+
+  還沒驗證的部分是 flight-subscribe 那一端，也就是從 Vercel 站按付款時，Origin
+  真的被寫進 CustomField3。這一段要走一次完整付款（stage
+  商店，不動真錢）才能確認，而且 Vercel
+  站還不是最終版，所以要等你同意。你可以自己做，也可以叫我用瀏覽器做：
+
+  1. 從 Vercel 站訂閱一條路線。
+  2. 在綠界 stage 頁用測試卡付款。
+  3. 看付款後是否回到 fare-finder-pro.vercel.app/dashboard，而不是 localhost。
+
+  如果還是回 localhost，最可能是 Origin header 沒帶到或不在白名單。我可以用
+  query_logs 查，或在 flight-subscribe 暫時加 log 確認。
+
+  要不要現在做這次付款測試？測完我再把
+  ppt-outline.md、test-plan.md、test-report.md 裡「付款後會落到
+  localhost」的已知落差改掉，然後一起 commit。
+
+✻ Worked for 1m 45s · done 10:51 PM
+
+❯ 用瀏覽器幫我從 Vercel 站測一次付款                                            
+
+  Called claude-in-chrome 2 times, recalled 1 memory (ctrl+o to expand)
+
+⏺ Chrome 擴充功能回報 fare-finder-pro.vercel.app 被「網站權限」擋住了，所以我沒
+  辦法開啟這個網址。這是擴充功能裡的設定，我不會繞過。
+
+  有兩個做法，你選一個：
+
+  1. 放行這個網域：在 Claude in Chrome 擴充功能的網站權限裡允許
+     fare-finder-pro.vercel.app，放行後告訴我，我就繼續用同一個工具測。
+  2. 改用 
+     chrome-devtools：這是另一個獨立的瀏覽器工具，不受這個權限限制。但它用自己的
+     Chrome profile，你的登入狀態不會帶過去，可能要你重新登入。記憶裡也記過這個
+     profile 會遇到 "browser already running" 的鎖定問題。
+
+  另外，付款流程需要登入。不管用哪個工具，登入密碼和信用卡號我都不能代填：登入請
+  你自己在瀏覽器裡完成，綠界 stage
+  頁的測試卡號也請你自己輸入。我負責開頁面、點訂閱、觀察付款後導回的網址。
+
+✻ Cooked for 26s · done 10:53 PM
+❯ 改用 chrome-devtools                                                          
+
+  Called chrome-devtools, recalled 1 memory (ctrl+o to expand)
+
+⏺ Memory 記載這個錯誤是舊的自動化 Chrome 佔住
+  profile。我先找出是哪個程序，再決定怎麼處理。
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ User answered Claude's questions:
+  ⎿  · chrome-devtools 的 Chrome（PID 18175，已開約 3 小時）佔住了 
+     profile，要結束它才能重新啟動。結束後可能要重新登入，可以嗎？ → 你幫我 kill
+     18175
+
+  Called chrome-devtools 2 times, ran 1 shell command (ctrl+o to expand)
+
+⏺ 我確認已登入測試帳號，台北飛東京已取消，首爾和倫敦尚未追蹤。接下來用首爾測試付
+  款，將目標價設為 1000（遠低於現價 5,562），避免付款後誤觸發降價通知。 
+  · summarized
+
+  Called chrome-devtools (ctrl+o to expand)
+
+⏺ 我在 Vercel 站的首爾卡片填好目標價 1000，接著按「開始追蹤」，會導到綠界 stage
+  付款頁。
+
+  Called chrome-devtools 4 times (ctrl+o to expand)
+
+⏺ 已到綠界 stage 付款頁：商店「測試帳號三」，訂單
+  FPMUBDBDCJ2M1P3D，商品「TPE-SEL 月訂閱」，NT$300。我先幫你切到信用卡分頁。
+
+  Called chrome-devtools (ctrl+o to expand)
+
+⏺ 信用卡表單已經展開。卡號、有效期限和安全碼我不能代填，請你在那個
+  chrome-devtools 開出來的 Chrome 視窗裡自己輸入。綠界 stage
+  公開的測試卡資料是：
+
+  - 卡號：4311-9522-2222-2222
+  - 有效期限：任一未來月份，例如 12/30
+  - 安全碼：222
+
+  持卡人姓名、手機、信箱等欄位隨便填即可，填完按「立即付款」。stage 可能會跳出
+  3D 驗證頁，OTP 也請你輸入。
+
+  付款完成後告訴我，我會確認瀏覽器最後落在哪個網域。預期是
+  https://fare-finder-pro.vercel.app/dashboard?purchase=success，而不是
+  localhost。
+
+✻ Churned for 1m 6s · done 10:56 PM
+
+❯ 付款完成                                                                      
+
+  Called chrome-devtools (ctrl+o to expand)
+
+⏺ 付款後瀏覽器落在
+  https://fare-finder-pro.vercel.app/dashboard?purchase=success，不是
+  localhost。我再確認頁面狀態和資料庫。
+
+  Called chrome-devtools, ran 1 shell command (ctrl+o to expand)
+
+⏺ 畫面與資料庫都確認首爾航線訂閱已生效，訂單編號也對得上。接下來我要修正先前提到
+  的過時說法。 · summarized
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ 付款後導回 Vercel 站的問題修好了，我已從 Vercel 站用綠界 stage
+  商店實測過一次。
+
+  驗證結果
+
+  - 導回網域：付款後瀏覽器落在
+    https://fare-finder-pro.vercel.app/dashboard?purchase=success，不是
+    localhost。
+  - 儀表板：首爾卡片顯示「已訂閱（有效）」，目標價 1000。
+  - 資料庫：TPE-SEL 是 active，total_success_times = 1，訂單編號
+    FPMUBDBDCJ2M1P3D 與綠界頁面一致。
+  - 這代表 flight-subscribe 把 Origin 寫進 CustomField3，flight-ecpay-result
+    讀回後導向的整條路徑都通了。
+
+  文件更新
+
+  docs/ppt-outline.md 和 docs/test-report.md 裡「付款後會落到
+  localhost」的說明已改成已修正。
+
+  測試資料
+
+  k***@gmail.com 現在有一筆 stage 的首爾訂閱（active，每月 NT$300 的 stage
+  定期定額）。目標價設
+  1000，遠低於現價，所以不會寄降價通知信。要清掉的話，可以在 Vercel
+  站按首爾卡片的「取消訂閱」（它會呼叫綠界停止定期定額，服務保留到期間結束）。這
+  是寫入動作，需要你同意我才會按。
+
+  待辦
+
+  - 還沒 commit：這次改動在工作目錄裡，包含 3 支 Edge Function
+    相關檔案、CLAUDE.md、handoff doc 和上面兩份文件。要我 commit 嗎？
+  - SITE_URL 仍未設定：它現在只是 fallback，也是 email
+    裡「重新訂閱」連結的來源。正式上線前還是要設。
+  - chrome-devtools 視窗：我開的 Chrome 還在，需要的話我可以關掉。
+
+✻ Cogitated for 44s · done 10:59 PM
+
+❯ SITE_URL 仍未設定：它現在只是 fallback，也是 email                            
+  裡「重新訂閱」連結的來源。正式上線前還是要設。                                
+  是何意思？                                                                    
+
+⏺ SITE_URL 是我們設在 Supabase Edge Functions
+  的環境變數，用來告訴後端「我們前端網站的正式網址是什麼」。它目前用在兩個地方。
+
+  1. 導回頁的 fallback
+
+  付款完成後，flight-ecpay-result 會決定把使用者導回哪個網址。順序是：
+
+  1. 先看下單時記下的網域（CustomField3）。如果在白名單內，就導回那裡。這次修好
+     的就是這一條，所以你從 Vercel 站付款會回到 Vercel。
+  2. 如果沒有記到，或網域不在白名單，就用 SITE_URL。
+
+  沒設 SITE_URL 時，它預設是
+  http://localhost:8080。所以萬一哪天有人從白名單以外的網域（例如 Vercel 的
+  preview 網址）付款，仍會被導到 localhost。
+
+  2. Email 裡的「重新訂閱」連結
+
+  訂閱到期（expired）時，flight-status-notification 會寄信通知使用者。信裡只有在
+  SITE_URL 有設定時，才會附上「到 <SITE_URL>/dashboard
+  重新訂閱」這句話。沒設的話，信就沒有連結。這是刻意的，避免寄出指向 localhost
+  的連結給真實使用者。
+
+  為什麼說「上線前要設」
+
+  現在沒設 SITE_URL 的影響有兩個：
+  - 白名單以外的網域付款會導到 localhost。
+  - 到期信沒有重新訂閱連結，使用者少了一個回來續訂的入口。
+
+  目前只有 stage 測試，兩個影響都無所謂。正式上線時，網站會有正式網域，這時執行
+  supabase secrets set SITE_URL=https://你的正式網域 就好。設定後 Edge Function
+  會自動讀到新值，不用改程式碼。
+
+  現在要不要設
+
+  你可以現在就設成 https://fare-finder-pro.vercel.app。副作用是：從 localhost
+  測試付款時，如果下單網域被記錄到就仍會回 localhost，但 email 會開始帶 Vercel
+  連結。因為 Vercel 站還不是最終版，我建議等正式網域確定再設。
+
+✻ Crunched for 9s · done 11:02 PM
+
+❯ supabase Site URL is                                                          
+  https://fare-finder-pro.vercel.app                                            
+
+⏺ 這兩個都叫 Site URL，但它們是不同的設定，彼此不會互相影響。
+
+  ┌──────┬──────────────────────────────────────────┬───────────────────────┐
+  │      │        Supabase Auth 的 Site URL         │   Edge Function 的    │
+  │      │                                          │    SITE_URL secret    │
+  ├──────┼──────────────────────────────────────────┼───────────────────────┤
+  │ 位置 │ Dashboard → Authentication → URL         │ supabase secrets set  │
+  │      │ Configuration                            │ 設定的環境變數        │
+  ├──────┼──────────────────────────────────────────┼───────────────────────┤
+  │      │                                          │ 我們自己寫的 Edge     │
+  │ 誰在 │ Supabase Auth：註冊確認信、重設密碼信裡  │ Function：付款導回的  │
+  │ 用   │ 的連結，以及登入後的預設導回             │ fallback、到期信的重  │
+  │      │                                          │ 新訂閱連結            │
+  ├──────┼──────────────────────────────────────────┼───────────────────────┤
+  │ 目前 │ https://fare-finder-pro.vercel.app（你剛 │ 未設定，預設          │
+  │ 值   │ 貼的）                                   │ http://localhost:8080 │
+  └──────┴──────────────────────────────────────────┴───────────────────────┘
+
+  Auth 那邊設好，不代表 Edge Function 讀得到。它們是兩個獨立的設定，要各設各的。
+
+  你的 Auth Site URL 已經指向 Vercel
+  站，表示你在認證上已經把它當成正式網址。所以 Edge secret
+  也設成同一個值是一致的，沒有衝突。
+
+  如果你決定現在就設，請執行這一行。auto mode 會擋正式環境的 secret
+  設定，所以需要你自己貼：
+
+  ! supabase secrets set SITE_URL=https://fare-finder-pro.vercel.app
+
+  設完之後：
+  - 付款導回的 fallback 變成 Vercel 站，白名單以外的網域付款也不會再落到
+    localhost。
+  - 之後的到期信會附上 https://fare-finder-pro.vercel.app/dashboard
+    的重新訂閱連結。
+  - 白名單裡的 SITE_URL 也會跟著變成這個值。localhost:8080
+    仍在白名單裡，本機測試不受影響。
+  - 不需要重新部署 function，但正在跑的 function
+    實例可能要一小段時間才會讀到新值。
+
+  設完可以告訴我，我用 curl 再驗一次「白名單外的網域會導回 Vercel」，並把
+  handoff doc 裡「SITE_URL 未設」的紀述更新。
+
+✻ Cooked for 12s · done 11:05 PM
+
+❯ 所以是 set edge function secrets  SITE_URL?                                   
+
+⏺ 對，就是設 Edge Function secrets 裡的 SITE_URL。有兩種設法，效果一樣：
+
+  用指令（前面那行）：
+  ! supabase secrets set SITE_URL=https://fare-finder-pro.vercel.app
+
+  用 Dashboard：Project → Edge Functions → Secrets（或 Project Settings → Edge
+  Functions），新增：
+  - Name：SITE_URL
+  - Value：https://fare-finder-pro.vercel.app
+
+  值後面不要加 /。程式碼會自動去掉結尾斜線，但少一個比較乾淨。
+
+  這個專案是多個 app 共用的，Edge secrets 是整個專案共用。其他 app 的 function
+  如果也用 SITE_URL 這個名字，會讀到同一個值。我只查過這個 repo 的
+  function，沒辦法確認其他 app 有沒有用。設之前你可以到 Dashboard 的 Secrets
+  列表看一下，有沒有別的 app 已經設了
+  SITE_URL。列表上如果已經有這個名字，就代表它是別人的，先不要覆蓋。前面我用
+  supabase secrets list --output json 列過名稱，目前沒有
+  SITE_URL，所以現在還沒有衝突。
+
+  設完告訴我，我來驗證並更新文件。
+
+✻ Baked for 6s · done 11:09 PM
+
+!  supabase secrets set SITE_URL=https://fare-finder-pro.vercel.app             
+  ⎿  {
+       "project_ref": "luugfvsrawnuzwpjvddt",
+       "count": 1,
+       "message": "Finished supabase secrets set."
+     }
+
+⏺ 已設定。我先確認 secret 存在（只印名稱），再用 curl
+  驗證白名單外的網域現在會導回 Vercel。
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ 變更已生效，不需重新部署 function：現在白名單外的網域都會落到 Vercel
+  站，不再導向 localhost 或跟隨偽造網域。接下來我會更新文件中關於 SITE_URL
+  未設定的說明。 · summarized
+
+  Searched for 1 pattern, ran 2 shell commands (ctrl+o to expand)
+
+⏺ SITE_URL 設定完成，文件也同步更新了。
+
+  結果
+
+  - Secret 已存在，值是 https://fare-finder-pro.vercel.app。
+  - 白名單外的網域和沒帶 CustomField3 的請求，都導回 Vercel 站。localhost:8080
+    仍導回 localhost。
+  - 到期信之後會附上重新訂閱連結，指向 https://fare-finder-pro.vercel.app/dashbo
+    ard。這一項我沒有實際觸發到期信來看，是依 flight-status-notification
+    的程式碼判斷。
+
+  文件
+
+  - CLAUDE.md、docs/m1-session-handoff.md、docs/ppt-outline.md 都改成 SITE_URL
+    已設定。
+  - handoff doc 還補了這次的修法、驗證方式，以及一句「這不是 Supabase Auth 的
+    Site URL」。
+  - 第 109、133 行的舊測試紀錄保留原樣，那是當時的歷史紀錄。
+
+  還沒做的事
+
+  1. commit：目前 7 個檔案有變更（3 支 function
+     相關檔案、CLAUDE.md、handoff、ppt-outline、test-report）。你要我 commit
+     嗎？這個專案有 Lovable 同步規則，我只會新增
+     commit，不改寫已推送的歷史，也不會 push，除非你說要。
+  2. 測試訂閱：k***@gmail.com 的首爾訂閱還是 active。需要清掉的話，可以在
+     Vercel 站按「取消訂閱」，要我用瀏覽器按也行，只是這是寫入動作，需要你同意。
+  3. chrome-devtools 視窗：還開著，需要的話我幫你關。
+
+✻ Sautéed for 59s · done 11:11 PM
+❯ commit 這些變更                                                               
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ 只 commit 這次的 7 個修改檔，工作目錄裡的簡報檔和截圖（docs/*.pptx、docs/ppt-s
+  creenshots/、no_7_*.txt）是別的工作，我不動。
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ 已完成 commit 46e5a5f（7 個檔案），但未 push——因為此專案與 Lovable
+  同步，我只新增 commit 不改寫歷史，需要的話請告訴我。首爾測試訂閱仍為
+  active、chrome-devtools 視窗也還開著，是否清理請你決定。 · summarized
+
+  Wrote 1 memory (ctrl+o to expand)
+
+⏺ 已更新記憶檔 chrome-devtools-profile-lock.md。
+
+✻ Crunched for 20s · done 11:11 PM
