@@ -61,6 +61,14 @@ Deno.serve(async (req) => {
     // A renewal that lands after a cancel must not resurrect the row.
     if (row.subscription_status === "cancelled" || row.subscription_status === "expired") return ok();
 
+    // Known gap (K-9 in docs/test-report.md): the "every scheduled execution used"
+    // check further down only runs for FAILED callbacks. If the LAST charge of a
+    // series succeeds (TotalSuccessTimes >= ExecTimes) the row stays `active` with a
+    // fresh current_period_end, and flight-parser only expires it once that date is
+    // RENEWAL_GRACE_DAYS in the past. Harmless in production: checkout sets
+    // ExecTimes=999 (monthly, ~83 years), so this needs a short test series
+    // (PeriodType=D, ExecTimes=2) or a finite plan we don't sell today.
+
     // This charge covers the next month from now. A successful charge also
     // resets the "payment failed" flag so the next bad cycle emails again.
     const periodEnd = new Date();
@@ -123,6 +131,13 @@ Deno.serve(async (req) => {
   // Every failed retry calls back, so only the first one per cycle emails: the
   // update matches only while payment_failed_at is null, which makes "first"
   // atomic even if two callbacks race. Only paying (active) rows are told.
+  //
+  // Known quirk (K-7 in docs/test-report.md): when this same failed callback also
+  // exhausts the series (the ExecTimes block below), the user gets BOTH this "payment
+  // failed, we will retry" mail and the "subscription ended" mail, which contradict
+  // each other. Only reachable when TotalSuccessTimes >= ExecTimes, so never with the
+  // production ExecTimes=999. If a finite plan is ever sold, compute that condition
+  // first and skip this mail when it holds.
   if (row.subscription_status === "active") {
     const { data: firstFailure, error: flagError } = await admin
       .from("subscriptions")
@@ -135,12 +150,26 @@ Deno.serve(async (req) => {
     if (flagError) {
       console.error("failed to record payment failure", flagError);
     } else if (firstFailure) {
-      sendStatusEmail({
-        event_type: "payment_failed",
-        email: firstFailure.email,
-        route: firstFailure.route,
-        current_period_end: row.current_period_end,
-      });
+      sendStatusEmail(
+        {
+          event_type: "payment_failed",
+          email: firstFailure.email,
+          route: firstFailure.route,
+          current_period_end: row.current_period_end,
+        },
+        // The flag above is set BEFORE the mail goes out (K-8 in docs/test-report.md). If
+        // the mail is then rejected, release it: we still answer ECPay `1|OK`, but ECPay
+        // keeps calling back on each failed retry (up to 6), so the next callback gets
+        // to try the mail again instead of the notice being lost for the whole cycle.
+        // A permanently bad address just costs a few extra rejected sends.
+        async () => {
+          const { error } = await admin
+            .from("subscriptions")
+            .update({ payment_failed_at: null })
+            .eq("id", row.id);
+          if (error) console.error("failed to release payment_failed_at after a rejected mail", error);
+        },
+      );
     }
   }
 

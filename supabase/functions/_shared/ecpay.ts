@@ -142,15 +142,35 @@ export function sendStatusEmail(payload: {
   // "renewed" only: what was charged, and which charge it was (1 = first).
   amount?: number;
   charge_no?: number;
-}) {
-  const p = fetch(fnUrl("flight-status-notification"), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  }).catch((e) => console.error("status notification dispatch failed", e));
+},
+// Optional: runs when the mail was NOT accepted (flight-status-notification answered
+// non-2xx, e.g. 502 when Resend rejects it, or the call itself failed). Callers that
+// mark "already told" before sending use it to undo that mark, see flight-ecpay-period.
+onFail?: () => Promise<void>) {
+  const p = (async () => {
+    let sent = false;
+    try {
+      const res = await fetch(fnUrl("flight-status-notification"), {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      sent = res.ok;
+      if (!sent) console.error(`status notification (${payload.event_type}) rejected: HTTP ${res.status}`);
+    } catch (e) {
+      console.error("status notification dispatch failed", e);
+    }
+    if (!sent && onFail) {
+      try {
+        await onFail();
+      } catch (e) {
+        console.error("status notification onFail failed", e);
+      }
+    }
+  })();
   // Let the runtime finish the request after we've already replied to ECPay.
   // deno-lint-ignore no-explicit-any
   (globalThis as any).EdgeRuntime?.waitUntil?.(p);
