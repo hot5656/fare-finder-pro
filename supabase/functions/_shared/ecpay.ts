@@ -17,9 +17,26 @@ const HOST = Deno.env.get("ECPAY_ENV") === "prod"
 export const CHECKOUT_URL = `${HOST}/Cashier/AioCheckOut/V5`;
 export const PERIOD_ACTION_URL = `${HOST}/Cashier/CreditCardPeriodAction`;
 
-// Where ECPay's browser redirect (OrderResultURL) finally lands the user.
-// Defaults to the dev server; set SITE_URL once there's a deployed front-end.
+// Fallback landing site for ECPay's browser redirect (OrderResultURL), used when
+// the checkout didn't carry a usable origin. Defaults to the dev server; set
+// SITE_URL once there's a deployed front-end.
 export const SITE_URL = (Deno.env.get("SITE_URL") ?? "http://localhost:8080").replace(/\/$/, "");
+
+// Front-ends allowed to receive the post-payment redirect. The checkout stores
+// the caller's origin in CustomField3 and flight-ecpay-result reads it back, so
+// the same allowlist gates both ends (that endpoint has no JWT: never redirect
+// to an origin that isn't listed here). SITE_URL is always allowed.
+const ALLOWED_ORIGINS = new Set([
+  SITE_URL,
+  "http://localhost:8080",
+  "https://fare-finder-pro.vercel.app",
+]);
+
+// Returns the origin when it is allowlisted, else "" (caller falls back to SITE_URL).
+export function allowedOrigin(origin: string | null | undefined): string {
+  const o = (origin ?? "").replace(/\/$/, "");
+  return ALLOWED_ORIGINS.has(o) ? o : "";
+}
 
 const PROJECT_URL = Deno.env.get("SUPABASE_URL") as string;
 export const fnUrl = (slug: string) => `${PROJECT_URL}/functions/v1/${slug}`;
@@ -91,6 +108,8 @@ export async function buildCheckoutForm(opts: {
   email: string;
   route: string;
   itemName: string;
+  // Allowlisted front-end origin to send the user back to ("" -> SITE_URL).
+  siteOrigin: string;
 }): Promise<string> {
   const params: Record<string, string> = {
     MerchantID: ECPAY_MERCHANT_ID,
@@ -113,6 +132,8 @@ export async function buildCheckoutForm(opts: {
     ExecTimes: "999", // ECPay has no "forever"; 999 is the max
     CustomField1: opts.email,
     CustomField2: opts.route,
+    // ECPay echoes CustomField1-4 back in the OrderResultURL POST.
+    CustomField3: opts.siteOrigin,
   };
   params.CheckMacValue = await checkMacValue(params);
 

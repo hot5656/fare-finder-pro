@@ -13,7 +13,7 @@
 // already-paid row). Only the verified ECPay callbacks write `active`.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildCheckoutForm, ECPAY_AMOUNT, newTradeNo } from "../_shared/ecpay.ts";
+import { allowedOrigin, buildCheckoutForm, ECPAY_AMOUNT, newTradeNo } from "../_shared/ecpay.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") as string;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") as string;
@@ -122,6 +122,8 @@ Deno.serve(async (req) => {
     email: user.email,
     route: plan.route,
     itemName: `Flight Price Notifier ${plan.route} 月訂閱`,
+    // Browsers always send Origin on this cross-origin POST; unknown -> "".
+    siteOrigin: allowedOrigin(req.headers.get("Origin")),
   });
   return new Response(html, {
     status: 200,

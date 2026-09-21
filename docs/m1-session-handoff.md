@@ -303,9 +303,21 @@ and closed with 保留 — London was not cancelled.)
 - **Secrets set remotely**: `RESEND_API_KEY`, `SEND_EMAIL_HOOK_SECRET`,
   `TRAVELPAYOUTS_TOKEN`, `ECPAY_MERCHANT_ID` / `ECPAY_HASH_KEY` /
   `ECPAY_HASH_IV` / `ECPAY_ENV` (`stage`) / `ECPAY_AMOUNT` (`300`), plus
-  auto-injected `SUPABASE_*`. Optional `SITE_URL` (where ECPay's browser
-  redirect lands) is **not set** and defaults to `http://localhost:8080`; set
-  it once there is a deployed front-end. Local `.env` does not (and should
+  auto-injected `SUPABASE_*`. `SITE_URL` (fallback landing site
+  for ECPay's browser redirect, and the resubscribe link in emails) was set to
+  `https://fare-finder-pro.vercel.app` on 2026-09-21 (unset it defaults to
+  `http://localhost:8080`); change it to the real domain when going live. It is
+  not the same thing as the Supabase Auth "Site URL" setting. The redirect itself follows the site the user paid from:
+  `flight-subscribe` stores the request `Origin` in ECPay `CustomField3`,
+  `flight-ecpay-result` reads it back and redirects there only if it is on the
+  `allowedOrigin()` allowlist in `_shared/ecpay.ts` (localhost:8080, the
+  Vercel site, `SITE_URL`); anything else falls back to `SITE_URL`. Found
+  2026-09-21: paying from the Vercel site landed on localhost before this;
+  fixed, and verified by a real stage payment from the Vercel site (landed on
+  `/dashboard?purchase=success`, `TPE-SEL` went `active`) plus curl checks
+  (unlisted origin and missing `CustomField3` both 302 to the Vercel site).
+  The test row (`kyp741@gmail.com`, `TPE-SEL`, target 1000) was left `active`.
+  Local `.env` does not (and should
   not) contain Travelpayouts/Resend/ECPay keys.
 - **Cron**: job `flight-price-check` posts to `flight-parser` using the
   service-role key stored in Supabase Vault as `flight_service_role_key`.
@@ -619,7 +631,7 @@ options, and how to know it is done.
    extended; the stale `m2-ecpay-subscription` pointer is fixed.
 4. **Before any real money:** M2 runs entirely on the shared **stage** merchant.
    Going live means a real MerchantID/HashKey/HashIV, `ECPAY_ENV=prod`, a real
-   `SITE_URL`, and a deployed front-end that is the final code (the Vercel site
+   `SITE_URL` (currently the Vercel URL), and a deployed front-end that is the final code (the Vercel site
    is not yet). Per the skill, that is M3 ("啟動 M3", own domain / go-live) —
    check whether the M3 skill still assumes the AWS version first.
 5. **Backlog, not started:** B-1 (real app access control instead of the client-declared

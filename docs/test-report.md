@@ -233,7 +233,7 @@
 
 - **環境**：chrome-devtools 開啟**隔離的乾淨瀏覽器環境**（無既有 session），網址 `https://fare-finder-pro.vercel.app/`；行動版以 `390x844x2,mobile,touch` 模擬。後端請求以 `curl`／Node 直接打 `https://luugfvsrawnuzwpjvddt.supabase.co/functions/v1/…`。
 - **資料影響（本節前半，FE-01～FE-12、A4／A5、B6、SEC-02／07）**：沒有建立帳號、沒有寫入或修改任何資料列、沒有寄出 email。FE-05 用不存在的假帳號，只產生一次被拒絕的登入請求；B6 的回呼全部帶 `SimulatePaid=1` 且使用不存在的交易編號與 email。**後半輪（FE-07／08／09／11、C3／E6／G5／G6）會寫入資料，見 4.7。**
-- **注意（Vercel 不是最終程式碼）**：本次前端結果只代表目前部署在 Vercel 的版本。Edge Function 的 `SITE_URL` 尚未設定，付款完成後會導回 `localhost:8080`，因此沒有在 Vercel 上測付款流程。
+- **注意（Vercel 不是最終程式碼）**：本次前端結果只代表當時部署在 Vercel 的版本。付款導回問題已於 2026-09-21 修正並在 Vercel 站實測（見 handoff doc）：付款後依下單網域導回，Vercel 站付款落在 `https://fare-finder-pro.vercel.app/dashboard?purchase=success`，首爾路線 `active`、`total_success_times = 1`。當時的報告內容仍是修正前的紀錄，`SITE_URL` 未設。
 - **觀察（非缺陷）**：
   1. 網站目前為深青綠加紅色主題，與 `README.md` v1 需求的紫色調不同，應是後續設計變更；README 的舊描述可一併更新。
   2. 首頁第一張卡片文案已列出「東京、首爾、倫敦」，與 README 的「東京、首爾」不同（倫敦為 M2 期間新增）。

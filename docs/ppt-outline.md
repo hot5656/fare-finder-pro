@@ -103,7 +103,7 @@
   - `ppt-screenshots/09-ecpay-cashier-filled.png`：完整收銀台（含綠界 stage 公開測試卡資料），需要展示完整表單時才用
   - `ppt-screenshots/10-dashboard-payment-success.png`：付款完成提示＋東京卡片「已訂閱（有效）」、目前目標 NT$10,000
 - **備註**：目前用綠界測試特店與測試卡，不會真的扣款
-- **備註（已知落差）**：付款後綠界會導回 `SITE_URL`，該環境變數尚未設定，預設是 `http://localhost:8080`，所以正式站付款後實際會落到 localhost（Demo 現場請手動改回 Vercel 網址；10 號截圖是直接開 `/dashboard?purchase=success` 取得的）。這是上線前待辦
+- **備註（已修正 2026-09-21）**：原本付款後綠界會導回未設定的 `SITE_URL`（預設 `http://localhost:8080`），從正式站付款會落到 localhost。現在 `flight-subscribe` 把下單網域寫進 ECPay `CustomField3`，`flight-ecpay-result` 驗過白名單後導回原站；已從 Vercel 站用 stage 商店實測，付款後落在 `https://fare-finder-pro.vercel.app/dashboard?purchase=success`。`SITE_URL` 已於同日設為 `https://fare-finder-pro.vercel.app`，作為 fallback 與 email 重新訂閱連結，正式網域確定後要改成正式網域
 
 ### Slide 12 — Step 4：管理訂閱
 - **調整目標價**：直接改數字、按「更新目標價」，不用重新付款
