@@ -35,12 +35,27 @@ const SUBJECTS: Record<string, string> = {
   invite: "邀請你加入 / You've been invited",
 };
 
+// A bare "click Continue" mail with no product name and no reason looks like phishing
+// to spam filters (and to people), so every mail says who we are, why they got it and
+// that it can be ignored.
+const PRODUCT = "Flight Price Notifier（機票降價通知）";
+const INTROS: Record<string, string> = {
+  signup: `你剛剛用這個 email 在 ${PRODUCT}註冊了帳號。請點擊下方按鈕確認你的 email，完成註冊。`,
+  recovery: `我們收到重設你 ${PRODUCT}帳號密碼的請求。請點擊下方按鈕設定新密碼。`,
+  email_change: `你要求變更 ${PRODUCT}帳號使用的 email。請點擊下方按鈕確認這項變更。`,
+  magiclink: `你要求用登入連結登入 ${PRODUCT}。請點擊下方按鈕登入。`,
+  invite: `有人邀請你加入 ${PRODUCT}。請點擊下方按鈕接受邀請。`,
+};
+const DEFAULT_INTRO = `請點擊下方按鈕完成 ${PRODUCT}的驗證。`;
+const IGNORE_NOTE = "如果這不是你本人的操作，請直接忽略這封信，你的帳號不會有任何變更。";
+
 function buildHtml(actionType: string, confirmUrl: string): string {
   const subject = SUBJECTS[actionType] ?? "驗證通知 / Verification";
+  const intro = INTROS[actionType] ?? DEFAULT_INTRO;
   return `
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
       <h2>${subject}</h2>
-      <p>請點擊以下按鈕完成操作：</p>
+      <p>${intro}</p>
       <p>
         <a href="${confirmUrl}"
            style="display:inline-block;padding:12px 20px;background:#7c3aed;color:#fff;
@@ -52,8 +67,18 @@ function buildHtml(actionType: string, confirmUrl: string): string {
         如果按鈕無法點擊，請複製以下連結到瀏覽器：<br/>
         <a href="${confirmUrl}">${confirmUrl}</a>
       </p>
+      <p style="color:#666;font-size:13px;">${IGNORE_NOTE}</p>
     </div>
   `;
+}
+
+// Plain-text alternative. HTML-only mail is one of the signals mailbox providers
+// weigh against a message (the confirmation mail landed in Gmail's spam folder while
+// flight-status-notification, which sends both parts, reached the inbox).
+function buildText(actionType: string, confirmUrl: string): string {
+  const subject = SUBJECTS[actionType] ?? "驗證通知 / Verification";
+  const intro = (INTROS[actionType] ?? DEFAULT_INTRO).replace("下方按鈕", "以下連結");
+  return `${subject}\n\n${intro}\n${confirmUrl}\n\n${IGNORE_NOTE}\n`;
 }
 
 Deno.serve(async (req) => {
@@ -85,6 +110,7 @@ Deno.serve(async (req) => {
       to: [user.email],
       subject: SUBJECTS[email_action_type] ?? "驗證通知 / Verification",
       html: buildHtml(email_action_type, confirmUrl),
+      text: buildText(email_action_type, confirmUrl),
     });
 
     if (error) {

@@ -119,7 +119,7 @@
 | FE-05 | 密碼錯誤登入 | 顯示 Supabase 錯誤訊息，不導頁 | 待驗 |
 | FE-06 | 帳號存在、密碼正確，但 `app_metadata.apps` **未含** `fare-finder-pro` | 登出並顯示 "Invalid login credentials"，不進 dashboard（嚴格隔離，登入頁不自動加標記） | 待驗（程式碼已實作） |
 | FE-07 | 全新 email 註冊 | 帶 `data.app = fare-finder-pro`；需信箱驗證時顯示確認提示並切回登入模式 | 待驗 |
-| FE-08 | 註冊時 email 已被別的 app 使用、且密碼**相符** | 依現行程式碼：登入後 `updateUser({data:{app}})` 補標記並導向 dashboard | 待驗；**與 `docs/shared-supabase-auth.md`「不自動加入」的描述有出入，見第 12 章** |
+| FE-08 | 註冊時 email 已被別的 app 使用、且密碼**相符** | 依現行程式碼：登入後 `updateUser({data:{app}})` 補標記並導向 dashboard | 已於 2026-09-21 執行，見測試報告。原本與 `docs/shared-supabase-auth.md`、README 的描述有出入，兩份文件已於同日改成描述實際行為 |
 | FE-09 | 註冊時 email 已被別的 app 使用、密碼**不符** | 寄出密碼重設信，顯示說明訊息並切回登入模式；點連結至 `/auth/reset` 設定新密碼後才補標記 | 待驗 |
 | FE-10 | 未登入直接開 `/dashboard` | 導向 `/auth` | 待驗 |
 | FE-11 | 驗證信／重設信連結導向 | 導回 `localhost:8080`，不出現 `otp_expired` 或導到無法開啟的網址 | 待驗（依 Redirect URLs 設定） |
@@ -314,7 +314,7 @@
 - 第 6 章前端用例（首頁內容、行動版、登入流程細節）在 handoff 中沒有逐項記錄，本計畫列為待驗。
 
 **風險與注意事項**
-- **文件與程式碼不一致（需決定並修正其一）**：`docs/shared-supabase-auth.md` 與 README 說註冊時 email 已存在應一律走密碼重設；但 `src/routes/auth/index.tsx` 在密碼**相符**時會直接 `updateUser` 補標記並登入（FE-08）。請確認哪個才是意圖，並讓文件與程式碼一致。
+- **文件與程式碼不一致（已處理，2026-09-21）**：`docs/shared-supabase-auth.md` 與 README 原本寫註冊時 email 已存在應一律走密碼重設，但 `src/routes/auth/index.tsx` 在密碼**相符**時會直接 `updateUser` 補標記並登入（FE-08）。已決定以程式碼為準，兩份文件改成描述實際行為（並補充「標籤是使用者自訂、不是權限」的說明）。
 - ECPay 只在 stage，尚未用真實特店與 `ECPAY_ENV=prod` 測過；`SITE_URL` 未設，正式上線前必設。
 - 歡迎信硬編碼「每月扣款」，若日後提供其他週期需改為由結帳帶入。
 - `flight.subscriptions.updated_at` 無 trigger；parser 的 lazy `cancelled → expired` 不會更新它。

@@ -178,7 +178,7 @@ WHERE tgrelid = 'auth.users'::regclass AND NOT tgisinternal;
 **運作原理**：
 
 1. 前端呼叫 `supabase.auth.signUp()` 或 `supabase.auth.updateUser()` 時，帶上 `options: { data: { app: '<你的 app 名稱>' } }`。
-2. 這個 trigger 會把 `raw_user_meta_data.app` 這個（使用者可自行修改的）暫存值，promote 進 `raw_app_meta_data.apps`（一個去重的 JSON 陣列，`app_metadata` 使用者端無法竄改）。
+2. 這個 trigger 會把 `raw_user_meta_data.app` 這個（使用者可自行修改的）暫存值，promote 進 `raw_app_meta_data.apps`（一個去重的 JSON 陣列）。用戶端不能直接寫 `app_metadata`，但這個值是從使用者可自行修改的欄位複製過來的，所以 **`apps` 是使用者自己宣告的標籤，不是權限**：任何已登入的使用者都能用 `updateUser({ data: { app } })` 幫自己加上任何標籤。它只適合當前端路由守衛，RLS 與 Edge Function 不可依賴它授權（真正的存取控制見 `docs/m1-session-handoff.md` 的 backlog B-1）。
 3. 每個 app 自己的登入邏輯，檢查 `user.app_metadata.apps` 裡有沒有包含**自己的 app 名稱**（字串必須跟自己傳的完全一致，且不能跟其他 app 撞名）。這個 repo 的參考實作在 `src/routes/auth/index.tsx`（`APP_NAME` 常數定義在 `src/integrations/supabase/app-scope.ts`）跟 `src/routes/_authenticated/route.tsx`。
 
 **這個 trigger 完全通用、不用改就能給新 app 用**——它不檢查 app 名稱是什麼字串，純粹「有傳就記錄」。新 app 只要：
@@ -187,9 +187,18 @@ WHERE tgrelid = 'auth.users'::regclass AND NOT tgisinternal;
 - 自己的登入頁自己判斷 `apps` 陣列裡有沒有那個名稱
 - **不需要**再建立任何新的 migration / trigger
 
-**所有共用這個 Supabase 專案的 app，一律採用「嚴格隔離」設計**（登入頁只認已經標記過的帳號，密碼對但沒標記一律拒絕；要加入某個 app,只能透過那個 app 自己的註冊流程,見上面「Redirect URLs」章節前後的討論）。不要實作「密碼對就自動加入」（在登入頁 `apps` 沒命中時自動呼叫 `updateUser({ data: { app } })` 補標記）——這會讓任何知道某帳號密碼的人，都能讓那個帳號自動取得你的 app 的存取權。新 app 一律沿用同一種規則，不要各自發明變體。
+**所有共用這個 Supabase 專案的 app，登入頁一律只認已經標記過的帳號**：密碼正確但沒標記就登出並顯示一般的登入失敗訊息，**登入本身不會補標記**。要加入某個 app，必須是使用者在那個 app 的註冊流程中（或管理員在後台）明確採取的動作。不要實作在登入頁 `apps` 沒命中時自動呼叫 `updateUser({ data: { app } })` 補標記——這會讓「登入」變成隱含的加入動作，每個 app 的登入頁也會悄悄擴大自己的存取範圍。新 app 一律沿用這條規則，不要各自發明變體。
 
-「透過 app 自己的註冊流程加入」實際上有兩種合法路徑，差別在誰觸發：使用者自己走 signup（email 已被別的 app 註冊時導去密碼重設流程，驗證信箱身份後才補標記——本 repo `src/routes/auth/index.tsx`、`src/routes/auth/reset.tsx` 走這條），或是管理員在自己 app 後台建帳號時撞到既有 email（`auth.admin.createUser()` 對已存在的 email 一定失敗，這時改成「掛靠既有身份」：不建新帳號、不改密碼，把自己的 app 名稱**合併**進 `app_metadata.apps`，用 spread 保留其他 app 既有的標記，不要整個覆寫掉；參考實作見 `web_project_management` repo 的 `app/(protected)/users/new/actions.ts` 的 `linkExistingAccountToThisApp()`）。兩種都合法，因為都是使用者本人或管理員明確採取了一個動作才加入，跟「密碼對就自動加入」性質不同。
+> 2026-09-21 更新：這一段原本寫成「email 已存在一律走密碼重設」，與程式碼不一致；依 FE-08、FE-09 實測（見 `docs/test-report.md`）改成描述實際行為。
+
+**註冊時遇到已被別的 app 使用的 email**，本 repo（`src/routes/auth/index.tsx`、`src/routes/auth/reset.tsx`）的實際行為是：
+
+- **密碼相符**：直接以該密碼登入並補標記，導向 dashboard，**不需要驗證信箱**。
+- **密碼不符**：不登入，寄密碼重設信；使用者點連結、設定新密碼之後才補標記。
+
+密碼相符可以直接加入的理由：走到這條路徑必須已經知道該帳號的密碼，而知道密碼的人本來就能登入其他 app 再用 `updateUser` 自己加標籤（見上面運作原理第 2 點），所以沒有給出額外的存取能力。它跟「登入頁自動補標記」的差別在**意圖**（使用者在註冊頁明確要求加入 vs. 登入時的隱含副作用），不是安全強度。新 app 想更嚴格（密碼相符也一律要求先驗證信箱）也可以，但請在該 app 的文件寫清楚，並確保不在登入頁補標記。
+
+「明確採取一個動作才加入」實際上有三種合法路徑：使用者走 signup 且密碼相符、使用者走 signup 但密碼不符（改走密碼重設）、或是管理員在自己 app 後台建帳號時撞到既有 email（`auth.admin.createUser()` 對已存在的 email 一定失敗，這時改成「掛靠既有身份」：不建新帳號、不改密碼，把自己的 app 名稱**合併**進 `app_metadata.apps`，用 spread 保留其他 app 既有的標記，不要整個覆寫掉；參考實作見 `web_project_management` repo 的 `app/(protected)/users/new/actions.ts` 的 `linkExistingAccountToThisApp()`）。三種都合法，因為都是使用者本人或管理員明確採取了一個動作才加入，跟登入頁的隱含自動補標記性質不同。
 
 **不要修改別人的**：`public.handle_new_user()` / `public.profiles`（`on_auth_user_created` trigger）是另一個既有 app（`project-management`）的員工資料表，新 app 不應該去編輯它的程式碼。但它**不是**跟這個機制無關——`auth.users` 上任何一個 trigger 都會對所有共用這個 project 的 app 的 signup 觸發，不只是建立它的那個 app。這不是假設性風險：`project-management` 的 `handle_new_user()` 原本沒做 app 過濾，對每一筆從 flight 註冊的帳號都無條件建立一筆 `public.profiles`、白佔一個員編，導致 flight 帳號雖被登入頁擋下，卻污染了 project-management 的使用者清單；後來用 `supabase/migrations/20260906000001_scope_handle_new_user_to_app.sql` 修掉，經過記在 `web_project_management` repo 的 `docs/migrations_overview.md` Phase 7。**如果你自己的 app 也要在 `auth.users` 掛 provisioning trigger**，動手前一定要先判斷 `new.raw_app_meta_data -> 'apps'` 有沒有含自己的 app 名稱，沒有就直接 `return new` 跳過副作用——不要假設別的 app 建的帳號不會經過你的 trigger。
 
