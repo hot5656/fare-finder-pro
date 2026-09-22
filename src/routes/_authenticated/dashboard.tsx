@@ -69,6 +69,17 @@ function DashboardPage() {
         : false,
   });
 
+  // Cosmetic only -- shows/hides the nav link. The actual /admin route and its
+  // data queries are guarded by RLS + flight.is_admin(), not this check.
+  const isAdminQuery = useQuery({
+    queryKey: ["admin", "is-admin"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("is_admin");
+      if (error) return false;
+      return data ?? false;
+    },
+  });
+
   async function handleSignOut() {
     await supabase.auth.signOut();
     navigate({ to: "/", replace: true });
@@ -90,12 +101,22 @@ function DashboardPage() {
               Flight Price Notifier
             </span>
           </Link>
-          <button
-            onClick={handleSignOut}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            Sign out / 登出
-          </button>
+          <div className="flex items-center gap-2">
+            {isAdminQuery.data && (
+              <Link
+                to="/admin"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+              >
+                Admin
+              </Link>
+            )}
+            <button
+              onClick={handleSignOut}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              Sign out / 登出
+            </button>
+          </div>
         </div>
       </header>
 
