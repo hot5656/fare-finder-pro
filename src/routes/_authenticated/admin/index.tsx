@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { callFunction } from "@/integrations/supabase/call-function";
 import type { Tables } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
@@ -52,6 +53,11 @@ function AdminPage() {
   });
 
   const subscriptions = useMemo(() => subscriptionsQuery.data ?? [], [subscriptionsQuery.data]);
+  const routesByPlan = useMemo(() => {
+    const map = new Map<string, Route_>();
+    for (const r of routesQuery.data ?? []) map.set(r.plan_name, r);
+    return map;
+  }, [routesQuery.data]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -218,46 +224,20 @@ function AdminPage() {
                       <th className="px-4 py-2">Payment failed</th>
                       <th className="px-4 py-2">Renewals</th>
                       <th className="px-4 py-2">Created</th>
+                      <th className="px-4 py-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredSubscriptions.map((s) => (
-                      <tr key={s.id} className="border-t border-border/60">
-                        <td className="px-4 py-2">{s.email}</td>
-                        <td className="px-4 py-2">{s.route}</td>
-                        <td className="px-4 py-2">
-                          {s.currency} {Number(s.target_price).toLocaleString()}
-                        </td>
-                        <td className="px-4 py-2">
-                          <span
-                            className={
-                              s.payment_failed_at
-                                ? "rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-semibold text-destructive"
-                                : s.subscription_status === "active"
-                                  ? "rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary"
-                                  : "rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground"
-                            }
-                          >
-                            {s.subscription_status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-muted-foreground">
-                          {fmtDateTime(s.current_period_end)}
-                        </td>
-                        <td className="px-4 py-2 text-muted-foreground">
-                          {fmtDateTime(s.payment_failed_at)}
-                        </td>
-                        <td className="px-4 py-2 text-muted-foreground">
-                          {s.total_success_times ?? 0}
-                        </td>
-                        <td className="px-4 py-2 text-muted-foreground">
-                          {fmtDateTime(s.created_at)}
-                        </td>
-                      </tr>
+                      <SubscriptionRow
+                        key={s.id}
+                        subscription={s}
+                        route={routesByPlan.get(s.plan_name)}
+                      />
                     ))}
                     {filteredSubscriptions.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">
+                        <td colSpan={9} className="px-4 py-6 text-center text-muted-foreground">
                           No matching subscriptions.
                         </td>
                       </tr>
@@ -278,6 +258,7 @@ function AdminPage() {
                       <th className="px-4 py-2">Route</th>
                       <th className="px-4 py-2">Price</th>
                       <th className="px-4 py-2">Sent at</th>
+                      <th className="px-4 py-2">Triggered</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -291,11 +272,20 @@ function AdminPage() {
                         <td className="px-4 py-2 text-muted-foreground">
                           {fmtDateTime(n.sent_at)}
                         </td>
+                        <td className="px-4 py-2">
+                          {n.triggered_by ? (
+                            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
+                              手動 Manual
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">自動 Auto</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                     {(notificationsQuery.data ?? []).length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-4 py-6 text-center text-muted-foreground">
+                        <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">
                           No notifications sent yet.
                         </td>
                       </tr>
@@ -308,6 +298,113 @@ function AdminPage() {
         )}
       </main>
     </div>
+  );
+}
+
+function subscriptionIsPaying(s: Subscription): boolean {
+  return (
+    s.subscription_status === "active" ||
+    (s.subscription_status === "cancelled" &&
+      s.current_period_end != null &&
+      new Date(s.current_period_end) >= new Date())
+  );
+}
+
+function SubscriptionRow({
+  subscription: s,
+  route,
+}: {
+  subscription: Subscription;
+  route: Route_ | undefined;
+}) {
+  const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  const matchesNow =
+    subscriptionIsPaying(s) &&
+    route?.last_price != null &&
+    Number(s.target_price) >= Number(route.last_price);
+
+  const notifyMutation = useMutation({
+    mutationFn: async () => {
+      const res = await callFunction("flight-admin-notify", { subscription_id: s.id });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "send failed");
+      return data as { sent: number; skipped: number };
+    },
+    onSuccess: (data) => {
+      setConfirming(false);
+      setResult(
+        data.sent > 0
+          ? "已發送（標記為 admin 手動觸發，見下方通知紀錄）Sent — marked as admin-triggered, see notification history below"
+          : "略過（Resend 拒絕或已存在同筆紀錄）",
+      );
+      queryClient.invalidateQueries({ queryKey: ["admin", "notifications"] });
+    },
+    onError: (e) => {
+      setResult(e instanceof Error ? e.message : "發送失敗 Send failed");
+    },
+  });
+
+  return (
+    <tr className="border-t border-border/60">
+      <td className="px-4 py-2">{s.email}</td>
+      <td className="px-4 py-2">{s.route}</td>
+      <td className="px-4 py-2">
+        {s.currency} {Number(s.target_price).toLocaleString()}
+      </td>
+      <td className="px-4 py-2">
+        <span
+          className={
+            s.payment_failed_at
+              ? "rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-semibold text-destructive"
+              : s.subscription_status === "active"
+                ? "rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary"
+                : "rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground"
+          }
+        >
+          {s.subscription_status}
+        </span>
+      </td>
+      <td className="px-4 py-2 text-muted-foreground">{fmtDateTime(s.current_period_end)}</td>
+      <td className="px-4 py-2 text-muted-foreground">{fmtDateTime(s.payment_failed_at)}</td>
+      <td className="px-4 py-2 text-muted-foreground">{s.total_success_times ?? 0}</td>
+      <td className="px-4 py-2 text-muted-foreground">{fmtDateTime(s.created_at)}</td>
+      <td className="px-4 py-2">
+        {matchesNow &&
+          (confirming ? (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-muted-foreground">確定發送？</span>
+              <button
+                onClick={() => notifyMutation.mutate()}
+                disabled={notifyMutation.isPending}
+                className="rounded-md border border-primary px-2 py-1 font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-50"
+              >
+                {notifyMutation.isPending ? "發送中…" : "確定"}
+              </button>
+              <button
+                onClick={() => setConfirming(false)}
+                disabled={notifyMutation.isPending}
+                className="rounded-md border border-border px-2 py-1 text-foreground transition-colors hover:bg-accent disabled:opacity-50"
+              >
+                取消
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                setResult(null);
+                setConfirming(true);
+              }}
+              className="rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              手動發送
+            </button>
+          ))}
+        {result && <p className="mt-1 text-xs text-muted-foreground">{result}</p>}
+      </td>
+    </tr>
   );
 }
 

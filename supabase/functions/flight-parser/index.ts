@@ -113,7 +113,11 @@ Deno.serve(async (req) => {
   // so a row can only ever trigger one "expired" email.
   const nowIso = new Date().toISOString();
   const lapsedBefore = new Date(Date.now() - RENEWAL_GRACE_DAYS * 86_400_000).toISOString();
-  const expiredRows: Array<{ email: string; route: string; reason: "period_ended" | "payment_lapsed" }> = [];
+  const expiredRows: Array<{
+    email: string;
+    route: string;
+    reason: "period_ended" | "payment_lapsed";
+  }> = [];
 
   // 1) cancelled, and the period they paid for is over.
   const { data: endedCancelled, error: cancelledError } = await admin
@@ -162,6 +166,7 @@ Deno.serve(async (req) => {
     target_price: number;
     cheapest: Cheapest;
     cheapest_usd?: Cheapest | null;
+    checked_at: string;
   }> = [];
 
   for (const route of (routes ?? []) as Route[]) {
@@ -172,24 +177,31 @@ Deno.serve(async (req) => {
     }
     console.log(`${route.route} ${month} cheapest ${cheapest.price} TWD`);
 
-    const { error: lastPriceError } = await admin
-      .from("routes")
-      .update({
-        last_price: cheapest.price,
-        last_price_currency: cheapest.currency,
-        last_checked_at: new Date().toISOString(),
-      })
-      .eq("plan_name", route.plan_name);
-    if (lastPriceError) {
-      console.error(`failed to record last_price for ${route.route}`, lastPriceError);
-    }
-
     const cheapestUsd = await fetchCheapest(route.origin, route.destination, month, "USD").catch(
       (e) => {
         console.error(`USD fare fetch failed for ${route.route}`, e);
         return null;
       },
     );
+
+    // Also persisted so flight-admin-notify (a manual, non-live-refetch send) can
+    // build a real booking link and USD line from this cached row.
+    const checkedAt = new Date().toISOString();
+    const { error: lastPriceError } = await admin
+      .from("routes")
+      .update({
+        last_price: cheapest.price,
+        last_price_currency: cheapest.currency,
+        last_price_depart_date: cheapest.depart_date,
+        last_price_airline: cheapest.airline,
+        last_price_usd: cheapestUsd?.price ?? null,
+        last_price_usd_currency: cheapestUsd?.currency ?? null,
+        last_checked_at: checkedAt,
+      })
+      .eq("plan_name", route.plan_name);
+    if (lastPriceError) {
+      console.error(`failed to record last_price for ${route.route}`, lastPriceError);
+    }
 
     // ...then only serve paying users: active, or cancelled but still inside
     // the period they paid for. pending_payment / expired are never emailed.
@@ -215,6 +227,7 @@ Deno.serve(async (req) => {
           target_price: sub.target_price,
           cheapest,
           cheapest_usd: cheapestUsd,
+          checked_at: checkedAt,
         });
       }
     }

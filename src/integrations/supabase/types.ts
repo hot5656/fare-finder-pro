@@ -36,6 +36,7 @@ export type Database = {
           price: number
           route: string
           sent_at: string
+          triggered_by: string | null
           user_id: string
         }
         Insert: {
@@ -44,6 +45,7 @@ export type Database = {
           price: number
           route: string
           sent_at?: string
+          triggered_by?: string | null
           user_id: string
         }
         Update: {
@@ -52,6 +54,7 @@ export type Database = {
           price?: number
           route?: string
           sent_at?: string
+          triggered_by?: string | null
           user_id?: string
         }
         Relationships: []
@@ -62,7 +65,11 @@ export type Database = {
           display_name: string
           last_checked_at: string | null
           last_price: number | null
+          last_price_airline: string | null
           last_price_currency: string | null
+          last_price_depart_date: string | null
+          last_price_usd: number | null
+          last_price_usd_currency: string | null
           origin: string
           plan_name: string
           route: string | null
@@ -72,7 +79,11 @@ export type Database = {
           display_name: string
           last_checked_at?: string | null
           last_price?: number | null
+          last_price_airline?: string | null
           last_price_currency?: string | null
+          last_price_depart_date?: string | null
+          last_price_usd?: number | null
+          last_price_usd_currency?: string | null
           origin: string
           plan_name: string
           route?: string | null
@@ -82,7 +93,11 @@ export type Database = {
           display_name?: string
           last_checked_at?: string | null
           last_price?: number | null
+          last_price_airline?: string | null
           last_price_currency?: string | null
+          last_price_depart_date?: string | null
+          last_price_usd?: number | null
+          last_price_usd_currency?: string | null
           origin?: string
           plan_name?: string
           route?: string | null

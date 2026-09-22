@@ -46,7 +46,15 @@ type Match = {
   target_price: number;
   cheapest: Cheapest;
   cheapest_usd?: Cheapest | null;
+  // When this price was actually checked -- "just now" from flight-parser's live
+  // fetch, or flight.routes.last_checked_at (possibly stale) from a manual send.
+  // Lets the recipient tell which point-in-time price triggered this email.
+  checked_at?: string | null;
 };
+
+// force: bypass shouldSend()'s dedup floor for this call. Only flight-admin-notify
+// sets this (one match at a time); flight-parser never does, so the automatic path
+// is unaffected. triggered_by records which admin forced the send, for audit.
 
 const PLAN_LABELS: Record<string, string> = {
   tokyo: "台北 → 東京",
@@ -78,14 +86,58 @@ function bookingUrl(match: Match): string {
   return TRAVELPAYOUTS_MARKER ? `${base}?marker=${TRAVELPAYOUTS_MARKER}` : base;
 }
 
-function renderEmail(match: Match): { subject: string; html: string; text: string } {
+function fmtCheckedAt(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  try {
+    return d.toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
+  } catch {
+    return iso;
+  }
+}
+
+function fmtDepartDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  try {
+    return d.toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" });
+  } catch {
+    return iso;
+  }
+}
+
+function renderEmail(
+  match: Match,
+  manual: boolean,
+): { subject: string; html: string; text: string } {
   const label = PLAN_LABELS[match.plan_name] ?? match.route;
   const price = Math.round(match.cheapest.price).toLocaleString();
   const target = Math.round(match.target_price).toLocaleString();
   const usdLine = match.cheapest_usd
     ? `<p style="color:#666;font-size:14px;">約 US$${Math.round(match.cheapest_usd.price).toLocaleString()}</p>`
     : "";
-  const usdText = match.cheapest_usd ? ` (約 US$${Math.round(match.cheapest_usd.price).toLocaleString()})` : "";
+  const usdText = match.cheapest_usd
+    ? ` (約 US$${Math.round(match.cheapest_usd.price).toLocaleString()})`
+    : "";
+  const checkedAt = fmtCheckedAt(match.checked_at);
+  const checkedAtLine = checkedAt
+    ? `<p style="color:#999;font-size:12px;margin-top:8px;">查價時間：${checkedAt}</p>`
+    : "";
+  const checkedAtText = checkedAt ? `\n查價時間：${checkedAt}` : "";
+  const manualLine = manual
+    ? `<p style="color:#999;font-size:12px;margin-top:4px;">此通知由客服人員手動觸發。</p>`
+    : "";
+  const manualText = manual ? "\n（此通知由客服人員手動觸發）" : "";
+  const departDate = fmtDepartDate(match.cheapest.depart_date);
+  const flightRef = [match.cheapest.airline, departDate ? `出發 ${departDate}` : ""]
+    .filter(Boolean)
+    .join(" · ");
+  const flightLine = flightRef
+    ? `<p style="color:#666;font-size:13px;margin-top:4px;">航班參考：${flightRef}</p>`
+    : "";
+  const flightText = flightRef ? `\n航班參考：${flightRef}` : "";
   const url = bookingUrl(match);
 
   const subject = `✈️ ${label} 降價通知！NT$${price} 已達標`;
@@ -96,6 +148,7 @@ function renderEmail(match: Match): { subject: string; html: string; text: strin
       <p style="font-size:22px;font-weight:700;margin:12px 0 0;">NT$${price}</p>
       ${usdLine}
       <p style="color:#666;font-size:13px;margin-top:4px;">你的目標價：NT$${target}</p>
+      ${flightLine}
       <p style="margin-top:16px;">
         <a href="${url}"
            style="display:inline-block;padding:12px 20px;background:#7c3aed;color:#fff;
@@ -103,9 +156,11 @@ function renderEmail(match: Match): { subject: string; html: string; text: strin
           立即訂購
         </a>
       </p>
+      ${checkedAtLine}
+      ${manualLine}
     </div>
   `;
-  const text = `${subject}\nNT$${price}${usdText}\n你的目標價：NT$${target}\n立即訂購: ${url}`;
+  const text = `${subject}\nNT$${price}${usdText}\n你的目標價：NT$${target}${flightText}\n立即訂購: ${url}${checkedAtText}${manualText}`;
 
   return { subject, html, text };
 }
@@ -116,7 +171,11 @@ Deno.serve(async (req) => {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const { matches } = (await req.json()) as { matches: Match[] };
+  const { matches, force, triggered_by } = (await req.json()) as {
+    matches: Match[];
+    force?: boolean;
+    triggered_by?: string | null;
+  };
   if (!Array.isArray(matches) || matches.length === 0) {
     return Response.json({ sent: 0, skipped: 0 });
   }
@@ -143,13 +202,13 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    if (!shouldSend(match.cheapest.price, last)) {
+    if (!force && !shouldSend(match.cheapest.price, last)) {
       console.log(`skipped (deduped) ${match.user_id}/${match.route}`);
       skipped++;
       continue;
     }
 
-    const { subject, html, text } = renderEmail(match);
+    const { subject, html, text } = renderEmail(match, !!force);
 
     let sendError: unknown = null;
     let status = 0;
@@ -183,6 +242,7 @@ Deno.serve(async (req) => {
       route: match.route,
       price: match.cheapest.price,
       currency: match.cheapest.currency,
+      triggered_by: force ? (triggered_by ?? null) : null,
     });
     if (insertError) {
       console.error(`failed to write history for ${match.user_id}/${match.route}`, insertError);
