@@ -65,8 +65,16 @@ function shouldSend(newPrice: number, last: { price: number; sent_at: string } |
 
 function bookingUrl(match: Match): string {
   const [origin, destination] = match.route.split("-");
-  const depart = match.cheapest.depart_date?.slice(0, 10) ?? "";
-  const base = `https://www.aviasales.com/search/${origin}${depart.replace(/-/g, "")}${destination}1`;
+  // Aviasales deep-link dates are DDMM (day+month, 2 digits each), not the
+  // full YYYY-MM-DD the API gives us — an 8-digit date makes the whole path
+  // unparseable and Aviasales silently drops destination/dates ("search
+  // failed to launch"), leaving only the origin recognized.
+  const departDate = match.cheapest.depart_date ? new Date(match.cheapest.depart_date) : null;
+  const depart =
+    departDate && !isNaN(departDate.getTime())
+      ? `${String(departDate.getDate()).padStart(2, "0")}${String(departDate.getMonth() + 1).padStart(2, "0")}`
+      : "";
+  const base = `https://www.aviasales.com/search/${origin}${depart}${destination}1`;
   return TRAVELPAYOUTS_MARKER ? `${base}?marker=${TRAVELPAYOUTS_MARKER}` : base;
 }
 
