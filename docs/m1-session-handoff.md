@@ -269,6 +269,31 @@ Checked in the browser: cursor `pointer` on all buttons; hovering 確定取消 t
 outlined red button to a solid red one. (London's confirm prompt was opened for the check
 and closed with 保留 — London was not cancelled.)
 
+### M2 follow-up 4: Aviasales booking link date format (2026-09-22 — deployed and verified)
+
+**Symptom (reported by the user, screenshot):** clicking 立即訂購 in a price-drop email
+landed on Aviasales with "Oops, the search failed to launch" — only "Taipei" was
+pre-filled, destination and dates were blank.
+**Cause:** `bookingUrl()` in `flight-notification/index.ts` built the date segment by
+stripping the hyphens out of the full `YYYY-MM-DD` depart date
+(`depart.replace(/-/g, "")`), giving an 8-digit `YYYYMMDD`. Aviasales'
+`/search/{origin}{DDMM}{destination}{passengers}` deep-link format expects a 4-digit
+`DDMM` (day+month only); the unparseable path made Aviasales drop destination/dates
+entirely and fall back to just the recognized origin.
+**Fix:** parse `depart_date` into a `Date` and build `DDMM` from `getDate()` /
+`getMonth() + 1`, each zero-padded to 2 digits (commit `a8696e7`).
+**Verified 2026-09-22 06:49Z** (function v7, deployed by the user via
+`supabase functions deploy flight-notification --use-api`): manually invoked
+`flight-notification` with `net.http_post` (Vault `flight_service_role_key`), passing a
+faked NT$4,000 match for kyp001@yahoo.com.tw's real, already-active Seoul subscription
+(fake price only to clear the 24h dedup floor) — response `{"sent":1,"skipped":0}`. The
+resulting email's link was `aviasales.com/search/TPE1610SEL1`, which correctly
+pre-filled Taipei → Seoul, Fri Oct 16 (the "Prices for nearby dates" strip Aviasales
+shows underneath, e.g. Oct 13–20, is the site's own ±3-day comparison widget — it isn't
+driven by anything in our URL). The test row (`notification_history` price 4000,
+`id ed0900b6…`) was deleted afterward so it doesn't skew future dedup comparisons for
+that route.
+
 ## Project / environment facts (don't re-derive these)
 
 - **Shared multi-app Supabase project.** Other apps' migrations live in the
