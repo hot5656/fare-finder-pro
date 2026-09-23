@@ -1,0 +1,2249 @@
+ ▐▛███▛█   Claude Code v2.1.280
+▝▜██████▀  Opus 5.5 · Claude Pro
+  ▝▝ ▝▝    ~/work/claude/fare-finder-pro
+
+  Opus 5.5 is now your default model and it draws down usage faster than Sonnet 5. Switch anytime with /model.
+
+❯ 我剛剛由 https://fare-finder-pro.vercel.app/admin 手動發送 kyp741@gmail.com   
+  TPE-TYO 為何 kyp741@gmail.com email 看不到？                                  
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Now check the DB and logs.
+
+  Called Supabase 6 times, ran 1 shell command (ctrl+o to expand)
+
+⏺ 發送本身成功了，Resend 也接受了這封信。問題出在收件端（Gmail
+  的顯示或分類），不在程式。
+
+  查到的紀錄（台北時間 2026-09-23 21:02:17）
+  - flight-admin-notify 回 200，它呼叫的 flight-notification 也回 200。
+  - flight.notification_history 有新增一筆：kyp741@gmail.com / TPE-TYO /
+    NT$6,557，triggered_by 有值，確認是手動觸發。
+  - 這筆紀錄只會在 Resend 沒回傳錯誤時才寫入（supabase/functions/flight-notifica
+    tion/index.ts:231-237，失敗會 continue，不寫入）。所以 Resend
+    已經接受寄送。log 裡也沒有 send failure。
+
+  最可能的原因：Gmail 把它併進了舊的對話串
+  今天 16:16（台北時間）排程已經自動寄過一封給 kyp741，內容是 TPE-TYO
+  NT$6,557。這次手動寄的價格一樣，所以主旨完全相同：✈️ 台北 → 東京 
+  降價通知！NT$6,557 已達標。Gmail 會把主旨相同的信歸成同一個對話，新信藏在舊對
+  話裡面，看起來就像沒收到。昨天也對同一個地址手動寄了 4
+  次，這個對話串裡應該已經有好幾封。
+
+  請依序確認
+  1. 在 Gmail 搜尋 from:noreply@roberthut.com 
+     newer_than:1d，打開那個對話，展開最後一封。手動寄出的信底部會多一行「此通知
+     由客服人員手動觸發」，還有「查價時間」。
+  2. 如果找不到，再看「垃圾郵件」和「促銷內容」分頁。短時間內重複寄內容相同的信
+     ，比較容易被分到那裡。
+  3. 還是沒有的話，到 Resend dashboard → Emails 查 21:02 那封的狀態（delivered /
+     bounced / complained）。我手上沒有 RESEND_API_KEY，沒辦法替你查。
+
+  如果想讓每封手動通知在 Gmail
+  裡獨立顯示，可以在手動發送時的主旨加上時間或「（手動）」字樣。要改的話跟我說。
+
+✻ Cooked for 1m 7s · done 9:07 PM
+
+❯ 現在收到了 是不是要一點時間 例如 40s                                          
+
+⏺ 對，這種延遲很正常，而且不是我們這邊造成的。
+
+  - 我們這邊沒有延遲：你按下按鈕是 21:02:10，Resend 接受寄送、寫入紀錄是
+    21:02:17，只用了 7 秒。flight-notification 是同步等 Resend
+    回覆的，沒有排隊。
+  - 延遲發生在寄送途中：Resend 接受信件後，還要經過它的佇列、和 Gmail 的 SMTP
+    連線，再加上 Gmail 的垃圾信掃描，才會出現在收件匣。一般要幾秒到一兩分鐘，40
+    秒很常見。短時間內一直對同一個地址寄內容相同的信（這個地址昨天到今天手動寄了
+    5 次），Gmail 有時會多檢查一下，就會再慢一點。
+  - 對話串的影響：新信進的是舊的對話串，所以不容易一眼看出它剛到。
+
+  之後測試時，按下按鈕後等 1 到 2 分鐘再看收件匣就可以。如果超過 5
+  分鐘還沒收到，再去 Resend dashboard 查那封信的狀態。
+
+✻ Baked for 6s · done 9:09 PM
+
+❯ ask only: 有沒有辦法標示更詳細內容 如含 出發時間 到達時間 航空公司 ...        
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ 可以加，但有上限。資料來源 Travelpayouts
+  提供的是快取的價格資料，不是即時訂位系統，所以只拿得到一部分欄位。
+
+  現在用的 API（flight-parser 呼叫的 v1/prices/cheap）有這些欄位
+  - airline：航空公司代碼，例如 CI、BR。信裡已經有顯示，但只是代碼。
+  - flight_number：航班號碼。目前有回傳，但我們沒有用到。
+  - departure_at / return_at：出發和回程的日期時間。信裡現在只顯示日期。
+  - 它沒有抵達時間、飛行時間、轉機次數。
+
+  如果改用 v3/prices_for_dates，可以多拿到
+  - duration_to / duration_back（飛行時間），配合出發時間就能算出抵達時間
+  - transfers / return_transfers：去程和回程的轉機次數
+  - origin_airport / destination_airport：實際的機場，例如 TPE→NRT 或 TSA→HND
+  - link：直接連到那一班航班的訂購連結，會比現在的搜尋頁準確
+
+  做得到的內容：航空公司名稱（用代碼對照表轉成「中華航空」這類名稱）、航班號碼、
+  去回程的出發和抵達時間、飛行時間、直飛或轉幾次、機場。
+
+  限制
+  1. 這些資料是其他使用者先前搜尋留下的快取，可能是幾小時到幾天前的。實際訂位時
+     時間或班次可能已經變了，信裡要註明「僅供參考」。
+  2. 抵達時間是用出發時間加飛行時間算出來的，時區要自己處理，可能跟航空公司公告
+     的時間有幾分鐘誤差。
+  3. 艙等、行李額度、剩餘座位都拿不到，這些要接航空公司或 GDS 的即時 API
+     才有，那是另一個等級的串接。
+
+  要做的話，要改 flight-parser（換成 v3 API、把更多欄位存進
+  flight.routes）、flight-admin-notify 和 flight-notification
+  的信件內容，而且需要一次資料表 migration。你決定要做再跟我說。
+
+✻ Cogitated for 16s · done 9:14 PM
+
+❯ ask only: v3 API 表示之前用的是較舊 api 資訊較少？                            
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ 對。v1/prices/cheap 是 Travelpayouts 比較舊的 endpoint，這個專案會用它，是因為
+  M1 課程 skill 的範本就是這樣寫的（.claude/skills/m1-code-flight-price-checker
+  /SKILL.md:199）。
+
+  兩者比較：
+
+  ┌──────┬───────────────────────────┬─────────────────────────────────────┐
+  │      │      v1/prices/cheap      │    aviasales/v3/prices_for_dates    │
+  ├──────┼───────────────────────────┼─────────────────────────────────────┤
+  │ 回傳 │ 價格、航空公司代碼、航班  │ 上面全部，再加上飛行時間、轉機次數  │
+  │ 欄位 │ 號碼、出發和回程時間      │ 、實際機場、該航班的訂購連結        │
+  ├──────┼───────────────────────────┼─────────────────────────────────────┤
+  │ 回傳 │ 以目的地為 key 的巢狀物件 │ 一般的陣列，比較好處理              │
+  │ 格式 │ （data[DEST][idx]）       │                                     │
+  ├──────┼───────────────────────────┼─────────────────────────────────────┤
+  │ 查詢 │ 較少                      │ 可以指定直飛、排序、筆數上限等      │
+  │ 參數 │                           │                                     │
+  ├──────┼───────────────────────────┼─────────────────────────────────────┤
+  │ 資料 │ 快取的搜尋結果            │ 一樣是快取，新鮮度沒有比較好        │
+  │ 來源 │                           │                                     │
+  └──────┴───────────────────────────┴─────────────────────────────────────┘
+
+  幾個要注意的地方：
+  - v1 目前還能正常使用，沒有壞，只是資訊比較少。換成 v3
+    是為了拿到更多欄位，不是因為 v1 不能用了。
+  - v3 的資料一樣是快取，不會因為換 API 就變成即時價格。
+  - 換成 v3 後，同一條航線查到的最低價可能會和現在不太一樣，因為兩個 endpoint
+    的篩選邏輯不同。所以切換時要先跑幾次比較一下，免得剛好在切換那次誤觸發或漏掉
+    降價通知。
+
+  以上是依我對 Travelpayouts 文件的了解。v1 在官方文件中目前是不是被標為
+  deprecated，我沒有即時查證。要做的話，我可以先查最新文件再確認。
+
+✻ Baked for 13s · done 9:16 PM
+
+❯ ask only:改用 v3 API 並在通知信加上航班詳細資訊(有沒有辦法同時取 v1           
+  資料列出作為比較)                                                             
+
+⏺ 可以同時拿 v1 和 v3 的資料。技術上不難，要先決定的是「用哪一個價格觸發通知」，
+  還有「比較結果要給誰看」。
+
+  做法
+  - flight-parser 每次執行時，對每條航線同時呼叫 v1 和 v3（Promise.all）。現在是
+    3 條航線 × TWD/USD，總共 6 個請求，加上 v3 後變 12 個，每 30
+    分鐘跑一次。這個量應該在 Travelpayouts
+    的限制內，但實際額度我沒有查證，實作前會先確認。
+  - 其中一方失敗時，另一方照常運作，不會讓整次查價失敗。
+
+  需要決定的事
+  1. 用哪一方的價格觸發通知？
+     - 建議先過渡：先繼續用 v1 觸發，v3 只記錄和顯示。累積幾天資料、確認 v3
+       價格合理後，再切成用 v3 觸發。
+     - 直接改用 v3
+       觸發也可以，但價格邏輯一變，已訂閱的使用者可能突然收到或突然收不到通知。
+  2. 比較結果給誰看？
+     - 建議只給管理者看：在 /admin 顯示 v1 和 v3 的價格並列、差額、查價時間。一
+       般用戶的信裡如果同時出現兩個價格，容易看不懂該信哪一個。
+     - 通知信只放 v3 的航班詳細資料（航空公司名稱、航班號碼、出發和抵達時間、飛
+       行時間、直飛或轉機、機場、直接訂購連結）。
+     - 如果你希望信裡也列出比較，可以在信尾加一行小字，例如「參考價（v1）NT$6,55
+       7」。
+  3. 比較資料存在哪裡？
+     - 只保留最新值：在 flight.routes 多加幾個 v3_*
+       欄位。最簡單，但看不到歷史變化。
+     - 建議另開一張表，例如
+       flight.price_checks，每次查價寫一筆（航線、來源、價格、航班資訊、時間），
+       就能看兩者長期的差異，再決定什麼時候切換。資料量不大，每天 3 條航線 × 2
+       個來源 × 48 次 ≈ 288 筆。
+
+  會改到的地方
+  - migration：新增 price_checks 資料表，或在 routes 加欄位
+  - flight-parser：呼叫 v3、寫入比較資料
+  - flight-notification / flight-admin-notify：信件加上航班詳細資料
+  - /admin 頁面：顯示 v1 和 v3 的比較
+  - migration 和 Edge Function 的部署需要你用 ! 自己執行（production DDL 在 auto
+    mode 下會被擋）
+
+  你決定好上面 3 點（或直接採用我的建議）之後跟我說，我再開始做。
+
+✻ Brewed for 14s · done 9:20 PM
+
+❯ 1. 直接改用 v3 觸發                                                           
+  2. 一般使用者同時列兩個內容(資訊儘量詳細)                                     
+  3. 我不太理解, 請澄清後再執行                                                 
+
+⏺ 第 3 點問的是：每次查到的 v1 和 v3 價格要存在哪裡、要存多久。
+
+  flight-parser 每 30 分鐘查一次價格，每次會得到兩組資料（v1 和
+  v3）。通知信是從資料庫讀這些資料組出來的；管理者手動發送時用的也是資料庫裡的價
+  格。所以資料一定要存，差別只在要不要留下過去的紀錄。
+
+  A. 只存最新的一筆（在 flight.routes 加欄位）
+
+  每次查價都直接覆蓋上一次的結果，資料庫裡永遠只有「最近一次」的資料：
+
+  ┌─────────┬─────────┬─────────┬──────────┬──────────┐
+  │  航線   │ v1 價格 │ v3 價格 │ v3 航班  │ 查價時間 │
+  ├─────────┼─────────┼─────────┼──────────┼──────────┤
+  │ TPE-TYO │ 6,557   │ 6,420   │ CI 100 … │ 21:00    │
+  └─────────┴─────────┴─────────┴──────────┴──────────┘
+
+  - 優點：改動最少，通知信和手動發送都夠用。
+  - 缺點：看不到過去的價格。例如想知道「上週 v3 是不是常常比 v1
+    便宜」，就查不到。
+
+  B. 每次查價都新增一筆紀錄（新開一張 flight.price_checks 表）
+
+  過去的資料全部保留：
+
+  ┌───────┬─────────┬──────┬───────┬──────────┐
+  │ 時間  │  航線   │ 來源 │ 價格  │   航班   │
+  ├───────┼─────────┼──────┼───────┼──────────┤
+  │ 21:00 │ TPE-TYO │ v1   │ 6,557 │ CI       │
+  ├───────┼─────────┼──────┼───────┼──────────┤
+  │ 21:00 │ TPE-TYO │ v3   │ 6,420 │ CI 100 … │
+  ├───────┼─────────┼──────┼───────┼──────────┤
+  │ 20:30 │ TPE-TYO │ v1   │ 6,557 │ CI       │
+  ├───────┼─────────┼──────┼───────┼──────────┤
+  │ 20:30 │ TPE-TYO │ v3   │ 6,480 │ BR 198 … │
+  └───────┴─────────┴──────┴───────┴──────────┘
+
+  - 優點：可以回頭分析兩個 API 的差異，也能畫價格走勢。
+  - 缺點：多一張表，每天大約 288 筆，需要定期清掉舊資料。
+
+  你決定直接用 v3 觸發通知，所以比較 v1 和 v3 主要是為了在信裡列出兩個價格，A
+  就夠用了。只有在你想長期觀察兩個 API 的差異時，才需要 B。
+
+⏺ User answered Claude's questions:
+  ⎿  · 查到的 v1 / v3 價格要怎麼存？ → A. 只存最新一筆 (Recommended)
+
+  Read 2 files (ctrl+o to expand)
+
+⏺ Before writing code, I'll confirm the v3 response format from the real API.
+
+  Searched for 1 pattern, listed 1 directory, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Found a real v1 response in a transcript that already returns flight_number,
+  duration, duration_to, and duration_back — contradicting what I said earlier,
+  which I'll flag at the end. Now checking the v3 docs.
+
+⏺ Fetch(https://travelpayouts.github.io/slate/)
+  ⎿  Received 273.7KB (200 OK)
+
+⏺ Still checking the v3 API docs so the code matches the real response format.
+  Nothing has been changed yet.
+
+⏺ Fetch(https://support.travelpayouts.com/hc/en-us/articles/203956163-Aviasales-
+       Data-API)
+  ⎿  Received 0 bytes (403 Forbidden)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Since the docs site blocks automated fetches, I'll write the v3 code against
+  the documented format and verify with a manual parser run after deploying.
+  First, checking how flight.routes is currently used.
+
+  Searched for 2 patterns (ctrl+o to expand)
+
+⏺ I'll add two new jsonb columns, last_offer_v3 and last_offer_v1, to
+  flight.routes to store full offers from each API, while keeping last_price*
+  pointed at v3 pricing so the dashboard stays unchanged. Starting with the
+  migration now.
+⏺ Write(supabase/migrations/20260923100000_flight_routes_offer_details.sql)
+  ⎿  Wrote 10 lines to
+     supabase/migrations/20260923100000_flight_routes_offer_details.sql
+       1 -- flight-parser now triggers alerts on Travelpayouts' v3 prices
+       2 -- also fetches v1 prices/cheap for comparison; both are listed 
+       3 -- Only the latest check is kept (overwritten every run). last_p
+         rice* keep
+          are unchanged;
+         imes, durations,
+         the same email
+       7 -- from cache. Shape: { "twd": Offer | null, "usd": Offer | null
+       8 alter table flight.routes
+      10   add column last_offer_v1 jsonb;
+     … +6 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Now flight-parser: fetch v3 and v1 in parallel, and trigger on v3.
+
+⏺ Update(supabase/functions/flight-parser/index.ts)
+  ⎿  Added 18 lines, removed 2 lines
+      26  // renewal is treated as lapsed (ECPay retries failed charges o
+          ver several days).
+      27  const RENEWAL_GRACE_DAYS = 7;
+      28  
+      29 +// One offer from either Travelpayouts endpoint, normalized. v3
+         + fills every                                                   
+      30 +// field; v1 has no airports, transfers or link (those stay und
+         +efined).                                                       
+      31  type Cheapest = {
+      32 +  source: "v3" | "v1";                                         
+      33    price: number;
+      34    currency: string;
+      35    airline: string;
+      33 -  depart_date: string;                                         
+      34 -  return_date: string;                                         
+      36 +  flight_number?: string;                                      
+      37 +  depart_date: string; // departure_at, with the origin's UTC o
+         +ffset                                                          
+      38 +  return_date: string; // return_at, with the destination's UTC
+         + offset                                                        
+      39 +  origin_airport?: string;                                     
+      40 +  destination_airport?: string;                                
+      41 +  transfers?: number | null;                                   
+      42 +  return_transfers?: number | null;                            
+      43 +  duration?: number | null; // minutes, both legs              
+      44 +  duration_to?: number | null; // minutes, outbound incl. layov
+         +ers                                                            
+      45 +  duration_back?: number | null;                               
+      46 +  link?: string; // Aviasales path, e.g. "/search/TPE2910TYO021
+         +11?t=..."                                                      
+      47  };
+      48  
+      49 +type OfferPair = { twd: Cheapest | null; usd: Cheapest | null }
+         +;                                                              
+      50 +                                                               
+      51 +const num = (v: unknown): number | null => (typeof v === "numbe
+         +r" ? v : null);                                                
+      52 +                                                               
+      53  type Route = {
+      54    plan_name: string;
+      55    display_name: string;
+
+⏺ Update(supabase/functions/flight-parser/index.ts)
+  ⎿  Added 66 lines, removed 5 lines
+      66    target_price: number;
+      67  };
+      68  
+      69 -async function fetchCheapest(                                  
+      69 +// v3 prices_for_dates: the alert trigger. one_way=false so it 
+         +prices a round                                                 
+      70 +// trip like v1 does (v3 defaults to one-way).                 
+      71 +async function fetchCheapestV3(                                
+      72    origin: string,
+      73    destination: string,
+      74    month: string,
+     ...
+       77    const q = new URLSearchParams({
+       78      origin,
+       79      destination,
+       80 +    departure_at: month,                                      
+       81 +    one_way: "false",                                         
+       82 +    sorting: "price",                                         
+       83 +    limit: "5",                                               
+       84 +    currency,                                                 
+       85 +    token: TRAVELPAYOUTS_TOKEN,                               
+       86 +  });                                                         
+       87 +  const res = await fetch(`https://api.travelpayouts.com/avias
+          +ales/v3/prices_for_dates?${q}`, {                             
+       88 +    headers: { "User-Agent": UA, Accept: "application/json" },
+       89 +  });                                                         
+       90 +  if (!res.ok) {                                              
+       91 +    console.error(`travelpayouts v3 ${currency} ${origin}-${de
+          +stination}: HTTP ${res.status}`);                             
+       92 +    return null;                                              
+       93 +  }                                                           
+       94 +  const body = await res.json();                              
+       95 +  if (!body.success || !Array.isArray(body.data) || !body.data
+          +.length) return null;                                         
+       96 +  const best = (body.data as any[]).reduce((a, b) => (a.price 
+          +< b.price ? a : b));                                          
+       97 +  return {                                                    
+       98 +    source: "v3",                                             
+       99 +    price: best.price,                                        
+      100 +    currency: currency.toUpperCase(),                         
+      101 +    airline: best.airline ?? "",                              
+      102 +    flight_number: best.flight_number != null ? String(best.fl
+          +ight_number) : undefined,                                     
+      103 +    depart_date: best.departure_at ?? "",                     
+      104 +    return_date: best.return_at ?? "",                        
+      105 +    origin_airport: best.origin_airport,                      
+      106 +    destination_airport: best.destination_airport,            
+      107 +    transfers: num(best.transfers),                           
+      108 +    return_transfers: num(best.return_transfers),             
+      109 +    duration: num(best.duration),                             
+      110 +    duration_to: num(best.duration_to),                       
+      111 +    duration_back: num(best.duration_back),                   
+      112 +    link: typeof best.link === "string" ? best.link : undefine
+          +d,                                                            
+      113 +  };                                                          
+      114 +}                                                             
+      115 +                                                              
+      116 +// v1 prices/cheap: the previous trigger, now fetched only to 
+          +show alongside v3.                                            
+      117 +async function fetchCheapestV1(                               
+      118 +  origin: string,                                             
+      119 +  destination: string,                                        
+      120 +  month: string,                                              
+      121 +  currency: string,                                           
+      122 +): Promise<Cheapest | null> {                                 
+      123 +  const q = new URLSearchParams({                             
+      124 +    origin,                                                   
+      125 +    destination,                                              
+      126      depart_date: month,
+      127      currency,
+      128      token: TRAVELPAYOUTS_TOKEN,
+     ...
+      131      headers: { "User-Agent": UA, Accept: "application/json" },
+      132    });
+      133    if (!res.ok) {
+       86 -    console.error(`travelpayouts ${currency} ${origin}-${desti
+          -nation}: HTTP ${res.status}`);                                
+      134 +    console.error(`travelpayouts v1 ${currency} ${origin}-${de
+          +stination}: HTTP ${res.status}`);                             
+      135      return null;
+      136    }
+      137    const body = await res.json();
+     ...
+      141    const best = offers.reduce((a, b) => (a.price < b.price ? a 
+           : b));
+      142    // NOTE: the real keys are departure_at / return_at, not dep
+           art_date / return_date.
+      143    return {
+      144 +    source: "v1",                                             
+      145      price: best.price,
+      146      currency: currency.toUpperCase(),
+       98 -    airline: best.airline,                                    
+       99 -    depart_date: best.departure_at,                           
+      100 -    return_date: best.return_at,                              
+      147 +    airline: best.airline ?? "",                              
+      148 +    flight_number: best.flight_number != null ? String(best.fl
+          +ight_number) : undefined,                                     
+      149 +    depart_date: best.departure_at ?? "",                     
+      150 +    return_date: best.return_at ?? "",                        
+      151 +    duration: num(best.duration),                             
+      152 +    duration_to: num(best.duration_to),                       
+      153 +    duration_back: num(best.duration_back),                   
+      154    };
+      155  }
+      156  
+      157 +// A failed or thrown fetch is logged and treated as "no offer
+          +".                                                            
+      158 +function safe(label: string, p: Promise<Cheapest | null>): Pro
+          +mise<Cheapest | null> {                                       
+      159 +  return p.catch((e) => {                                     
+      160 +    console.error(`${label} fare fetch failed`, e);           
+      161 +    return null;                                              
+      162 +  });                                                         
+      163 +}                                                             
+      164 +                                                              
+      165  function nextMonth(): string {
+      166    const now = new Date();
+      167    // Date.UTC rolls month 12 over into January of the next yea
+           r for us.
+
+⏺ Now the route loop in flight-parser:
+
+⏺ Update(supabase/functions/flight-parser/index.ts)
+  ⎿  Added 18 lines, removed 11 lines
+      243      target_price: number;
+      244      cheapest: Cheapest;
+      245      cheapest_usd?: Cheapest | null;
+      246 +    compare_v1?: OfferPair | null;                            
+      247      checked_at: string;
+      248    }> = [];
+      249  
+      250    for (const route of (routes ?? []) as Route[]) {
+      250 -    const cheapest = await fetchCheapest(route.origin, route.d
+          -estination, month, "TWD");                                    
+      251 +    const { origin, destination } = route;                    
+      252 +    const [cheapest, cheapestUsd, v1Twd, v1Usd] = await Promis
+          +e.all([                                                       
+      253 +      safe(`v3 TWD ${route.route}`, fetchCheapestV3(origin, de
+          +stination, month, "TWD")),                                    
+      254 +      safe(`v3 USD ${route.route}`, fetchCheapestV3(origin, de
+          +stination, month, "USD")),                                    
+      255 +      safe(`v1 TWD ${route.route}`, fetchCheapestV1(origin, de
+          +stination, month, "TWD")),                                    
+      256 +      safe(`v1 USD ${route.route}`, fetchCheapestV1(origin, de
+          +stination, month, "USD")),                                    
+      257 +    ]);                                                       
+      258 +    const compareV1: OfferPair = { twd: v1Twd, usd: v1Usd };  
+      259 +    console.log(                                              
+      260 +      `${route.route} ${month} v3 ${cheapest ? `${cheapest.pri
+          +ce} TWD ${cheapest.airline}${cheapest.flight_number ?? ""} tra
+          +nsfers=${cheapest.transfers ?? "?"}` : "none"}` +             
+      261 +        ` | v1 ${v1Twd ? `${v1Twd.price} TWD ${v1Twd.airline}$
+          +{v1Twd.flight_number ?? ""}` : "none"}`,                      
+      262 +    );                                                        
+      263 +    // v3 is the trigger; without a v3 TWD fare there is nothi
+          +ng to alert on.                                               
+      264      if (!cheapest) {
+      252 -      console.error(`skip ${route.route}: no TWD fare availabl
+          -e`);                                                          
+      265 +      console.error(`skip ${route.route}: no v3 TWD fare avail
+          +able`);                                                       
+      266        continue;
+      267      }
+      255 -    console.log(`${route.route} ${month} cheapest ${cheapest.p
+          -rice} TWD`);                                                  
+      268  
+      257 -    const cheapestUsd = await fetchCheapest(route.origin, rout
+          -e.destination, month, "USD").catch(                           
+      258 -      (e) => {                                                
+      259 -        console.error(`USD fare fetch failed for ${route.route
+          -}`, e);                                                       
+      260 -        return null;                                          
+      261 -      },                                                      
+      262 -    );                                                        
+      263 -                                                              
+      269      // Also persisted so flight-admin-notify (a manual, non-li
+           ve-refetch send) can
+      265 -    // build a real booking link and USD line from this cached
+          - row.                                                         
+      270 +    // render the same detailed email from this cached row.   
+      271      const checkedAt = new Date().toISOString();
+      272      const { error: lastPriceError } = await admin
+      273        .from("routes")
+     ...
+      278          last_price_airline: cheapest.airline,
+      279          last_price_usd: cheapestUsd?.price ?? null,
+      280          last_price_usd_currency: cheapestUsd?.currency ?? null
+           ,
+      281 +        last_offer_v3: { twd: cheapest, usd: cheapestUsd },   
+      282 +        last_offer_v1: compareV1,                             
+      283          last_checked_at: checkedAt,
+      284        })
+      285        .eq("plan_name", route.plan_name);
+
+⏺ Update(supabase/functions/flight-parser/index.ts)
+  ⎿  Added 1 line
+      311            target_price: sub.target_price,
+      312            cheapest,
+      313            cheapest_usd: cheapestUsd,
+      314 +          compare_v1: compareV1,                              
+      315            checked_at: checkedAt,
+      316          });
+      317        }
+
+⏺ Next, the email rendering in flight-notification:
+
+  Made 1 scratchpad edit +353, ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      p='supabase/functions/flight-notification/index.ts'…)
+  ⎿  174:function bookingUrl(route: string, offer: Cheapest): string {
+     304:function renderEmail(
+     322:  const url = bookingUrl(match.route, match.cheapest);
+     … +2 lines (ctrl+o to expand)
+  ⎿  Updated supabase/functions/flight-notification/index.ts (+251 -34)
+      30  
+      31  const resend = new Resend(RESEND_API_KEY);
+      32  
+      33 +// One offer from either Travelpayouts endpoint (see flight-par
+         +ser). v3 fills                                                 
+      34 +// every field; v1 has no airports, transfers or link.         
+      35  type Cheapest = {
+      36 +  source?: "v3" | "v1";                                        
+      37    price: number;
+      38    currency: string;
+      39    airline: string;
+      40 +  flight_number?: string;                                      
+      41    depart_date: string;
+      42    return_date: string;
+      43 +  origin_airport?: string;                                     
+      44 +  destination_airport?: string;                                
+      45 +  transfers?: number | null;                                   
+      46 +  return_transfers?: number | null;                            
+      47 +  duration?: number | null;                                    
+      48 +  duration_to?: number | null;                                 
+      49 +  duration_back?: number | null;                               
+      50 +  link?: string;                                               
+      51  };
+      52  
+      53 +type OfferPair = { twd: Cheapest | null; usd: Cheapest | null }
+         +;                                                              
+      54 +                                                               
+      55  type Match = {
+      56    user_id: string;
+      57    email: string;
+      58    route: string; // e.g. "TPE-TYO"
+      59    plan_name: string;
+      60    target_price: number;
+      47 -  cheapest: Cheapest;                                          
+      61 +  cheapest: Cheapest; // v3, the price that triggered this aler
+         +t                                                              
+      62    cheapest_usd?: Cheapest | null;
+      63 +  // v1's cheapest offer at the same check, listed in the email
+         + for comparison.                                               
+      64 +  compare_v1?: OfferPair | null;                               
+      65    // When this price was actually checked -- "just now" from fl
+          ight-parser's live
+      66    // fetch, or flight.routes.last_checked_at (possibly stale) f
+          rom a manual send.
+      67    // Lets the recipient tell which point-in-time price triggere
+          d this email.
+     ...
+       78    london: "台北 → 倫敦",
+     … 326 more lines (ctrl+o to expand)
+
+⏺ Now flight-admin-notify, so it builds the email from the cached jsonb:
+
+⏺ Update(supabase/functions/flight-admin-notify/index.ts)
+  ⎿  Added 7 lines, removed 1 line
+       84      return json({ error: "subscription does not currently matc
+           h", reason: "not_matching" }, 409);
+       85    }
+       86  
+       87 +  // Full offers cached by flight-parser ({ twd, usd } per sou
+          +rce). Rows last                                               
+       88 +  // written before those columns existed fall back to the fla
+          +t last_price_* fields.                                        
+       89 +  const v3 = route.last_offer_v3 as { twd: unknown; usd: unkno
+          +wn } | null;                                                  
+       90 +  const v1 = route.last_offer_v1 as { twd: unknown; usd: unkno
+          +wn } | null;                                                  
+       91 +                                                              
+       92    const match = {
+       93      user_id: sub.user_id,
+       94      email: sub.email,
+       95      route: sub.route,
+       96      plan_name: sub.plan_name,
+       97      target_price: sub.target_price,
+       93 -    cheapest: {                                               
+       98 +    compare_v1: v1 ?? null,                                   
+       99 +    cheapest: v3?.twd ?? {                                    
+      100        price: route.last_price,
+      101        currency: route.last_price_currency ?? "TWD",
+      102        airline: route.last_price_airline ?? "",
+
+⏺ Update(supabase/functions/flight-admin-notify/index.ts)
+  ⎿  Added 3 lines, removed 2 lines
+      103        depart_date: route.last_price_depart_date ?? "",
+      104        return_date: "",
+      105      },
+      106 -    cheapest_usd:                                             
+      107 -      route.last_price_usd != null                            
+      106 +    cheapest_usd: v3                                          
+      107 +      ? (v3.usd ?? null)                                      
+      108 +      : route.last_price_usd != null                          
+      109          ? {
+      110              price: route.last_price_usd,
+      111              currency: route.last_price_usd_currency ?? "USD",
+
+⏺ Next, the generated types (so the front-end stays in sync with the new
+  columns) and the flight-parser header comment:
+
+⏺ Bash(python3 - <<'EOF'
+      p='src/integrations/supabase/types.ts'…)
+  ⎿  1:export type Json =
+     TSC_OK
+  ⎿  Updated src/integrations/supabase/types.ts (+6 -0)
+      64            destination: string
+      65            display_name: string
+      66            last_checked_at: string | null
+      67 +          last_offer_v1: Json | null                           
+      68 +          last_offer_v3: Json | null                           
+      69            last_price: number | null
+      70            last_price_airline: string | null
+      71            last_price_currency: string | null
+     ...
+      80            destination: string
+      81            display_name: string
+      82            last_checked_at?: string | null
+      83 +          last_offer_v1?: Json | null                          
+      84 +          last_offer_v3?: Json | null                          
+      85            last_price?: number | null
+      86            last_price_airline?: string | null
+      87            last_price_currency?: string | null
+     ...
+       96            destination?: string
+       97            display_name?: string
+       98            last_checked_at?: string | null
+       99 +          last_offer_v1?: Json | null                         
+      100 +          last_offer_v3?: Json | null                         
+      101            last_price?: number | null
+      102            last_price_airline?: string | null
+      103            last_price_currency?: string | null
+  ⎿  Updated supabase/functions/flight-parser/index.ts (+3 -2)
+      1 -// flight-parser: scrapes each route's cheapest fare and hands m
+        -atches off to                                                   
+      2 -// flight-notification. Triggered every 30 min by pg_cron (see t
+        -he M1 skill                                                     
+      1 +// flight-parser: fetches each route's cheapest fare and hands m
+        +atches off to                                                   
+      2 +// flight-notification. Alerts trigger on Travelpayouts v3 price
+        +s_for_dates;                                                    
+      3 +// v1 prices/cheap is fetched alongside and only listed in the e
+        +mail. Triggered every 30 min by pg_cron (see the M1 skill       
+      4  // docs), or manually for testing.
+      5  //
+      6  // Env vars required (set via `supabase secrets set`):
+
+⏺ My header replacement left a long line; fixing the wrap:
+
+⏺ Update(supabase/functions/flight-parser/index.ts)
+  ⎿  Added 3 lines, removed 2 lines
+      1  // flight-parser: fetches each route's cheapest fare and hands m
+         atches off to
+      2  // flight-notification. Alerts trigger on Travelpayouts v3 price
+         s_for_dates;
+      3 -// v1 prices/cheap is fetched alongside and only listed in the e
+        -mail. Triggered every 30 min by pg_cron (see the M1 skill       
+      4 -// docs), or manually for testing.                              
+      3 +// v1 prices/cheap is fetched alongside and only listed in the e
+        +mail.                                                           
+      4 +// Triggered every 30 min by pg_cron (see the M1 skill docs), or
+        + manually for                                                   
+      5 +// testing.                                                     
+      6  //
+      7  // Env vars required (set via `supabase secrets set`):
+      8  //   TRAVELPAYOUTS_TOKEN   - Travelpayouts API token
+
+⏺ Deno can't typecheck locally, so I'll render a sample email with Node, using
+  the real v1 response from the transcript plus a v3 sample shaped like the
+  docs.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The rendering works, including rows cached in the old format. Running lint:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(npx prettier --write supabase/functions/flight-notification/index.ts
+      >/dev/null && for f in supabase/functions/flight-parser/index.ts
+      src/integrations/supabase/…)
+  ⎿  supabase/functions/flight-parser/index.ts HEAD: 3  now: 4
+     src/integrations/supabase/types.ts HEAD: 176  now: 182
+     NOTIF_ADMIN_CLEAN
+  ⎿  Updated supabase/functions/flight-notification/index.ts (+3 -1)
+      258    ) => {
+      259      const dep = iso ? new Date(iso) : null;
+      260      if (!dep || isNaN(dep.getTime())) return;
+      261 -    const arrive = dur ? ` → ${fmtLocal(new Date(dep.getTime()
+          - + dur * 60_000), b)} ${b}` : ` → ${b}`;                      
+      261 +    const arrive = dur                                        
+      262 +      ? ` → ${fmtLocal(new Date(dep.getTime() + dur * 60_000),
+          + b)} ${b}`                                                    
+      263 +      : ` → ${b}`;                                            
+      264      const parts = [`${fmtLocal(dep, a)} ${a}${arrive}`, fmtDur
+           ation(dur), fmtStops(stops)];
+      265      out.push({ title, line: parts.filter(Boolean).join(" · ") 
+           });
+      266    };
+
+⏺ Lint checks out—remaining warnings match pre-existing patterns already in
+  HEAD. Now I'll update the handoff doc to note this change.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ Update(docs/m1-session-handoff.md)
+  ⎿  Added 18 lines
+      294  `id ed0900b6…`) was deleted afterward so it doesn't skew futur
+           e dedup comparisons for
+      295  that route.
+      296  
+      297 +### M2 follow-up 5: v3 fare trigger + detailed flight info in 
+          +alerts (2026-09-23 — code only, NOT yet deployed)             
+      298 +                                                              
+      299 +**Change:** `flight-parser` now triggers alerts on Travelpayou
+          +ts                                                            
+      300 +`/aviasales/v3/prices_for_dates` (`one_way=false`, so round tr
+          +ips like v1) and fetches                                      
+      301 +v1 `/v1/prices/cheap` alongside (TWD + USD each, 4 parallel ca
+          +lls per route). The email                                     
+      302 +lists both: v3 (triggering) with airline name, flight number, 
+          +per-leg departure/arrival                                     
+      303 +(local time per city; arrival = departure + `duration_to`/`dur
+          +ation_back`), duration,                                       
+      304 +direct/transfers, airports and v3's itinerary deep link; then 
+          +v1 with a price                                               
+      305 +difference line. Latest offers are cached in new `flight.route
+          +s.last_offer_v3` /                                            
+      306 +`last_offer_v1` jsonb (`{ twd, usd }`, overwritten each run; m
+          +igration                                                      
+      307 +`20260923100000`); `last_price*` now hold the v3 price. `fligh
+          +t-admin-notify` renders                                       
+      308 +from those columns, falling back to `last_price*` for rows wri
+          +tten before them.                                             
+      309 +**Not yet verified against a live v3 response:** the field nam
+          +es come from the v3 docs                                      
+      310 +(docs site blocks fetching); check the parser's `v3 … | v1 …` 
+          +log line after the first                                      
+      311 +run. Note that v1 was already returning `flight_number`/`durat
+          +ion*` (see                                                    
+      312 +`no_11_check_tickets_raw_data_2026-09.txt`); only transfers, a
+          +irports and the link are                                      
+      313 +v3-only.                                                      
+      314 +                                                              
+      315  ## Project / environment facts (don't re-derive these)
+      316  
+      317  - **Shared multi-app Supabase project.** Other apps' migration
+           s live in the
+
+⏺ 程式都改好了（v3 觸發通知，信裡同時列出 v3 和 v1），還沒部署。v3
+  的欄位名稱是照文件寫的，還沒拿真的 v3 回應測過。
+
+  先更正我之前說錯的地方
+  我之前說 v1 沒有航班號碼和飛行時間，這是錯的。之前的測試紀錄（no_11_check_tick
+  ets_raw_data_2026-09.txt）顯示 v1 本來就有 flight_number、duration_to、duratio
+  n_back。只有直飛或轉機、實際機場、那一班的訂購連結是 v3 才有的。
+
+  改了什麼
+  - flight-parser：每條航線同時查 v3 和 v1（TWD、USD 各一次），用 v3 的 TWD 
+    價格判斷要不要通知。如果某次 v3 查不到票價，那條航線這次就跳過，不會改用
+    v1。
+  - flight-notification：信件內容改成下面這樣（我用 Node 套範例資料跑出來的，v3
+    的價格是假的）：
+  航班詳情（v3 最低價，觸發本通知）
+    票價（來回）：NT$6,420（約 US$203）
+    航空公司：樂桃航空（MM）
+    去程航班：MM628
+    去程：2026/10/29（四）17:15 TPE → 2026/10/29（四）21:30 NRT · 3 小時 15 分 ·
+  直飛
+    回程：2026/11/02（一）22:25 NRT → 2026/11/03（二）01:30 TPE · 4 小時 5 分 · 
+  轉機 1 次
+    總飛行時間：7 小時 20 分
+  立即訂購 → v3 那一班的訂購連結
+  對照：Aviasales 另一資料來源（v1）的最低價
+    票價（來回）：NT$6,557（約 US$207）
+    價差：比上方高 NT$137
+    …（v1 有的欄位同樣列出）
+    - 每個時間都用當地時間顯示。
+    - 抵達時間是推算的，信尾有註明「僅供參考」。
+    - API 回傳的欄位有缺時，那一列就不顯示。
+  - flight-admin-notify：手動發送時從快取資料組出同樣的信。舊格式的快取資料也能
+    正常產生信件。
+  - Migration 20260923100000：在 flight.routes 新增 last_offer_v3 /
+    last_offer_v1（jsonb），每次查價覆蓋，也就是你選的 A。原本的 last_price*
+    改存 v3 的價格，所以 dashboard 和 admin 頁面不用改。
+  - 另外同步改了 types.ts，並在 docs/m1-session-handoff.md
+    記錄這次變更（follow-up 5）。
+
+  請依序執行（要先跑 migration，parser 才寫得進新欄位）：
+  ! supabase db query --linked --file
+  supabase/migrations/20260923100000_flight_routes_offer_details.sql
+  ! supabase migration repair --status applied 20260923100000
+  ! supabase functions deploy flight-notification --use-api
+  ! supabase functions deploy flight-admin-notify --use-api
+  ! supabase functions deploy flight-parser --use-api
+  ! supabase db query --linked --file
+  supabase/scripts/manual-flight-parser-run.sql
+
+  跑完跟我說。我會從 parser 的 log（TPE-TYO 2026-10 v3 … | v1 …）和
+  last_offer_v3 確認真實的 v3 回應格式，對得上之後，你再從 /admin
+  手動寄一封看實際的信。
+
+  Commit 等驗證完再做。
+
+✻ Baked for 4m 51s · done 9:33 PM
+!  supabase db query --linked --file                                            
+  supabase/migrations/20260923100000_flight_routes_offer_details.sql            
+  ⎿  Initialising login role...
+     {
+       "boundary": "b88625bd0afa5dbc49c4d7d4bda331d8",
+     … +5 lines (ctrl+o to expand)
+
+  Called Supabase (ctrl+o to expand)
+
+⏺ Migration 生效了：flight.routes 已經有 last_offer_v1 和 last_offer_v3 兩個
+  jsonb 欄位。
+
+  請接著執行下一行。這步很重要，沒跑的話 migration 紀錄會對不上：
+  ! supabase migration repair --status applied 20260923100000
+
+  再部署 3 個 function，最後手動跑一次 parser：
+  ! supabase functions deploy flight-notification --use-api
+  ! supabase functions deploy flight-admin-notify --use-api
+  ! supabase functions deploy flight-parser --use-api
+  ! supabase db query --linked --file
+  supabase/scripts/manual-flight-parser-run.sql
+
+  跑完跟我說。我會確認 repair 有寫進 schema_migrations，並用 parser 的 log
+  核對真實的 v3 回應格式。
+
+✻ Cooked for 27s · done 9:34 PM
+
+!  supabase migration repair --status applied 20260923100000                    
+  ⎿  Initialising login role...
+     Connecting to remote database...
+     Repaired migration history: [20260923100000] => applied
+     … +8 lines (ctrl+o to expand)
+
+  Called Supabase (ctrl+o to expand)
+
+⏺ Repair 成功了，schema_migrations 裡已經有 20260923100000。
+
+  接下來請部署 3 個 function，再手動跑一次 parser：
+  ! supabase functions deploy flight-notification --use-api
+  ! supabase functions deploy flight-admin-notify --use-api
+  ! supabase functions deploy flight-parser --use-api
+  ! supabase db query --linked --file
+  supabase/scripts/manual-flight-parser-run.sql
+
+  flight-notification 要先部署。如果 parser
+  先上線，這時抓到的降價通知會交給還沒更新的 flight-notification
+  處理，新的航班詳細資料就不會出現在信裡。
+
+✻ Baked for 22s · done 9:35 PM
+
+!  supabase functions deploy flight-notification --use-api                      
+  ⎿  Uploading asset (flight-notification): supabase/functions/flight-notif
+     ication/deno.json
+     Uploading asset (flight-notification): supabase/functions/flight-notif
+     … +10 lines (ctrl+o to expand)
+
+⏺ flight-notification 部署好了。部署成功也代表 Deno 編譯通過。
+
+  請繼續執行：
+  ! supabase functions deploy flight-admin-notify --use-api
+  ! supabase functions deploy flight-parser --use-api
+  ! supabase db query --linked --file
+  supabase/scripts/manual-flight-parser-run.sql
+
+✻ Baked for 7s · done 9:35 PM
+
+!  supabase functions deploy flight-admin-notify --use-api                      
+  ⎿  Uploading asset (flight-admin-notify): supabase/functions/flight-admin
+     -notify/deno.json
+     Uploading asset (flight-admin-notify): supabase/functions/flight-admin
+     … +10 lines (ctrl+o to expand)
+
+⏺ flight-admin-notify 部署好了。
+
+  最後兩步：
+  ! supabase functions deploy flight-parser --use-api
+  ! supabase db query --linked --file
+  supabase/scripts/manual-flight-parser-run.sql
+
+✻ Churned for 8s · done 9:36 PM
+
+!  supabase functions deploy flight-parser --use-api                            
+  ⎿  Uploading asset (flight-parser): supabase/functions/flight-parser/deno
+     .json
+     Uploading asset (flight-parser): supabase/functions/flight-parser/inde
+     … +10 lines (ctrl+o to expand)
+
+⏺ 3 個 function 都部署好了。
+
+  最後手動跑一次 parser，確認 v3 真的有回資料：
+  ! supabase db query --linked --file
+  supabase/scripts/manual-flight-parser-run.sql
+
+  跑完我會從 log 和 flight.routes.last_offer_v3 確認 v3
+  回應的欄位格式。也可以不手動跑，等下一次整點或半點的排程自動執行，我再去看。
+
+✻ Baked for 8s · done 9:36 PM
+
+!  supabase db query --linked --file                                            
+  supabase/scripts/manual-flight-parser-run.sql                                 
+  ⎿  Initialising login role...
+     {
+       "boundary": "2a84378dd79c0fb52122b2758ba832b4",
+     … +12 lines (ctrl+o to expand)
+
+  Called Supabase 2 times (ctrl+o to expand)
+
+⏺ v3 版本已正常運作，13:37（UTC）那次執行成功寫入三條航線的 last_offer_v3 /
+  last_offer_v1
+  資料，格式符合文件規範。我現在用這筆真實資料渲染信件，確認內容是否正確。
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ 我發現「總飛行時間：47小時40分」計算有誤——API回傳的duration並不等於去程加回程
+  時間，只是東京和首爾兩條線剛好相等才沒被發現。我會改成直接把兩段飛行時間相加來
+  修正。
+
+⏺ Update(supabase/functions/flight-notification/index.ts)
+  ⎿  Added 5 lines, removed 1 line
+      285    if (twd.airline) rows.push(["航空公司", airlineLabel(twd.air
+           line)]);
+      286    if (twd.flight_number) rows.push(["去程航班", `${twd.airline
+           }${twd.flight_number}`]);
+      287    for (const leg of legs(route, twd)) rows.push([leg.title, le
+           g.line]);
+      288 -  if (twd.duration) rows.push(["總飛行時間", fmtDuration(twd.d
+          -uration)]);                                                   
+      288 +  // Sum the legs rather than using the API's `duration`: on T
+          +PE-LON it came back                                           
+      289 +  // as 2860 min against legs of 925 + 805, so it isn't a plai
+          +n total.                                                      
+      290 +  if (twd.duration_to && twd.duration_back) {                 
+      291 +    rows.push(["去回程合計", `${fmtDuration(twd.duration_to + 
+          +twd.duration_back)}（含轉機等候）`]);                         
+      292 +  }                                                           
+      293    return rows;
+      294  }
+      295  
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      p='docs/m1-session-handoff.md'…)
+  ⎿  Updated docs/m1-session-handoff.md (+10 -4)
+      294  `id ed0900b6…`) was deleted afterward so it doesn't skew futur
+           e dedup comparisons for
+      295  that route.
+      296  
+      297 -### M2 follow-up 5: v3 fare trigger + detailed flight info in 
+          -alerts (2026-09-23 — code only, NOT yet deployed)             
+      297 +### M2 follow-up 5: v3 fare trigger + detailed flight info in 
+          +alerts (2026-09-23 — deployed; v3 data verified)              
+      298  
+      299  **Change:** `flight-parser` now triggers alerts on Travelpayou
+           ts
+      300  `/aviasales/v3/prices_for_dates` (`one_way=false`, so round tr
+           ips like v1) and fetches
+     ...
+      306  `last_offer_v1` jsonb (`{ twd, usd }`, overwritten each run; m
+           igration
+      307  `20260923100000`); `last_price*` now hold the v3 price. `fligh
+           t-admin-notify` renders
+      308  from those columns, falling back to `last_price*` for rows wri
+           tten before them.
+      309 -**Not yet verified against a live v3 response:** the field nam
+          -es come from the v3 docs                                      
+      310 -(docs site blocks fetching); check the parser's `v3 … | v1 …` 
+          -log line after the first                                      
+      311 -run. Note that v1 was already returning `flight_number`/`durat
+          -ion*` (see                                                    
+      309 +**Verified 2026-09-23 13:37Z** (migration applied + repaired, 
+          +all three functions                                           
+      310 +deployed, manual parser run): `last_offer_v3` / `last_offer_v1
+          +` populated for all three                                     
+      311 +routes with the expected v3 fields (`flight_number` is a strin
+          +g, `link` a relative                                          
+      312 +`/search/…` path). On this first run v1 and v3 returned the **
+          +same** cheapest fare on                                       
+      313 +every route (same cache), so the comparison block mostly reads
+          + "與上方價格相同".                                            
+      314 +v3's `duration` is not `duration_to + duration_back` (TPE-LON:
+          + 2860 vs 925 + 805), so                                       
+      315 +the email sums the legs instead. The TPE-TYO v3 `link` token s
+          +tarts `GK…` while                                             
+      316 +`airline` is `MM`: the deep link may open a slightly different
+          + itinerary than the one                                       
+      317 +listed. Note that v1 was already returning `flight_number`/`du
+          +ration*` (see                                                 
+      318  `no_11_check_tickets_raw_data_2026-09.txt`); only transfers, a
+           irports and the link are
+      319  v3-only.
+      320  
+
+⏺ v3 已經上線，資料也確認沒問題。還剩一個小修正需要重新部署。
+
+  驗證結果（手動跑 parser，UTC 13:37）
+  - 三條航線的 last_offer_v3 / last_offer_v1 都寫進去了。v3
+    的欄位格式跟程式寫的一致，航班號碼、機場、轉機次數、訂購連結都有。
+  - 這次 v1 和 v3 查到的最低價完全一樣（東京 NT$6,557、首爾 NT$5,178、倫敦
+    NT$20,345），看起來兩者用的是同一份快取。所以信裡的對照區目前大多會顯示「與
+    上方價格相同」。
+  - 倫敦那筆有轉機：去程轉 2 次，回程轉 1 次，信裡會正確標出來。
+
+  用倫敦的真實資料渲染信件時發現一個錯誤，已修正
+  - 「總飛行時間」原本直接用 API 的 duration，倫敦線因此顯示 47 小時 40
+    分。但去程 925 分加回程 805 分只有 28 小時 50 分，可見 duration
+    不是去回程的總和。
+  - 現在改成把兩段相加，顯示為「去回程合計：28 小時 50
+    分（含轉機等候）」。這個修正在本機，還沒部署。
+
+  另一件要知道的事
+  東京線 v3 的訂購連結裡，航班代碼是 GK（捷星日本），但 airline 欄位是
+  MM（樂桃）。這是 Travelpayouts 資料本身的不一致，點「立即訂購」開啟的航班可能
+  跟信裡寫的不一樣。這部分我沒有處理。
+
+  請重新部署 flight-notification，然後測試
+  ! supabase functions deploy flight-notification --use-api
+  部署後到 /admin 對 kyp741@gmail.com 的 TPE-TYO
+  手動發送一次，確認實際收到的信件內容。沒問題的話再跟我說，我再 commit（還沒
+  commit）。
+
+✻ Crunched for 1m 16s · done 9:37 PM
+
+!  supabase functions deploy flight-notification --use-api                      
+  ⎿  Uploading asset (flight-notification): supabase/functions/flight-notif
+     ication/deno.json
+     Uploading asset (flight-notification): supabase/functions/flight-notif
+     … +10 lines (ctrl+o to expand)
+
+⏺ flight-notification 已經重新部署，「去回程合計」的修正上線了。
+
+  接下來請到 /admin 對 kyp741@gmail.com 的 TPE-TYO
+  手動發送一次。這次也會收在同一個對話串，信要等 1 到 2
+  分鐘才會到，打開後展開最後一封看。
+
+  信裡應該會看到：
+  - 航空公司：樂桃航空（MM）
+  - 去程航班：MM628
+  - 去程：10/29（四）17:15 TPE → 21:30 NRT · 3 小時 15 分 · 直飛
+  - 回程：11/02（一）22:25 NRT → 11/03（二）01:30 TPE · 4 小時 5 分 · 直飛
+  - 去回程合計：7 小時 20 分（含轉機等候）
+  - 對照區（v1）：價差顯示「與上方價格相同」
+
+  收到後確認內容沒問題再跟我說，我再 commit。
+
+✻ Cogitated for 11s · done 9:38 PM
+
+❯ 收到了 內容如下                                                               
+  ✈️ 台北 → 東京 降價通知！NT$6,557 已達標                                      
+  NT$6,557                                                                      
+                                                                                
+  約 US$207                                                                     
+                                                                                
+  你的目標價：NT$10,000                                                         
+                                                                                
+  航班詳情（v3 最低價，觸發本通知）                                             
+  票價（來回）    NT$6,557（約 US$207）                                         
+  航空公司    樂桃航空（MM）                                                    
+  去程航班    MM628                                                             
+  去程    2026/10/29（四）17:15 TPE → 2026/10/29（四）21:30 NRT · 3 小時 15 分  
+  · 直飛                                                                        
+  回程    2026/11/02（一）22:25 NRT → 2026/11/03（二）01:30 TPE · 4 小時 5 分 · 
+  直飛                                                                          
+  去回程合計    7 小時 20 分（含轉機等候）                                      
+  立即訂購                                                                      
+                                                                                
+  對照：Aviasales 另一資料來源（v1）的最低價                                    
+  票價（來回）    NT$6,557（約 US$207）                                         
+  價差    與上方價格相同                                                        
+  航空公司    樂桃航空（MM）                                                    
+  去程航班    MM628                                                             
+  去程    2026/10/29（四）17:15 TPE → 2026/10/29（四）21:30 TYO · 3 小時 15 分  
+  回程    2026/11/02（一）22:25 TYO → 2026/11/03（二）01:30 TPE · 4 小時 5 分   
+  去回程合計    7 小時 20 分（含轉機等候）                                      
+  查看此航班日期的搜尋結果                                                      
+                                                                                
+  票價與航班為 Aviasales 近期搜尋的快取資料，實際價格、時間與座位以訂購頁為準； 
+  抵達時間依出發時間與飛行時間推算（當地時間），僅供參考。                      
+                                                                                
+  查價時間：2026/9/23 下午9:36:59                                               
+                                                                                
+  此通知由客服人員手動觸發。                                                    
+⏺ 信件內容跟預期完全一致，驗證通過。我現在 commit，只加入這次改的檔案，未追蹤的
+  pptx 和截圖不會加進去。
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ 通知信已經照新格式寄出，內容正確，程式也 commit 在 multi-app
+  分支了（f5d8d41）。
+
+  - 觸發：價格是否達標改由 v3 判斷。v1 仍會一起查，只放在信裡當對照。
+  - 信件內容：航空公司名稱、航班號碼、去回程的出發與抵達時間（當地時間）、飛行時
+    間、直飛或轉機、機場，以及 v3 那一班的訂購連結。下方附 v1 的對照與價差。
+  - 資料庫：flight.routes 新增兩個欄位，存每次查到的 v3、v1
+    最新結果（只留最新一筆）。手動發送時直接從這裡組信。
+  - 部署：migration 已套用並完成 repair，3 個 function 都部署了。
+
+  還沒 push。這個分支有跟 Lovable 同步，要推的時候跟我說。
+
+  有兩點要知道：
+  - v1 和 v3 目前查到的都是同一筆：兩邊用的應該是同一份快取，所以對照區多半會顯
+    示「與上方價格相同」。要不要保留 v1 對照，可以之後再決定。
+  - 東京線的訂購連結可能不是信裡那一班：資料標示是樂桃（MM），但 v3
+    連結裡的航班代碼是捷星日本（GK）。這是 Travelpayouts
+    資料本身的不一致，點開的航班可能跟信裡寫的不同。
+
+✻ Sautéed for 15s · done 9:40 PM
+
+❯ ask only: 標示回程 有何意義 不是單程價格？                                    
+
+⏺ 不是單程。NT$6,557 是來回票價，已經包含那一段回程航班。所以列出回程是在說明這
+  個價格買到的是哪一趟回程，它本來就是票價的一部分。
+
+  怎麼確認是來回票價
+  - v1（/v1/prices/cheap）：預設就回傳來回票價，每筆都有 return_at（回程時間）和
+    duration_back（回程飛行時間）。專案從 M1
+    開始用的就是它，所以之前通知信裡的價格一直都是來回價。
+  - v3：我設定了 one_way=false，讓它也查來回票，才能跟 v1 比較。v3
+    預設是查單程。
+  - 訂購連結：/search/TPE2910TYO02111，拆開是 TPE、10/29 出發、TYO、11/02
+    回程、1 位旅客，就是那張來回票。
+  - 信上的欄位名稱「票價（來回）」也是這個意思。
+
+  如果想改成單程
+  v3 可以改成 one_way=true 查單程，改動不大。但要考慮：
+  - 單程通常比來回的一半還貴，也可能便宜（例如廉航）。總之價格基準會變。
+  - 使用者設定目標價時，參考的是 dashboard 上的「最後查詢」價格，那一直都是來回
+    價。改成單程後，價格可能突然跌到目標價以下，造成一批誤觸發的通知。
+  - v1 沒辦法指定單程，改了之後對照區就不是同一種票價，比較沒意義。
+
+  建議維持來回，只要讓使用者清楚知道是來回價就好，例如在 dashboard
+  的價格旁加上「來回」字樣。要改單程或加標示的話跟我說。
+
+✻ Brewed for 10s · done 9:44 PM
+
+❯ ask only:但一般若回程更改時間會不會影響價格？                                 
+
+⏺ 會。來回票價是針對特定一組出發日和回程日算的，回程改期，價格通常就會變。
+
+  購票前：選不同的回程日
+  - NT$6,557 只適用於 10/29 出發、11/02 回程這個組合。在 Aviasales
+    上改回程日，價格會重新計算，可能差很多。
+  - 影響價格的因素包括星期幾（週五、週日回程通常較貴）、連假、剩餘的便宜艙位，還
+    有停留天數（有些航空公司的票價規則會限制最短或最長停留）。
+
+  購票後：更改已購機票的回程
+  - 通常要付「改票手續費」加上「新舊票價差額」，金額由票種規則決定。
+  - 通知信裡這種最低價，多半是廉航（例如樂桃）或限制多的便宜票種。這類票改期費用
+    高，有的甚至不能改。
+  - 我們拿不到票價規則，Travelpayouts 的資料不含這部分。
+
+  這跟我們的通知有什麼關係
+  - 通知判斷的是「這個月出發的來回票中，最便宜的那一組日期」。出發日和回程日是
+    Travelpayouts 快取裡剛好最便宜的組合，不是使用者自己選的。
+  - 所以日期彈性大的人最適合這個通知。已經有固定日期的人點進去，換成自己的日期後
+    ，價格可能高於通知的價格。
+  - 目前信裡寫的是「實際價格、時間與座位以訂購頁為準」，沒有明說「換日期價格會不
+    同」。
+
+  可以改善的方向
+  1. 在信裡明講（最簡單）：例如「此價格僅適用於上列出發與回程日期，更改日期價格
+     可能不同；廉航票改期通常需付手續費與差額」。
+  2. 讓使用者設定行程條件：v3 可以指定確切的出發日和回程日（departure_at /
+     return_at 可以精確到日），其他 endpoint
+     也能按停留天數查。這要改訂閱表單和資料表，是比較大的功能。
+
+  要做的話跟我說想做哪一種。
+
+✻ Cooked for 13s · done 9:45 PM
+
+❯ 先做第 1 項，在信裡加上日期說明, 並在 doashboard 註名爲來回價格               
+
+  Searched for 1 pattern, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      p='src/routes/_authenticated/dashboard.tsx'…)
+  ⎿  Updated src/routes/_authenticated/dashboard.tsx (+2 -2)
+      254          htmlFor={`target-price-${route.plan_name}`}
+      255          className="mt-4 block text-sm font-medium text-muted-f
+           oreground"
+      256        >
+      257 -        目標價 TWD / Target price                             
+      257 +        來回目標價 TWD / Round-trip target price              
+      258        </label>
+      259        <div className="mt-2 flex gap-2">
+      260          <input
+     ...
+      316        )}
+      317        {route.last_price != null && (
+      318          <p className="mt-2 text-xs text-muted-foreground">
+      319 -          最後查詢：{route.last_price_currency === "TWD" ? "NT
+          -$" : `${route.last_price_currency} `}                         
+      319 +          最後查詢（來回）：{route.last_price_currency === "TW
+          +D" ? "NT$" : `${route.last_price_currency} `}                 
+      320            {Number(route.last_price).toLocaleString()}
+      321            {route.last_checked_at && (
+      322              <> ‧ {new Date(route.last_checked_at).toLocaleStri
+           ng("zh-TW")}</>
+
+⏺ Dashboard 的文字改好了，接著改通知信：
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      p='supabase/functions/flight-notification/index.ts'…)
+  ⎿  /Users/gaoyiping/work/claude/fare-finder-pro/src/routes/_authenticated
+     /dashboard.tsx
+       164:6  warning  React Hook useEffect has a missing dependency: 'subs
+     … +6 lines (ctrl+o to expand)
+  ⎿  Updated src/routes/_authenticated/dashboard.tsx (+9 -5)
+      117          )}
+      118          {purchase === "failed" && (
+      119            <p className="mt-6 rounded-lg bg-destructive/10 px-4
+            py-3 text-sm text-destructive">
+      120 -            付款未完成，你可以在下方點「完成付款」重試。 / Pay
+          -ment didn't go through — use “完成付款” to retry.             
+      120 +            付款未完成，你可以在下方點「完成付款」重試。 / Pay
+          +ment didn't go through — use                                  
+      121 +            “完成付款” to retry.                              
+      122            </p>
+      123          )}
+      124  
+     ...
+      143    );
+      144  }
+      145  
+      145 -const fmtDate = (iso: string | null) =>                       
+      146 -  iso ? new Date(iso).toLocaleDateString("zh-TW") : "";       
+      146 +const fmtDate = (iso: string | null) => (iso ? new Date(iso).t
+          +oLocaleDateString("zh-TW") : "");                             
+      147  
+      148  function PlanCard({
+      149    route,
+     ...
+      208        const res = await callFunction("flight-cancel-subscripti
+           on", { plan_name: route.plan_name });
+      209        const data = await res.json();
+      210        // Show ECPay's own reason when the function gives one, 
+           not just a generic line.
+      211 -      if (!res.ok) throw new Error(data.detail ? `${data.error
+          -}（${data.detail}）` : (data.error ?? "cancel failed"));      
+      211 +      if (!res.ok)                                            
+      212 +        throw new Error(                                      
+      213 +          data.detail ? `${data.error}（${data.detail}）` : (d
+          +ata.error ?? "cancel failed"),                                
+      214 +        );                                                    
+      215        setConfirmingCancel(false);
+      216        onSubscribed();
+      217      } catch (e) {
+     ...
+      319        )}
+      320        {route.last_price != null && (
+      321          <p className="mt-2 text-xs text-muted-foreground">
+      319 -          最後查詢（來回）：{route.last_price_currency === "TW
+          -D" ? "NT$" : `${route.last_price_currency} `}                 
+      322 +          最後查詢（來回）：                                  
+      323 +          {route.last_price_currency === "TWD" ? "NT$" : `${ro
+          +ute.last_price_currency} `}                                   
+      324            {Number(route.last_price).toLocaleString()}
+      325            {route.last_checked_at && (
+      326              <> ‧ {new Date(route.last_checked_at).toLocaleStri
+           ng("zh-TW")}</>
+  ⎿  Updated supabase/functions/flight-notification/index.ts (+30 -1)
+      221    }
+      222  }
+      223  
+      224 +// Date only ("2026/10/29（四）") in the zone of the city the 
+          +leg departs from.                                             
+      225 +function fmtDay(iso: string, code: string): string {          
+      226 +  const d = iso ? new Date(iso) : null;                       
+      227 +  if (!d || isNaN(d.getTime())) return "";                    
+      228 +  return fmtLocal(d, code)                                    
+      229 +    .replace(/\s*\d{2}:\d{2}$/, "")                           
+      230 +    .replace(/）.*$/, "）");                                  
+      231 +}                                                             
+      232 +                                                              
+      233 +// The fare is for this exact date pair; spell that out, since
+          + changing either                                              
+      234 +// date (the return included) reprices the ticket.            
+      235 +function dateNote(route: string, o: Cheapest): string {       
+      236 +  const [routeFrom, routeTo] = route.split("-");              
+      237 +  const out = fmtDay(o.depart_date, o.origin_airport || routeF
+          +rom);                                                         
+      238 +  const back = fmtDay(o.return_date, o.destination_airport || 
+          +routeTo);                                                     
+      239 +  const dates =                                               
+      240 +    out && back                                               
+      241 +      ? `去程 ${out}、回程 ${back} 這組日期`                  
+      242 +      : out                                                   
+      243 +        ? `去程 ${out} 出發的這組行程`                        
+      244 +        : "上列日期";                                         
+      245 +  return (                                                    
+      246 +    `此為來回票價，僅適用於${dates}。更改任一日期（包含回程） 
+          +價格都可能不同；` +                                           
+      247 +    "廉價航空等優惠票購買後改期，通常需支付改票手續費與票價差 
+          +額，部分票種不可更改。"                                       
+      248 +  );                                                          
+      249 +}                                                             
+      250 +                                                              
+      251  function fmtDuration(min: number | null | undefined): string {
+      252    if (min == null || min <= 0) return "";
+      253    const h = Math.floor(min / 60);
+     ...
+      355    const url = bookingUrl(match.route, match.cheapest);
+      356  
+      357    const mainRows = offerRows(match.route, match.cheapest, matc
+           h.cheapest_usd);
+      358 +  const datesNote = dateNote(match.route, match.cheapest);    
+      359  
+      360    // v1 comparison block. Also says how far v1's price is from
+            the v3 one.
+      361    const v1 = match.compare_v1?.twd ?? null;
+     … 15 more lines (ctrl+o to expand)
+
+⏺ Lint 沒有錯誤；那個 warning
+  原本就有，不是這次造成的。接著渲染一次，確認信件長相：
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(S=/private/tmp/claude-501/-Users-gaoyiping-work-claude-fare-finder-pro/8c
+      0d1d3c-ef5e-4f27-8268-8bcbe34b4199/scratchpad && sed -i '' 's/`去程
+      ${out}、回程 ${back} 這組日…)
+  ⎿  241:      ? `去程 ${out}、回程 ${back}這組日期`
+     ※ 此為來回票價，僅適用於去程 2026/10/29（四）、回程 2026/11/02（一）這
+     組日期。更改任一日期（包含回程）價格都可能不同；廉價航空等優惠票購買後
+     … +6 lines (ctrl+o to expand)
+  ⎿  Updated supabase/functions/flight-notification/index.ts (+1 -1)
+      238    const back = fmtDay(o.return_date, o.destination_airport || 
+           routeTo);
+      239    const dates =
+      240      out && back
+      241 -      ? `去程 ${out}、回程 ${back} 這組日期`                  
+      241 +      ? `去程 ${out}、回程 ${back}這組日期`                   
+      242        : out
+      243          ? `去程 ${out} 出發的這組行程`
+      244          : "上列日期";
+
+⏺ Bash(sed -i '' 's/`去程 ${out} 出發的這組行程`/`去程 ${out}出發的這組行程`/'
+      supabase/functions/flight-notification/index.ts && grep -c
+      "出發的這組行程" supabase/functions/flight-notificatio…)
+  ⎿  1
+     All matched files use Prettier code style!
+      src/routes/_authenticated/dashboard.tsx         | 16 ++++++++-----
+     … +3 lines (ctrl+o to expand)
+  ⎿  Updated supabase/functions/flight-notification/index.ts (+1 -1)
+      240      out && back
+      241        ? `去程 ${out}、回程 ${back}這組日期`
+      242        : out
+      243 -        ? `去程 ${out} 出發的這組行程`                        
+      243 +        ? `去程 ${out}出發的這組行程`                         
+      244          : "上列日期";
+      245    return (
+      246      `此為來回票價，僅適用於${dates}。更改任一日期（包含回程）
+           價格都可能不同；` +
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Prettier 順便改了檔案裡其他 3 段原本就沒排版的程式碼。為了讓 diff
+  只包含這次的修改，我把檔案還原，只重新套用兩處文字變更：
+
+⏺ Bash(git checkout src/routes/_authenticated/dashboard.tsx && python3 - <<'EOF'
+      p='src/routes/_authenticated/dashboard.tsx'…)
+  ⎿  Updated 1 path from the index
+      src/routes/_authenticated/dashboard.tsx | 4 ++--
+      1 file changed, 2 insertions(+), 2 deletions(-)
+     TSC_OK
+  ⎿  Updated src/routes/_authenticated/dashboard.tsx (+5 -9)
+      117          )}
+      118          {purchase === "failed" && (
+      119            <p className="mt-6 rounded-lg bg-destructive/10 px-4
+            py-3 text-sm text-destructive">
+      120 -            付款未完成，你可以在下方點「完成付款」重試。 / Pay
+          -ment didn't go through — use                                  
+      121 -            “完成付款” to retry.                              
+      120 +            付款未完成，你可以在下方點「完成付款」重試。 / Pay
+          +ment didn't go through — use “完成付款” to retry.             
+      121            </p>
+      122          )}
+      123  
+     ...
+      142    );
+      143  }
+      144  
+      146 -const fmtDate = (iso: string | null) => (iso ? new Date(iso).t
+          -oLocaleDateString("zh-TW") : "");                             
+      145 +const fmtDate = (iso: string | null) =>                       
+      146 +  iso ? new Date(iso).toLocaleDateString("zh-TW") : "";       
+      147  
+      148  function PlanCard({
+      149    route,
+     ...
+      208        const res = await callFunction("flight-cancel-subscripti
+           on", { plan_name: route.plan_name });
+      209        const data = await res.json();
+      210        // Show ECPay's own reason when the function gives one, 
+           not just a generic line.
+      211 -      if (!res.ok)                                            
+      212 -        throw new Error(                                      
+      213 -          data.detail ? `${data.error}（${data.detail}）` : (d
+          -ata.error ?? "cancel failed"),                                
+      214 -        );                                                    
+      211 +      if (!res.ok) throw new Error(data.detail ? `${data.error
+          +}（${data.detail}）` : (data.error ?? "cancel failed"));      
+      212        setConfirmingCancel(false);
+      213        onSubscribed();
+      214      } catch (e) {
+     ...
+      316        )}
+      317        {route.last_price != null && (
+      318          <p className="mt-2 text-xs text-muted-foreground">
+      322 -          最後查詢（來回）：                                  
+      323 -          {route.last_price_currency === "TWD" ? "NT$" : `${ro
+          -ute.last_price_currency} `}                                   
+      319 +          最後查詢（來回）：{route.last_price_currency === "TW
+          +D" ? "NT$" : `${route.last_price_currency} `}                 
+      320            {Number(route.last_price).toLocaleString()}
+      321            {route.last_checked_at && (
+      322              <> ‧ {new Date(route.last_checked_at).toLocaleStri
+           ng("zh-TW")}</>
+
+⏺ 兩項都改好了，還沒部署也還沒 commit。
+
+  1. 通知信
+  「航班詳情」表格下方、「立即訂購」按鈕上方，新增一個黃底提醒框，會帶入實際日期
+  ：
+
+  ▎ 此為來回票價，僅適用於去程 2026/10/29（四）、回程 
+  ▎ 2026/11/02（一）這組日期。更改任一日期（包含回程）價格都可能不同；廉價航空等
+  ▎ 優惠票購買後改期，通常需支付改票手續費與票價差額，部分票種不可更改。
+
+  如果資料裡沒有回程日期，會改寫成「僅適用於去程
+  2026/10/29（四）出發的這組行程」。純文字版的信也有同樣的內容。
+
+  2. Dashboard（src/routes/_authenticated/dashboard.tsx）
+  - 目標價欄位標籤：目標價 TWD / Target price 改為 來回目標價 TWD / Round-trip 
+    target price
+  - 價格顯示：最後查詢：NT$6,557 改為 最後查詢（來回）：NT$6,557
+
+  /admin 頁面沒有改，因為這次只提到 dashboard。
+
+  請部署通知信
+  ! supabase functions deploy flight-notification --use-api
+  然後從 /admin 手動發一封確認提醒框。Dashboard 的改動只要本機 npm run dev，到
+  http://localhost:8080/dashboard 就能看到；Vercel
+  上的網站要重新部署才會更新。兩邊都確認沒問題後跟我說，我再 commit。
+
+✻ Brewed for 1m 24s · done 9:51 PM
+
+!  supabase functions deploy flight-notification --use-api                      
+  ⎿  Uploading asset (flight-notification): supabase/functions/flight-notif
+     ication/deno.json
+     Uploading asset (flight-notification): supabase/functions/flight-notif
+     … +10 lines (ctrl+o to expand)
+
+⏺ flight-notification 部署好了，日期說明已經上線。
+
+  請確認兩件事：
+
+  1. 通知信：從 /admin 對 kyp741@gmail.com 的 TPE-TYO 手動發送一次，等 1 到 2
+     分鐘，展開對話串最後一封。「航班詳情」表格下方應該有一個黃底提醒框，寫著「
+     此為來回票價，僅適用於去程 2026/10/29（四）、回程
+     2026/11/02（一）這組日期…」。
+  2. Dashboard：本機 npm run dev 後打開
+     http://localhost:8080/dashboard，應該會看到「來回目標價 TWD / Round-trip
+     target price」和「最後查詢（來回）：NT$…」。
+
+  兩邊都沒問題的話跟我說，我再 commit。
+
+✻ Churned for 13s · done 9:51 PM
+
+※ recap: 目標是讓通知信和 dashboard 清楚標示票價為來回價：信件的日期說明已部署，dashboard 標籤已在本機改好但還沒 commit。下一步請從 /admin 手動發一封信、並到 localhost:8080/dashboard 確認，沒問題我就 commit。 (disable recaps in /config)
+
+❯ 收到了                                                                        
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ 通知信的日期說明你已經收到並確認了，這次的改動已 commit 在 multi-app
+  分支（bf5644e，接在 f5d8d41 後面）。
+
+  Dashboard
+  上「來回」的兩處標示我只確認過型別檢查通過，還沒實際在畫面上看過。你可以本機
+  npm run dev 後打開 http://localhost:8080/dashboard 確認。
+
+  兩個 commit 都還沒 push，所以 Vercel 上的 dashboard 還是舊的文字。要 push
+  或部署到 Vercel 時跟我說。
+
+✻ Sautéed for 10s · done 10:43 PM
+
+❯ ask only: can amin set enable/disable show and poll v1 data?                  
+⏺ 目前做不到，現在的程式每次都會查 v1，信裡也一定會列出 v1
+  對照，沒有任何開關。要加的話不難，做法如下。
+
+  建議只做一個開關，同時控制「查不查 v1」和「信裡顯不顯示」：
+  - 你選的是「只存最新一筆」，後台頁面本來就沒有顯示 v1。所以查了 v1
+    卻不顯示，這些資料沒有地方用。
+  - 如果以後想「照樣查 v1，但只給管理者看」，那要在 /admin 另外加 v1
+    的顯示，才需要拆成兩個開關。
+
+  需要改的地方
+  1. 設定表（migration）：新增 flight.settings，裡面一個 v1_compare_enabled
+     布林值，預設開啟，維持現在的行為。
+  2. 寫入要走 Edge Function：M2 之後前端已經不能直接寫入資料。所以要新增一個像
+     flight-admin-settings 的 function，用管理者的 JWT 呼叫，再比對
+     flight.admins 確認身分後才能寫入。做法跟現在的 flight-admin-notify 一樣。
+  3. /admin 頁面：加一個開關，旁邊顯示目前狀態。
+  4. flight-parser：開頭先讀這個設定。
+     - 關閉時不呼叫 v1，每條航線從 4 個 API 請求減為 2 個。
+     - last_offer_v1 會寫成 null，並且不把 v1 資料傳給通知信。
+  5. flight-notification：沒有收到 v1
+     資料時不顯示對照區。目前的寫法大致已經是這樣，但要確認關閉時不會出現「v1
+     此次未回傳票價」這行字。
+  6. flight-admin-notify：也要讀這個設定，不能只看 last_offer_v1
+     有沒有值。否則剛關掉開關、parser 還沒重跑時，手動發送的信仍會帶著舊的 v1
+     資料。
+
+  生效時間：開關切換後，下一次查價（最多 30
+  分鐘後）就套用；手動發送則是立即套用。
+
+  要做的話跟我說，也告訴我要一個開關還是兩個。
+
+✻ Brewed for 14s · done 10:45 PM
+
+❯ ask:還是保持目前狀態 只是做一個開關 可選擇關掉 原本v1 polling and 顯示,       
+  若狀態無v1 data,但 enable 送通知信, show 無 v1 data 之類內容即可              
+
+⏺ 了解，規格整理如下：
+
+  一個開關：「v1 對照」，預設開啟，也就是維持目前的行為。
+
+  ┌─────────────┬───────────────────┬───────────────────────────────────────┐
+  │    狀態     │   flight-parser   │                通知信                 │
+  ├─────────────┼───────────────────┼───────────────────────────────────────┤
+  │ 開啟，有 v1 │ 照常查 v1         │ 照常顯示 v1 對照區（跟現在一樣）      │
+  │  資料       │                   │                                       │
+  ├─────────────┼───────────────────┼───────────────────────────────────────┤
+  │ 開啟，沒有  │ 照常查 v1         │ 顯示一行「對照：v1                    │
+  │ v1 資料     │                   │ 資料來源目前無資料」，通知照常寄出    │
+  ├─────────────┼───────────────────┼───────────────────────────────────────┤
+  │             │ 不查              │                                       │
+  │ 關閉        │ v1，每條航線少 2  │ 完全不顯示 v1 區塊                    │
+  │             │ 個 API 請求       │                                       │
+  └─────────────┴───────────────────┴───────────────────────────────────────┘
+
+  「開啟但沒有 v1 資料」會在三種情況下出現：
+  - 這次 v1 API 沒有回傳票價，或呼叫失敗
+  - 剛從關閉切回開啟，parser 還沒重跑，快取裡的 v1 是 null
+  - 手動發送時，快取裡還沒有 v1 資料
+
+  v1 是否有資料不影響通知要不要寄，觸發條件只看 v3。
+
+  要改的地方
+  - migration：新增 flight.settings，裡面放 v1_compare_enabled，預設 true
+  - 新增 flight-admin-settings Edge Function，只有 flight.admins
+    裡的管理者能讀寫
+  - /admin 頁面加一個開關
+  - flight-parser、flight-admin-notify 都讀這個設定；flight-notification
+    依據收到的資料決定顯示「對照區」、「無資料」或「不顯示」
+
+  這樣對的話跟我說「做」，我就開始改。
+
+✻ Cogitated for 9s · done 10:51 PM
+
+❯ 做                                                                            
+
+  Searched for 1 pattern, ran 2 shell commands (ctrl+o to expand)
+
+⏺ 先建立設定表的 migration：
+
+⏺ Write(supabase/migrations/20260923110000_flight_settings.sql)
+  ⎿  Wrote 33 lines to
+     supabase/migrations/20260923110000_flight_settings.sql
+       1 -- App-wide settings an admin can change from /admin. Key/value 
+       2 -- switches don't each need a migration.
+       4 -- v1_compare_enabled (boolean, default true): whether flight-pa
+         rser also polls
+         xt to the v3
+         ow reads as true.
+       8 -- Reads: admins only, via the same flight.is_admin() choke poin
+         t as the other
+         : service role
+         ns itself).
+     … +33 lines (ctrl+o to expand)
+
+⏺ 接著是給管理者寫入設定用的 Edge Function：
+
+⏺ Write(supabase/functions/flight-admin-settings/index.ts)
+  ⎿  Wrote 72 lines to supabase/functions/flight-admin-settings/index.ts
+       1 // flight-admin-settings: an admin changes an app-wide setting i
+       2 //
+       3 // Called with the admin's own JWT (verify_jwt = true). Body: { 
+       4 // The caller must be in flight.admins (checked server-side, nev
+       5 // app_metadata.apps), and only keys listed in SETTINGS are acce
+         pted, each with
+         h RLS.
+       7 
+         js@2";
+      10 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") as string;
+     … +79 lines (ctrl+o to expand)
+
+⏺ Bash(echo '{}' > supabase/functions/flight-admin-settings/deno.json && python3
+      - <<'EOF'
+      p='supabase/config.toml'…)
+  ⎿  # Admin: called by an admin user with their own JWT; checked against f
+     light.admins inside.
+     [functions.flight-admin-notify]
+     … +15 lines (ctrl+o to expand)
+  ⎿  Updated supabase/config.toml (+7 -0)
+      45  import_map = "./functions/flight-admin-notify/deno.json"
+      46  entrypoint = "./functions/flight-admin-notify/index.ts"
+      47  
+      48 +# Admin: called by an admin user with their own JWT; checked ag
+         +ainst flight.admins inside.                                    
+      49 +[functions.flight-admin-settings]                              
+      50 +enabled = true                                                 
+      51 +verify_jwt = true                                              
+      52 +import_map = "./functions/flight-admin-settings/deno.json"     
+      53 +entrypoint = "./functions/flight-admin-settings/index.ts"      
+      54 +                                                               
+      55  # M2: service-role bearer only (checked inside the function).
+      56  [functions.flight-status-notification]
+      57  enabled = true
+  ⎿  Created supabase/functions/flight-admin-settings/deno.json (+1 -0)
+      1 +{}                                                              
+
+⏺ 接著改 flight-parser：開關關閉時不查 v1。
+
+⏺ Bash(python3 - <<'EOF'
+      p='supabase/functions/flight-parser/index.ts'…)
+  ⎿  258:    compare_v1?: OfferPair | null;
+     300:        last_offer_v1: compareV1,
+     332:          compare_v1: compareV1,
+  ⎿  Updated supabase/functions/flight-parser/index.ts (+20 -4)
+      236    }
+      237    if (expiredRows.length) console.log(`expired ${expiredRows.l
+           ength} subscription(s)`);
+      238  
+      239 +  // Admin switch (/admin, flight.settings): off = don't poll 
+          +v1 at all and leave                                           
+      240 +  // it out of the email. A missing row or a failed read keeps
+          + it on.                                                       
+      241 +  const { data: v1Setting, error: settingError } = await admin
+      242 +    .from("settings")                                         
+      243 +    .select("value")                                          
+      244 +    .eq("key", "v1_compare_enabled")                          
+      245 +    .maybeSingle();                                           
+      246 +  if (settingError) console.error("failed to read v1_compare_e
+          +nabled", settingError);                                       
+      247 +  const v1Enabled = v1Setting?.value !== false;               
+      248 +                                                              
+      249    const month = nextMonth();
+      250    const matches: Array<{
+      251      user_id: string;
+     ...
+      264      const [cheapest, cheapestUsd, v1Twd, v1Usd] = await Promis
+           e.all([
+      265        safe(`v3 TWD ${route.route}`, fetchCheapestV3(origin, de
+           stination, month, "TWD")),
+      266        safe(`v3 USD ${route.route}`, fetchCheapestV3(origin, de
+           stination, month, "USD")),
+      257 -      safe(`v1 TWD ${route.route}`, fetchCheapestV1(origin, de
+          -stination, month, "TWD")),                                    
+      258 -      safe(`v1 USD ${route.route}`, fetchCheapestV1(origin, de
+          -stination, month, "USD")),                                    
+      267 +      v1Enabled                                               
+      268 +        ? safe(`v1 TWD ${route.route}`, fetchCheapestV1(origin
+          +, destination, month, "TWD"))                                 
+      269 +        : null,                                               
+      270 +      v1Enabled                                               
+      271 +        ? safe(`v1 USD ${route.route}`, fetchCheapestV1(origin
+          +, destination, month, "USD"))                                 
+      272 +        : null,                                               
+      273      ]);
+      260 -    const compareV1: OfferPair = { twd: v1Twd, usd: v1Usd };  
+      274 +    // null = comparison switched off (no v1 block in the emai
+          +l); a pair with                                               
+      275 +    // twd: null = switched on but v1 had nothing (email says 
+          +so).                                                          
+      276 +    const compareV1: OfferPair | null = v1Enabled ? { twd: v1T
+          +wd, usd: v1Usd } : null;                                      
+      277      console.log(
+      278        `${route.route} ${month} v3 ${cheapest ? `${cheapest.pri
+           ce} TWD ${cheapest.airline}${cheapest.flight_number ?? ""} tra
+           nsfers=${cheapest.transfers ?? "?"}` : "none"}` +
+      263 -        ` | v1 ${v1Twd ? `${v1Twd.price} TWD ${v1Twd.airline}$
+          -{v1Twd.flight_number ?? ""}` : "none"}`,                      
+      279 +        ` | v1 ${!v1Enabled ? "off" : v1Twd ? `${v1Twd.price} 
+          +TWD ${v1Twd.airline}${v1Twd.flight_number ?? ""}` : "none"}`, 
+      280      );
+      281      // v3 is the trigger; without a v3 TWD fare there is nothi
+           ng to alert on.
+      282      if (!cheapest) {
+
+⏺ Bash(python3 - <<'EOF'
+      p='supabase/functions/flight-parser/index.ts'…)
+  ⎿  supabase/functions/flight-admin-settings/index.ts 4ms (unchanged)
+     supabase/functions/flight-notification/index.ts 19ms (unchanged)
+     [error] No parser could be inferred for file "/Users/gaoyiping/work/cl
+     … +8 lines (ctrl+o to expand)
+  ⎿  Updated supabase/functions/flight-admin-notify/index.ts (+11 -1)
+       89    const v3 = route.last_offer_v3 as { twd: unknown; usd: unkno
+           wn } | null;
+       90    const v1 = route.last_offer_v1 as { twd: unknown; usd: unkno
+           wn } | null;
+       91  
+       92 +  // Read the switch here too rather than trusting last_offer_
+          +v1: it can still                                              
+       93 +  // hold data (or null) from a parser run made before the swi
+          +tch was flipped.                                              
+       94 +  const { data: v1Setting } = await admin                     
+       95 +    .from("settings")                                         
+       96 +    .select("value")                                          
+       97 +    .eq("key", "v1_compare_enabled")                          
+       98 +    .maybeSingle();                                           
+       99 +  const v1Enabled = v1Setting?.value !== false;               
+      100 +                                                              
+      101    const match = {
+      102      user_id: sub.user_id,
+      103      email: sub.email,
+      104      route: sub.route,
+      105      plan_name: sub.plan_name,
+      106      target_price: sub.target_price,
+       98 -    compare_v1: v1 ?? null,                                   
+      107 +    // null = switched off (no v1 block); an empty pair = on b
+          +ut nothing cached yet.                                        
+      108 +    compare_v1: v1Enabled ? (v1 ?? { twd: null, usd: null }) :
+          + null,                                                        
+      109      cheapest: v3?.twd ?? {
+      110        price: route.last_price,
+      111        currency: route.last_price_currency ?? "TWD",
+  ⎿  Updated supabase/functions/flight-notification/index.ts (+4 -2)
+      376        <p style="font-size:13px;margin:8px 0 0;"><a href="${esc
+           (v1Url)}" style="color:#7c3aed;">查看此航班日期的搜尋結果</a><
+           /p>`;
+      377      v1Text = `\n\n對照：Aviasales 另一資料來源（v1）的最低價\n
+           ${rowsText(v1Rows)}\n  搜尋連結：${v1Url}`;
+      378    } else if (match.compare_v1) {
+      379 -    v1Html = `<p style="font-size:13px;color:#888;margin-top:2
+          -4px;">對照：v1 資料來源此次未回傳票價。</p>`;                 
+      380 -    v1Text = "\n\n對照：v1 資料來源此次未回傳票價。";         
+      379 +    // Comparison is switched on but there is no v1 fare (v1 r
+          +eturned nothing, or                                           
+      380 +    // nothing is cached yet). compare_v1 null/absent = switch
+          +ed off: no block.                                             
+      381 +    v1Html = `<p style="font-size:13px;color:#888;margin-top:2
+          +4px;">對照：v1 資料來源目前無資料。</p>`;                     
+      382 +    v1Text = "\n\n對照：v1 資料來源目前無資料。";             
+      383    }
+      384  
+      385    const note =
+  ⎿  Updated supabase/functions/flight-parser/index.ts (+2 -1)
+      1  // flight-parser: fetches each route's cheapest fare and hands m
+         atches off to
+      2  // flight-notification. Alerts trigger on Travelpayouts v3 price
+         s_for_dates;
+      3 -// v1 prices/cheap is fetched alongside and only listed in the e
+        -mail.                                                           
+      3 +// v1 prices/cheap is fetched alongside and only listed in the e
+        +mail, unless an                                                 
+      4 +// admin switched that off (flight.settings v1_compare_enabled).
+      5  // Triggered every 30 min by pg_cron (see the M1 skill docs), or
+          manually for
+      6  // testing.
+      7  //
+
+⏺ 現在更新 types.ts，加入 settings 表：
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(sed -n 17,31p src/integrations/supabase/types.ts && python3 - <<'EOF'
+      p='src/integrations/supabase/types.ts'…)
+  ⎿        admins: {
+             Row: {
+               created_at: string
+     … +12 lines (ctrl+o to expand)
+  ⎿  Updated src/integrations/supabase/types.ts (+21 -0)
+      110          }
+      111          Relationships: []
+      112        }
+      113 +      settings: {                                             
+      114 +        Row: {                                                
+      115 +          key: string                                         
+      116 +          updated_at: string                                  
+      117 +          updated_by: string | null                           
+      118 +          value: Json                                         
+      119 +        }                                                     
+      120 +        Insert: {                                             
+      121 +          key: string                                         
+      122 +          updated_at?: string                                 
+      123 +          updated_by?: string | null                          
+      124 +          value: Json                                         
+      125 +        }                                                     
+      126 +        Update: {                                             
+      127 +          key?: string                                        
+      128 +          updated_at?: string                                 
+      129 +          updated_by?: string | null                          
+      130 +          value?: Json                                        
+      131 +        }                                                     
+      132 +        Relationships: []                                     
+      133 +      }                                                       
+      134        subscriptions: {
+      135          Row: {
+      136            created_at: string
+
+⏺ 接著在 /admin 加上開關：
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      p='src/routes/_authenticated/admin/index.tsx'…)
+  ⎿  TSC_OK
+      src/integrations/supabase/types.ts              | 21 +++++++
+      src/routes/_authenticated/admin/index.tsx       | 74 ++++++++++++++++
+     … +6 lines (ctrl+o to expand)
+  ⎿  Updated src/routes/_authenticated/admin/index.tsx (+74 -0)
+      3  import { useMutation, useQuery, useQueryClient } from "@tanstack
+         /react-query";
+      4  import { supabase } from "@/integrations/supabase/client";
+      5  import { callFunction } from "@/integrations/supabase/call-funct
+         ion";
+      6 +import { Switch } from "@/components/ui/switch";                
+      7  import type { Tables } from "@/integrations/supabase/types";
+      8  
+      9  export const Route = createFileRoute("/_authenticated/admin/")({
+     ...
+      154                ))}
+      155              </div>
+      156  
+      157 +            <V1CompareSetting />                              
+      158 +                                                              
+      159              {/* Routes / last price */}
+      160              <section className="mt-10">
+      161                <h2 className="text-lg font-bold">航線最新價格 R
+           outes</h2>
+     ...
+      304    );
+      305  }
+      306  
+      307 +// Admin switch for the Travelpayouts v1 comparison (flight.se
+          +ttings                                                        
+      308 +// v1_compare_enabled). Read through RLS (admins only); writte
+          +n through                                                     
+      309 +// flight-admin-settings. A missing row means on, matching fli
+          +ght-parser.                                                   
+      310 +function V1CompareSetting() {                                 
+      311 +  const queryClient = useQueryClient();                       
+      312 +  const [error, setError] = useState<string | null>(null);    
+      313 +                                                              
+      314 +  const settingQuery = useQuery({                             
+      315 +    queryKey: ["admin", "settings", "v1_compare_enabled"],    
+      316 +    queryFn: async () => {                                    
+      317 +      const { data, error } = await supabase                  
+      318 +        .from("settings")                                     
+      319 +        .select("value, updated_at")                          
+      320 +        .eq("key", "v1_compare_enabled")                      
+      321 +        .maybeSingle();                                       
+      322 +      if (error) throw error;                                 
+      323 +      return { enabled: data?.value !== false, updatedAt: data
+          +?.updated_at ?? null };                                       
+      324 +    },                                                        
+      325 +  });                                                         
+      326 +                                                              
+      327 +  const mutation = useMutation({                              
+      328 +    mutationFn: async (enabled: boolean) => {                 
+     … 52 more lines (ctrl+o to expand)
+
+⏺ 型別檢查和 lint 都通過。最後在 handoff doc 補上這次的變更：
+
+⏺ Bash(python3 - <<'EOF'
+      p='docs/m1-session-handoff.md'…)
+  ⎿  Updated docs/m1-session-handoff.md (+14 -0)
+      318  `no_11_check_tickets_raw_data_2026-09.txt`); only transfers, a
+           irports and the link are
+      319  v3-only.
+      320  
+      321 +### M2 follow-up 6: admin switch for the v1 comparison (2026-0
+          +9-23)                                                         
+      322 +                                                              
+      323 +`flight.settings` (key/value jsonb; migration `20260923110000`
+          +) holds                                                       
+      324 +`v1_compare_enabled`, default `true` (a missing row also reads
+          + as on). Admins read it                                       
+      325 +through RLS (`flight.is_admin()`); writes go only through the 
+          +new                                                           
+      326 +`flight-admin-settings` Edge Function (admin JWT, checked agai
+          +nst `flight.admins`,                                          
+      327 +allowlisted keys and value types). `/admin` has a 設定 Setting
+          +s switch.                                                     
+      328 +Off: `flight-parser` makes no v1 calls, writes `last_offer_v1 
+          += null` and passes                                            
+      329 +`compare_v1: null`, so the email has no v1 block. On but no v1
+          + fare (v1 returned                                            
+      330 +nothing, or nothing cached yet for a manual send): `compare_v1
+          +` is `{twd: null, …}`                                         
+      331 +and the email shows 「對照：v1 資料來源目前無資料。」. `flight
+          +-admin-notify` reads the                                      
+      332 +switch itself instead of trusting `last_offer_v1`, which may p
+          +redate a flip. Alerts                                         
+      333 +always trigger on v3 regardless.                              
+      334 +                                                              
+      335  ## Project / environment facts (don't re-derive these)
+      336  
+      337  - **Shared multi-app Supabase project.** Other apps' migration
+           s live in the
+
+⏺ v1 對照的開關做好了，型別檢查和 lint 都通過，還沒部署，也還沒 commit。
+
+  三種狀態下的行為
+
+  ┌─────────────────┬─────────┬────────────────────────────────────────────┐
+  │      狀態       │  查價   │                   通知信                   │
+  ├─────────────────┼─────────┼────────────────────────────────────────────┤
+  │ 開啟（預設）    │ 照常查  │ 顯示 v1 對照區                             │
+  │                 │ v1      │                                            │
+  ├─────────────────┼─────────┼────────────────────────────────────────────┤
+  │ 開啟，但沒有 v1 │ 照常查  │ 顯示「對照：v1                             │
+  │  資料           │ v1      │ 資料來源目前無資料。」，通知照常寄出       │
+  ├─────────────────┼─────────┼────────────────────────────────────────────┤
+  │ 關閉            │ 不查 v1 │ 不顯示 v1 區塊                             │
+  └─────────────────┴─────────┴────────────────────────────────────────────┘
+
+  不管開關是哪個狀態，通知都只看 v3 的價格決定要不要寄。
+
+  改了哪些地方
+  - Migration 20260923110000：新增 flight.settings 表，預設寫入
+    v1_compare_enabled = true。只有管理者能讀，寫入只能透過下面這個 Edge
+    Function。
+  - 新增 flight-admin-settings：寫入前會用管理者的 JWT 比對
+    flight.admins，而且只接受已定義的設定名稱和布林值。config.toml 也加了這個
+    function 的設定。
+  - flight-parser：開頭讀取開關。關閉時跳過 v1 的兩個請求，last_offer_v1 寫成
+    null。
+  - flight-admin-notify：自己讀開關，不看快取裡的 v1
+    資料，因為那筆快取可能是切換前留下的。
+  - flight-notification：沒有 v1 資料時的提示文字改成「目前無資料」。
+  - /admin：在「航線最新價格」上方新增「設定
+    Settings」區塊，有開關和最後更新時間。
+  - 另外更新了 types.ts 和 handoff doc（follow-up 6）。
+
+  請依序執行（migration 要先跑，否則 parser 讀設定時會出錯）：
+  ! supabase db query --linked --file
+  supabase/migrations/20260923110000_flight_settings.sql
+  ! supabase migration repair --status applied 20260923110000
+  ! supabase functions deploy flight-admin-settings --use-api
+  ! supabase functions deploy flight-notification --use-api
+  ! supabase functions deploy flight-admin-notify --use-api
+  ! supabase functions deploy flight-parser --use-api
+
+  部署完成後，在本機 npm run dev，打開 http://localhost:8080/admin 測試：
+  1. 把開關切到關閉，然後手動發送一次。信裡應該完全沒有 v1 區塊。
+  2. 再切回開啟，然後手動發送一次。信裡應該恢復 v1 對照區。
+
+  每次切換後我會去查 flight.settings，確認有沒有寫進去。
+
+✻ Baked for 1m 49s · done 10:54 PM
+
+!  supabase db query --linked --file                                            
+  supabase/migrations/20260923110000_flight_settings.sql                        
+  ⎿  Initialising login role...
+     {
+       "boundary": "77509daf8689b1ff23d8a3bd20e1ad1a",
+     … +5 lines (ctrl+o to expand)
+
+  Called Supabase (ctrl+o to expand)
+
+⏺ Migration 生效了，我也查過實際結果：
+  - flight.settings 已經有 v1_compare_enabled = true 這一筆
+  - 前端角色只剩 authenticated 有 SELECT 權限，anon 的權限已移除
+  - RLS policy admins can read settings 已建立
+
+  請接著執行：
+  ! supabase migration repair --status applied 20260923110000
+  ! supabase functions deploy flight-admin-settings --use-api
+  ! supabase functions deploy flight-notification --use-api
+  ! supabase functions deploy flight-admin-notify --use-api
+  ! supabase functions deploy flight-parser --use-api
+
+✻ Worked for 19s · done 10:55 PM
+
+!  supabase migration repair --status applied 20260923110000                    
+  ⎿  Initialising login role...
+     Connecting to remote database...
+     Repaired migration history: [20260923110000] => applied
+     … +8 lines (ctrl+o to expand)
+  Called Supabase (ctrl+o to expand)
+
+⏺ Repair 成功了，schema_migrations 裡已經有 20260923110000。
+
+  接著請部署 4 個 function：
+  ! supabase functions deploy flight-admin-settings --use-api
+  ! supabase functions deploy flight-notification --use-api
+  ! supabase functions deploy flight-admin-notify --use-api
+  ! supabase functions deploy flight-parser --use-api
+
+✻ Cooked for 19s · done 10:56 PM
+
+!  supabase functions deploy flight-admin-settings --use-api                    
+  ⎿  Uploading asset (flight-admin-settings): supabase/functions/flight-adm
+     in-settings/deno.json
+     Uploading asset (flight-admin-settings): supabase/functions/flight-adm
+     … +10 lines (ctrl+o to expand)
+
+⏺ flight-admin-settings 部署好了。
+
+  還有 3 個：
+  ! supabase functions deploy flight-notification --use-api
+  ! supabase functions deploy flight-admin-notify --use-api
+  ! supabase functions deploy flight-parser --use-api
+
+✻ Worked for 8s · done 10:56 PM
+
+!  supabase functions deploy flight-notification --use-api                      
+  ⎿  Uploading asset (flight-notification): supabase/functions/flight-notif
+     ication/deno.json
+     Uploading asset (flight-notification): supabase/functions/flight-notif
+     … +10 lines (ctrl+o to expand)
+
+⏺ flight-notification 部署好了。
+
+  還有 2 個：
+  ! supabase functions deploy flight-admin-notify --use-api
+  ! supabase functions deploy flight-parser --use-api
+
+✻ Churned for 8s · done 10:56 PM
+
+!  supabase functions deploy flight-admin-notify --use-api                      
+  ⎿  Uploading asset (flight-admin-notify): supabase/functions/flight-admin
+     -notify/deno.json
+     Uploading asset (flight-admin-notify): supabase/functions/flight-admin
+     … +10 lines (ctrl+o to expand)
+
+⏺ flight-admin-notify 部署好了。
+
+  最後一個：
+  ! supabase functions deploy flight-parser --use-api
+
+✻ Cooked for 7s · done 10:56 PM
+
+!  supabase functions deploy flight-parser --use-api                            
+  ⎿  Uploading asset (flight-parser): supabase/functions/flight-parser/deno.json
+     Uploading asset (flight-parser): supabase/functions/flight-parser/index.ts
+     {
+       "project_ref": "luugfvsrawnuzwpjvddt",
+       "functions": [
+         "flight-parser"
+       ],
+       "dashboard_url":
+     "https://supabase.com/dashboard/project/luugfvsrawnuzwpjvddt/functions",
+       "message": "Deployed Functions."
+     }
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ 4 個 function 都部署好了，更新時間都是剛剛（14:56Z）。新的
+  flight-admin-settings 也已開啟 verify_jwt，沒有登入不能呼叫。
+
+  請在本機 npm run dev，打開 http://localhost:8080/admin 測試：
+
+  1. 關閉測試：在「設定 Settings」區塊把「v1 價格對照」切到關閉，再對
+     kyp741@gmail.com 的 TPE-TYO 手動發送一次。信裡應該完全沒有 v1 對照區。
+  2. 開啟測試：切回開啟，再手動發送一次。信裡應該恢復「對照：Aviasales
+     另一資料來源（v1）的最低價」這一區。
+
+  每次切換後跟我說，我會查 flight.settings 確認值和 updated_by
+  有沒有正確寫入。兩項都確認沒問題後我再 commit。
+
+✻ Baked for 23s · done 10:57 PM
+
+❯ 切換會頓一下不是很靈敏                                                        
+
+  Called Supabase 2 times (ctrl+o to expand)
+
+⏺ 切換功能運作正常，但因儲存需 1.4~3.4
+  秒且要等完成才更新畫面，導致操作有延遲感。我將改為「按下即時切換」，畫面立即反
+  應、儲存在背景進行，失敗時自動退回並顯示錯誤訊息。
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      p='src/routes/_authenticated/admin/index.tsx'…)
+  ⎿  OK
+  ⎿  Updated src/routes/_authenticated/admin/index.tsx (+36 -8)
+      304    );
+      305  }
+      306  
+      307 +const SETTING_KEY = ["admin", "settings", "v1_compare_enabled"
+          +];                                                            
+      308 +type V1Setting = { enabled: boolean; updatedAt: string | null 
+          +};                                                            
+      309 +                                                              
+      310  // Admin switch for the Travelpayouts v1 comparison (flight.se
+           ttings
+      311  // v1_compare_enabled). Read through RLS (admins only); writte
+           n through
+      312  // flight-admin-settings. A missing row means on, matching fli
+           ght-parser.
+     ...
+      315    const [error, setError] = useState<string | null>(null);
+      316  
+      317    const settingQuery = useQuery({
+      315 -    queryKey: ["admin", "settings", "v1_compare_enabled"],    
+      316 -    queryFn: async () => {                                    
+      318 +    queryKey: SETTING_KEY,                                    
+      319 +    queryFn: async (): Promise<V1Setting> => {                
+      320        const { data, error } = await supabase
+      321          .from("settings")
+      322          .select("value, updated_at")
+     ...
+      327      },
+      328    });
+      329  
+      330 +  // Optimistic: the switch flips on click and the save (1-3 s
+          + through the Edge                                             
+      331 +  // Function) runs behind it; a failed save puts the previous
+          + value back.                                                  
+      332    const mutation = useMutation({
+      333      mutationFn: async (enabled: boolean) => {
+      334        const res = await callFunction("flight-admin-settings", 
+           {
+     ...
+      337        });
+      338        const data = await res.json();
+      339        if (!res.ok) throw new Error(data.error ?? "save failed"
+           );
+      340 +      return data as { value: unknown; updated_at: string };  
+      341 +    },                                                        
+      342 +    onMutate: async (enabled) => {                            
+      343 +      setError(null);                                         
+      344 +      await queryClient.cancelQueries({ queryKey: SETTING_KEY 
+          +});                                                           
+      345 +      const previous = queryClient.getQueryData<V1Setting>(SET
+          +TING_KEY);                                                    
+      346 +      queryClient.setQueryData<V1Setting>(SETTING_KEY, {      
+      347 +        enabled,                                              
+      348 +        updatedAt: previous?.updatedAt ?? null,               
+      349 +      });                                                     
+     … 40 more lines (ctrl+o to expand)
+
+⏺ 改好了，型別檢查和 lint 都通過。這次只改前端，不用重新部署任何 function，本機
+  dev server 存檔後會自動熱更新，重新整理頁面就能測。
+
+  改了什麼（src/routes/_authenticated/admin/index.tsx）
+  - 按下開關就立即切換位置，不再等伺服器回應，也不會變灰。
+  - 儲存期間，開關下方會顯示一行小字「儲存中… Saving…」。
+  - 儲存完成後直接用伺服器回傳的值更新「最後更新」時間，不必再讀一次設定。
+  - 儲存失敗時，開關會自動退回原本的位置並顯示錯誤。
+  - 儲存還沒完成時再按一次會被忽略，避免兩次請求的先後順序錯亂。
+
+  後端的反應時間沒有變，還是需要 1.4 到 3.4 秒，只是現在畫面不用等它。
+
+  目前資料庫的狀態是「關閉」（你剛剛最後一次切換的結果，時間是
+  14:58:07Z）。所以現在可以直接做關閉測試：到 /admin 對 kyp741@gmail.com 的
+  TPE-TYO 手動發送，信裡應該沒有 v1 區塊。接著切回開啟，再發一封，確認 v1
+  對照區回來了。
+
+✻ Sautéed for 42s · done 10:59 PM
+
+❯ 好了，關閉時收到的信沒有 v1                                                   
+
+  Called Supabase (ctrl+o to expand)
+
+⏺ 關閉測試通過了。
+
+  我查了資料庫，你在 15:01:38（UTC）已經把開關切回開啟，15:01:54
+  又手動發送了一封。那一封的內容應該不是完整的 v1 對照區，而是一行：
+
+  ▎ 對照：v1 資料來源目前無資料。
+
+  這是設計好的「開啟但沒有 v1 資料」狀態，不是錯誤。15:00
+  的排程查價執行時開關還是關閉，所以沒有查 v1，快取裡的 v1 資料是空的。
+
+  請確認那封信是不是這樣。要看到完整的 v1 對照區，有兩個方法：
+  - 等下一次排程（15:30 UTC，台北時間 23:30）重新查價後，再手動發送一次
+  - 或者現在手動跑一次查價，再從 /admin 發送：
+  ! supabase db query --linked --file
+  supabase/scripts/manual-flight-parser-run.sql
+
+  確認完就可以 commit。
+
+✻ Brewed for 17s · done 11:02 PM
+
+❯ 是顯示目前無資料，commit 吧                                                   
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ v1 對照開關的改動已經 commit 在 multi-app 分支（8243164），三種狀態都測過了：
+  - 關閉：信裡沒有 v1 區塊。
+  - 開啟但沒有 v1 資料：信裡顯示「對照：v1 資料來源目前無資料。」。
+  - 開啟且有資料：信裡顯示完整 v1 對照區。這個狀態前面測試 v3 通知信時已經看過；
+    開關做好之後還沒再測一次，下次排程查價後再手動發一封就能看到。
+
+  目前開關是開啟的。
+
+  今天的 3 個 commit 都還沒 push：
+  - f5d8d41：改用 v3 觸發通知，信裡加上航班詳細資料
+  - bf5644e：信裡加上來回票價的日期說明，dashboard 標示為來回價格
+  - 8243164：/admin 的 v1 對照開關
+
+  Supabase 這邊（兩個 migration、所有 Edge
+  Function）已經上線。前端的改動（dashboard 的「來回」字樣、/admin
+  的開關）目前只在本機，Vercel 上還是舊版。要 push 或部署到 Vercel 時跟我說。
+
+✻ Cooked for 12s · done 11:03 PM

@@ -46,3 +46,4 @@ Claude Code 對話紀錄的匯出檔，非程式碼，依序記錄各次開發�
 | `no_9_fix_flight_url_2026-09-22.txt` | 修正通知信裡 Aviasales 訂購連結的日期格式問題。 |
 | `no_10_add_admin_2026-09-22.txt` | 新增 admin 唯讀後台（`/admin`）與手動觸發降價通知功能。 |
 | `no_11_check_tickets_raw_data_2026-09.txt` | 查票價掃描（`flight-parser`）觸發機制與手動測試腳本（`supabase/scripts/manual-flight-parser-run.sql`）；修掉 `routeTree.gen.ts` 因行尾符號造成的假 diff（新增 `.gitattributes`）；臨時加 log 撈 Travelpayouts 原始回應後移除並重新部署。 |
+| `no_12_change_to_v3_api_2026-09-23.txt` | 查手動通知信「看不到」的原因（Gmail 同主旨併入對話串、送達延遲）；改用 Travelpayouts v3 API 觸發通知，信中列出航班詳情（航空公司、航班號、去回程起降時間、飛行時間、轉機、機場）並附 v1 對照（`flight.routes.last_offer_v3` / `last_offer_v1`）；信中註明來回票價僅適用所列日期、dashboard 標示「來回」；`/admin` 新增 v1 對照開關（`flight.settings`、`flight-admin-settings`）。 |
