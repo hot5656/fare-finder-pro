@@ -45,3 +45,4 @@ Claude Code 對話紀錄的匯出檔，非程式碼，依序記錄各次開發�
 | `no_8_fix_pay_return_url_2026-09-21.txt` | 修正 ECPay 付款完成後導回原站網址的問題。 |
 | `no_9_fix_flight_url_2026-09-22.txt` | 修正通知信裡 Aviasales 訂購連結的日期格式問題。 |
 | `no_10_add_admin_2026-09-22.txt` | 新增 admin 唯讀後台（`/admin`）與手動觸發降價通知功能。 |
+| `no_11_check_tickets_raw_data_2026-09.txt` | 查票價掃描（`flight-parser`）觸發機制與手動測試腳本（`supabase/scripts/manual-flight-parser-run.sql`）；修掉 `routeTree.gen.ts` 因行尾符號造成的假 diff（新增 `.gitattributes`）；臨時加 log 撈 Travelpayouts 原始回應後移除並重新部署。 |
