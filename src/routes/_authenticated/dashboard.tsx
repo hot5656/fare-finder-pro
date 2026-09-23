@@ -254,7 +254,7 @@ function PlanCard({
         htmlFor={`target-price-${route.plan_name}`}
         className="mt-4 block text-sm font-medium text-muted-foreground"
       >
-        目標價 TWD / Target price
+        來回目標價 TWD / Round-trip target price
       </label>
       <div className="mt-2 flex gap-2">
         <input
@@ -316,7 +316,7 @@ function PlanCard({
       )}
       {route.last_price != null && (
         <p className="mt-2 text-xs text-muted-foreground">
-          最後查詢：{route.last_price_currency === "TWD" ? "NT$" : `${route.last_price_currency} `}
+          最後查詢（來回）：{route.last_price_currency === "TWD" ? "NT$" : `${route.last_price_currency} `}
           {Number(route.last_price).toLocaleString()}
           {route.last_checked_at && (
             <> ‧ {new Date(route.last_checked_at).toLocaleString("zh-TW")}</>

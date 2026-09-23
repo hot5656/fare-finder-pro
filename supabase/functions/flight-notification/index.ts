@@ -221,6 +221,33 @@ function fmtLocal(d: Date, code: string): string {
   }
 }
 
+// Date only ("2026/10/29（四）") in the zone of the city the leg departs from.
+function fmtDay(iso: string, code: string): string {
+  const d = iso ? new Date(iso) : null;
+  if (!d || isNaN(d.getTime())) return "";
+  return fmtLocal(d, code)
+    .replace(/\s*\d{2}:\d{2}$/, "")
+    .replace(/）.*$/, "）");
+}
+
+// The fare is for this exact date pair; spell that out, since changing either
+// date (the return included) reprices the ticket.
+function dateNote(route: string, o: Cheapest): string {
+  const [routeFrom, routeTo] = route.split("-");
+  const out = fmtDay(o.depart_date, o.origin_airport || routeFrom);
+  const back = fmtDay(o.return_date, o.destination_airport || routeTo);
+  const dates =
+    out && back
+      ? `去程 ${out}、回程 ${back}這組日期`
+      : out
+        ? `去程 ${out}出發的這組行程`
+        : "上列日期";
+  return (
+    `此為來回票價，僅適用於${dates}。更改任一日期（包含回程）價格都可能不同；` +
+    "廉價航空等優惠票購買後改期，通常需支付改票手續費與票價差額，部分票種不可更改。"
+  );
+}
+
 function fmtDuration(min: number | null | undefined): string {
   if (min == null || min <= 0) return "";
   const h = Math.floor(min / 60);
@@ -328,6 +355,7 @@ function renderEmail(
   const url = bookingUrl(match.route, match.cheapest);
 
   const mainRows = offerRows(match.route, match.cheapest, match.cheapest_usd);
+  const datesNote = dateNote(match.route, match.cheapest);
 
   // v1 comparison block. Also says how far v1's price is from the v3 one.
   const v1 = match.compare_v1?.twd ?? null;
@@ -365,6 +393,7 @@ function renderEmail(
       <p style="color:#666;font-size:13px;margin-top:4px;">你的目標價：NT$${target}</p>
       <h3 style="font-size:15px;margin:20px 0 6px;">航班詳情（v3 最低價，觸發本通知）</h3>
       <table style="font-size:14px;border-collapse:collapse;">${rowsHtml(mainRows)}</table>
+      <p style="font-size:13px;color:#92400e;background:#fef3c7;border-radius:6px;padding:8px 10px;margin:12px 0 0;">${esc(datesNote)}</p>
       <p style="margin-top:16px;">
         <a href="${esc(url)}"
            style="display:inline-block;padding:12px 20px;background:#7c3aed;color:#fff;
@@ -382,7 +411,7 @@ function renderEmail(
   `;
   const text =
     `${subject}\nNT$${price}${usdText}\n你的目標價：NT$${target}` +
-    `\n\n航班詳情（v3 最低價，觸發本通知）\n${rowsText(mainRows)}\n立即訂購: ${url}` +
+    `\n\n航班詳情（v3 最低價，觸發本通知）\n${rowsText(mainRows)}\n※ ${datesNote}\n立即訂購: ${url}` +
     `${v1Text}\n\n${note}${checkedAtText}${manualText}`;
 
   return { subject, html, text };
