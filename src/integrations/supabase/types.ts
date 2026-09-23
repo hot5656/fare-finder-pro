@@ -64,6 +64,8 @@ export type Database = {
           destination: string
           display_name: string
           last_checked_at: string | null
+          last_offer_v1: Json | null
+          last_offer_v3: Json | null
           last_price: number | null
           last_price_airline: string | null
           last_price_currency: string | null
@@ -78,6 +80,8 @@ export type Database = {
           destination: string
           display_name: string
           last_checked_at?: string | null
+          last_offer_v1?: Json | null
+          last_offer_v3?: Json | null
           last_price?: number | null
           last_price_airline?: string | null
           last_price_currency?: string | null
@@ -92,6 +96,8 @@ export type Database = {
           destination?: string
           display_name?: string
           last_checked_at?: string | null
+          last_offer_v1?: Json | null
+          last_offer_v3?: Json | null
           last_price?: number | null
           last_price_airline?: string | null
           last_price_currency?: string | null

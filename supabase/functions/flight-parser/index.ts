@@ -1,6 +1,8 @@
-// flight-parser: scrapes each route's cheapest fare and hands matches off to
-// flight-notification. Triggered every 30 min by pg_cron (see the M1 skill
-// docs), or manually for testing.
+// flight-parser: fetches each route's cheapest fare and hands matches off to
+// flight-notification. Alerts trigger on Travelpayouts v3 prices_for_dates;
+// v1 prices/cheap is fetched alongside and only listed in the email.
+// Triggered every 30 min by pg_cron (see the M1 skill docs), or manually for
+// testing.
 //
 // Env vars required (set via `supabase secrets set`):
 //   TRAVELPAYOUTS_TOKEN   - Travelpayouts API token
@@ -26,13 +28,29 @@ const BATCH = 25;
 // renewal is treated as lapsed (ECPay retries failed charges over several days).
 const RENEWAL_GRACE_DAYS = 7;
 
+// One offer from either Travelpayouts endpoint, normalized. v3 fills every
+// field; v1 has no airports, transfers or link (those stay undefined).
 type Cheapest = {
+  source: "v3" | "v1";
   price: number;
   currency: string;
   airline: string;
-  depart_date: string;
-  return_date: string;
+  flight_number?: string;
+  depart_date: string; // departure_at, with the origin's UTC offset
+  return_date: string; // return_at, with the destination's UTC offset
+  origin_airport?: string;
+  destination_airport?: string;
+  transfers?: number | null;
+  return_transfers?: number | null;
+  duration?: number | null; // minutes, both legs
+  duration_to?: number | null; // minutes, outbound incl. layovers
+  duration_back?: number | null;
+  link?: string; // Aviasales path, e.g. "/search/TPE2910TYO02111?t=..."
 };
+
+type OfferPair = { twd: Cheapest | null; usd: Cheapest | null };
+
+const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
 
 type Route = {
   plan_name: string;
@@ -50,7 +68,55 @@ type Subscription = {
   target_price: number;
 };
 
-async function fetchCheapest(
+// v3 prices_for_dates: the alert trigger. one_way=false so it prices a round
+// trip like v1 does (v3 defaults to one-way).
+async function fetchCheapestV3(
+  origin: string,
+  destination: string,
+  month: string,
+  currency: string,
+): Promise<Cheapest | null> {
+  const q = new URLSearchParams({
+    origin,
+    destination,
+    departure_at: month,
+    one_way: "false",
+    sorting: "price",
+    limit: "5",
+    currency,
+    token: TRAVELPAYOUTS_TOKEN,
+  });
+  const res = await fetch(`https://api.travelpayouts.com/aviasales/v3/prices_for_dates?${q}`, {
+    headers: { "User-Agent": UA, Accept: "application/json" },
+  });
+  if (!res.ok) {
+    console.error(`travelpayouts v3 ${currency} ${origin}-${destination}: HTTP ${res.status}`);
+    return null;
+  }
+  const body = await res.json();
+  if (!body.success || !Array.isArray(body.data) || !body.data.length) return null;
+  const best = (body.data as any[]).reduce((a, b) => (a.price < b.price ? a : b));
+  return {
+    source: "v3",
+    price: best.price,
+    currency: currency.toUpperCase(),
+    airline: best.airline ?? "",
+    flight_number: best.flight_number != null ? String(best.flight_number) : undefined,
+    depart_date: best.departure_at ?? "",
+    return_date: best.return_at ?? "",
+    origin_airport: best.origin_airport,
+    destination_airport: best.destination_airport,
+    transfers: num(best.transfers),
+    return_transfers: num(best.return_transfers),
+    duration: num(best.duration),
+    duration_to: num(best.duration_to),
+    duration_back: num(best.duration_back),
+    link: typeof best.link === "string" ? best.link : undefined,
+  };
+}
+
+// v1 prices/cheap: the previous trigger, now fetched only to show alongside v3.
+async function fetchCheapestV1(
   origin: string,
   destination: string,
   month: string,
@@ -67,7 +133,7 @@ async function fetchCheapest(
     headers: { "User-Agent": UA, Accept: "application/json" },
   });
   if (!res.ok) {
-    console.error(`travelpayouts ${currency} ${origin}-${destination}: HTTP ${res.status}`);
+    console.error(`travelpayouts v1 ${currency} ${origin}-${destination}: HTTP ${res.status}`);
     return null;
   }
   const body = await res.json();
@@ -77,12 +143,25 @@ async function fetchCheapest(
   const best = offers.reduce((a, b) => (a.price < b.price ? a : b));
   // NOTE: the real keys are departure_at / return_at, not depart_date / return_date.
   return {
+    source: "v1",
     price: best.price,
     currency: currency.toUpperCase(),
-    airline: best.airline,
-    depart_date: best.departure_at,
-    return_date: best.return_at,
+    airline: best.airline ?? "",
+    flight_number: best.flight_number != null ? String(best.flight_number) : undefined,
+    depart_date: best.departure_at ?? "",
+    return_date: best.return_at ?? "",
+    duration: num(best.duration),
+    duration_to: num(best.duration_to),
+    duration_back: num(best.duration_back),
   };
+}
+
+// A failed or thrown fetch is logged and treated as "no offer".
+function safe(label: string, p: Promise<Cheapest | null>): Promise<Cheapest | null> {
+  return p.catch((e) => {
+    console.error(`${label} fare fetch failed`, e);
+    return null;
+  });
 }
 
 function nextMonth(): string {
@@ -166,26 +245,31 @@ Deno.serve(async (req) => {
     target_price: number;
     cheapest: Cheapest;
     cheapest_usd?: Cheapest | null;
+    compare_v1?: OfferPair | null;
     checked_at: string;
   }> = [];
 
   for (const route of (routes ?? []) as Route[]) {
-    const cheapest = await fetchCheapest(route.origin, route.destination, month, "TWD");
+    const { origin, destination } = route;
+    const [cheapest, cheapestUsd, v1Twd, v1Usd] = await Promise.all([
+      safe(`v3 TWD ${route.route}`, fetchCheapestV3(origin, destination, month, "TWD")),
+      safe(`v3 USD ${route.route}`, fetchCheapestV3(origin, destination, month, "USD")),
+      safe(`v1 TWD ${route.route}`, fetchCheapestV1(origin, destination, month, "TWD")),
+      safe(`v1 USD ${route.route}`, fetchCheapestV1(origin, destination, month, "USD")),
+    ]);
+    const compareV1: OfferPair = { twd: v1Twd, usd: v1Usd };
+    console.log(
+      `${route.route} ${month} v3 ${cheapest ? `${cheapest.price} TWD ${cheapest.airline}${cheapest.flight_number ?? ""} transfers=${cheapest.transfers ?? "?"}` : "none"}` +
+        ` | v1 ${v1Twd ? `${v1Twd.price} TWD ${v1Twd.airline}${v1Twd.flight_number ?? ""}` : "none"}`,
+    );
+    // v3 is the trigger; without a v3 TWD fare there is nothing to alert on.
     if (!cheapest) {
-      console.error(`skip ${route.route}: no TWD fare available`);
+      console.error(`skip ${route.route}: no v3 TWD fare available`);
       continue;
     }
-    console.log(`${route.route} ${month} cheapest ${cheapest.price} TWD`);
-
-    const cheapestUsd = await fetchCheapest(route.origin, route.destination, month, "USD").catch(
-      (e) => {
-        console.error(`USD fare fetch failed for ${route.route}`, e);
-        return null;
-      },
-    );
 
     // Also persisted so flight-admin-notify (a manual, non-live-refetch send) can
-    // build a real booking link and USD line from this cached row.
+    // render the same detailed email from this cached row.
     const checkedAt = new Date().toISOString();
     const { error: lastPriceError } = await admin
       .from("routes")
@@ -196,6 +280,8 @@ Deno.serve(async (req) => {
         last_price_airline: cheapest.airline,
         last_price_usd: cheapestUsd?.price ?? null,
         last_price_usd_currency: cheapestUsd?.currency ?? null,
+        last_offer_v3: { twd: cheapest, usd: cheapestUsd },
+        last_offer_v1: compareV1,
         last_checked_at: checkedAt,
       })
       .eq("plan_name", route.plan_name);
@@ -227,6 +313,7 @@ Deno.serve(async (req) => {
           target_price: sub.target_price,
           cheapest,
           cheapest_usd: cheapestUsd,
+          compare_v1: compareV1,
           checked_at: checkedAt,
         });
       }

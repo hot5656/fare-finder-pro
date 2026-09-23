@@ -84,21 +84,28 @@ Deno.serve(async (req) => {
     return json({ error: "subscription does not currently match", reason: "not_matching" }, 409);
   }
 
+  // Full offers cached by flight-parser ({ twd, usd } per source). Rows last
+  // written before those columns existed fall back to the flat last_price_* fields.
+  const v3 = route.last_offer_v3 as { twd: unknown; usd: unknown } | null;
+  const v1 = route.last_offer_v1 as { twd: unknown; usd: unknown } | null;
+
   const match = {
     user_id: sub.user_id,
     email: sub.email,
     route: sub.route,
     plan_name: sub.plan_name,
     target_price: sub.target_price,
-    cheapest: {
+    compare_v1: v1 ?? null,
+    cheapest: v3?.twd ?? {
       price: route.last_price,
       currency: route.last_price_currency ?? "TWD",
       airline: route.last_price_airline ?? "",
       depart_date: route.last_price_depart_date ?? "",
       return_date: "",
     },
-    cheapest_usd:
-      route.last_price_usd != null
+    cheapest_usd: v3
+      ? (v3.usd ?? null)
+      : route.last_price_usd != null
         ? {
             price: route.last_price_usd,
             currency: route.last_price_usd_currency ?? "USD",

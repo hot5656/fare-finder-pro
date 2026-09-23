@@ -294,6 +294,30 @@ driven by anything in our URL). The test row (`notification_history` price 4000,
 `id ed0900b6…`) was deleted afterward so it doesn't skew future dedup comparisons for
 that route.
 
+### M2 follow-up 5: v3 fare trigger + detailed flight info in alerts (2026-09-23 — deployed; v3 data verified)
+
+**Change:** `flight-parser` now triggers alerts on Travelpayouts
+`/aviasales/v3/prices_for_dates` (`one_way=false`, so round trips like v1) and fetches
+v1 `/v1/prices/cheap` alongside (TWD + USD each, 4 parallel calls per route). The email
+lists both: v3 (triggering) with airline name, flight number, per-leg departure/arrival
+(local time per city; arrival = departure + `duration_to`/`duration_back`), duration,
+direct/transfers, airports and v3's itinerary deep link; then v1 with a price
+difference line. Latest offers are cached in new `flight.routes.last_offer_v3` /
+`last_offer_v1` jsonb (`{ twd, usd }`, overwritten each run; migration
+`20260923100000`); `last_price*` now hold the v3 price. `flight-admin-notify` renders
+from those columns, falling back to `last_price*` for rows written before them.
+**Verified 2026-09-23 13:37Z** (migration applied + repaired, all three functions
+deployed, manual parser run): `last_offer_v3` / `last_offer_v1` populated for all three
+routes with the expected v3 fields (`flight_number` is a string, `link` a relative
+`/search/…` path). On this first run v1 and v3 returned the **same** cheapest fare on
+every route (same cache), so the comparison block mostly reads "與上方價格相同".
+v3's `duration` is not `duration_to + duration_back` (TPE-LON: 2860 vs 925 + 805), so
+the email sums the legs instead. The TPE-TYO v3 `link` token starts `GK…` while
+`airline` is `MM`: the deep link may open a slightly different itinerary than the one
+listed. Note that v1 was already returning `flight_number`/`duration*` (see
+`no_11_check_tickets_raw_data_2026-09.txt`); only transfers, airports and the link are
+v3-only.
+
 ## Project / environment facts (don't re-derive these)
 
 - **Shared multi-app Supabase project.** Other apps' migrations live in the
