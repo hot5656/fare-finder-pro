@@ -376,8 +376,10 @@ function renderEmail(
       <p style="font-size:13px;margin:8px 0 0;"><a href="${esc(v1Url)}" style="color:#7c3aed;">查看此航班日期的搜尋結果</a></p>`;
     v1Text = `\n\n對照：Aviasales 另一資料來源（v1）的最低價\n${rowsText(v1Rows)}\n  搜尋連結：${v1Url}`;
   } else if (match.compare_v1) {
-    v1Html = `<p style="font-size:13px;color:#888;margin-top:24px;">對照：v1 資料來源此次未回傳票價。</p>`;
-    v1Text = "\n\n對照：v1 資料來源此次未回傳票價。";
+    // Comparison is switched on but there is no v1 fare (v1 returned nothing, or
+    // nothing is cached yet). compare_v1 null/absent = switched off: no block.
+    v1Html = `<p style="font-size:13px;color:#888;margin-top:24px;">對照：v1 資料來源目前無資料。</p>`;
+    v1Text = "\n\n對照：v1 資料來源目前無資料。";
   }
 
   const note =

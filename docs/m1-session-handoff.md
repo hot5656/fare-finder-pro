@@ -318,6 +318,20 @@ listed. Note that v1 was already returning `flight_number`/`duration*` (see
 `no_11_check_tickets_raw_data_2026-09.txt`); only transfers, airports and the link are
 v3-only.
 
+### M2 follow-up 6: admin switch for the v1 comparison (2026-09-23)
+
+`flight.settings` (key/value jsonb; migration `20260923110000`) holds
+`v1_compare_enabled`, default `true` (a missing row also reads as on). Admins read it
+through RLS (`flight.is_admin()`); writes go only through the new
+`flight-admin-settings` Edge Function (admin JWT, checked against `flight.admins`,
+allowlisted keys and value types). `/admin` has a 設定 Settings switch.
+Off: `flight-parser` makes no v1 calls, writes `last_offer_v1 = null` and passes
+`compare_v1: null`, so the email has no v1 block. On but no v1 fare (v1 returned
+nothing, or nothing cached yet for a manual send): `compare_v1` is `{twd: null, …}`
+and the email shows 「對照：v1 資料來源目前無資料。」. `flight-admin-notify` reads the
+switch itself instead of trusting `last_offer_v1`, which may predate a flip. Alerts
+always trigger on v3 regardless.
+
 ## Project / environment facts (don't re-derive these)
 
 - **Shared multi-app Supabase project.** Other apps' migrations live in the

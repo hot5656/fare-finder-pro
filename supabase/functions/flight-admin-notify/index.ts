@@ -89,13 +89,23 @@ Deno.serve(async (req) => {
   const v3 = route.last_offer_v3 as { twd: unknown; usd: unknown } | null;
   const v1 = route.last_offer_v1 as { twd: unknown; usd: unknown } | null;
 
+  // Read the switch here too rather than trusting last_offer_v1: it can still
+  // hold data (or null) from a parser run made before the switch was flipped.
+  const { data: v1Setting } = await admin
+    .from("settings")
+    .select("value")
+    .eq("key", "v1_compare_enabled")
+    .maybeSingle();
+  const v1Enabled = v1Setting?.value !== false;
+
   const match = {
     user_id: sub.user_id,
     email: sub.email,
     route: sub.route,
     plan_name: sub.plan_name,
     target_price: sub.target_price,
-    compare_v1: v1 ?? null,
+    // null = switched off (no v1 block); an empty pair = on but nothing cached yet.
+    compare_v1: v1Enabled ? (v1 ?? { twd: null, usd: null }) : null,
     cheapest: v3?.twd ?? {
       price: route.last_price,
       currency: route.last_price_currency ?? "TWD",

@@ -1,6 +1,7 @@
 // flight-parser: fetches each route's cheapest fare and hands matches off to
 // flight-notification. Alerts trigger on Travelpayouts v3 prices_for_dates;
-// v1 prices/cheap is fetched alongside and only listed in the email.
+// v1 prices/cheap is fetched alongside and only listed in the email, unless an
+// admin switched that off (flight.settings v1_compare_enabled).
 // Triggered every 30 min by pg_cron (see the M1 skill docs), or manually for
 // testing.
 //
@@ -236,6 +237,16 @@ Deno.serve(async (req) => {
   }
   if (expiredRows.length) console.log(`expired ${expiredRows.length} subscription(s)`);
 
+  // Admin switch (/admin, flight.settings): off = don't poll v1 at all and leave
+  // it out of the email. A missing row or a failed read keeps it on.
+  const { data: v1Setting, error: settingError } = await admin
+    .from("settings")
+    .select("value")
+    .eq("key", "v1_compare_enabled")
+    .maybeSingle();
+  if (settingError) console.error("failed to read v1_compare_enabled", settingError);
+  const v1Enabled = v1Setting?.value !== false;
+
   const month = nextMonth();
   const matches: Array<{
     user_id: string;
@@ -254,13 +265,19 @@ Deno.serve(async (req) => {
     const [cheapest, cheapestUsd, v1Twd, v1Usd] = await Promise.all([
       safe(`v3 TWD ${route.route}`, fetchCheapestV3(origin, destination, month, "TWD")),
       safe(`v3 USD ${route.route}`, fetchCheapestV3(origin, destination, month, "USD")),
-      safe(`v1 TWD ${route.route}`, fetchCheapestV1(origin, destination, month, "TWD")),
-      safe(`v1 USD ${route.route}`, fetchCheapestV1(origin, destination, month, "USD")),
+      v1Enabled
+        ? safe(`v1 TWD ${route.route}`, fetchCheapestV1(origin, destination, month, "TWD"))
+        : null,
+      v1Enabled
+        ? safe(`v1 USD ${route.route}`, fetchCheapestV1(origin, destination, month, "USD"))
+        : null,
     ]);
-    const compareV1: OfferPair = { twd: v1Twd, usd: v1Usd };
+    // null = comparison switched off (no v1 block in the email); a pair with
+    // twd: null = switched on but v1 had nothing (email says so).
+    const compareV1: OfferPair | null = v1Enabled ? { twd: v1Twd, usd: v1Usd } : null;
     console.log(
       `${route.route} ${month} v3 ${cheapest ? `${cheapest.price} TWD ${cheapest.airline}${cheapest.flight_number ?? ""} transfers=${cheapest.transfers ?? "?"}` : "none"}` +
-        ` | v1 ${v1Twd ? `${v1Twd.price} TWD ${v1Twd.airline}${v1Twd.flight_number ?? ""}` : "none"}`,
+        ` | v1 ${!v1Enabled ? "off" : v1Twd ? `${v1Twd.price} TWD ${v1Twd.airline}${v1Twd.flight_number ?? ""}` : "none"}`,
     );
     // v3 is the trigger; without a v3 TWD fare there is nothing to alert on.
     if (!cheapest) {

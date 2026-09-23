@@ -3,6 +3,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { callFunction } from "@/integrations/supabase/call-function";
+import { Switch } from "@/components/ui/switch";
 import type { Tables } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
@@ -153,6 +154,8 @@ function AdminPage() {
               ))}
             </div>
 
+            <V1CompareSetting />
+
             {/* Routes / last price */}
             <section className="mt-10">
               <h2 className="text-lg font-bold">航線最新價格 Routes</h2>
@@ -298,6 +301,105 @@ function AdminPage() {
         )}
       </main>
     </div>
+  );
+}
+
+const SETTING_KEY = ["admin", "settings", "v1_compare_enabled"];
+type V1Setting = { enabled: boolean; updatedAt: string | null };
+
+// Admin switch for the Travelpayouts v1 comparison (flight.settings
+// v1_compare_enabled). Read through RLS (admins only); written through
+// flight-admin-settings. A missing row means on, matching flight-parser.
+function V1CompareSetting() {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const settingQuery = useQuery({
+    queryKey: SETTING_KEY,
+    queryFn: async (): Promise<V1Setting> => {
+      const { data, error } = await supabase
+        .from("settings")
+        .select("value, updated_at")
+        .eq("key", "v1_compare_enabled")
+        .maybeSingle();
+      if (error) throw error;
+      return { enabled: data?.value !== false, updatedAt: data?.updated_at ?? null };
+    },
+  });
+
+  // Optimistic: the switch flips on click and the save (1-3 s through the Edge
+  // Function) runs behind it; a failed save puts the previous value back.
+  const mutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await callFunction("flight-admin-settings", {
+        key: "v1_compare_enabled",
+        value: enabled,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "save failed");
+      return data as { value: unknown; updated_at: string };
+    },
+    onMutate: async (enabled) => {
+      setError(null);
+      await queryClient.cancelQueries({ queryKey: SETTING_KEY });
+      const previous = queryClient.getQueryData<V1Setting>(SETTING_KEY);
+      queryClient.setQueryData<V1Setting>(SETTING_KEY, {
+        enabled,
+        updatedAt: previous?.updatedAt ?? null,
+      });
+      return { previous };
+    },
+    onSuccess: (data) =>
+      queryClient.setQueryData<V1Setting>(SETTING_KEY, {
+        enabled: data.value !== false,
+        updatedAt: data.updated_at,
+      }),
+    onError: (e, _enabled, context) => {
+      if (context?.previous) queryClient.setQueryData(SETTING_KEY, context.previous);
+      setError(e instanceof Error ? e.message : "儲存失敗 Save failed");
+    },
+  });
+
+  const enabled = settingQuery.data?.enabled ?? true;
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-bold">設定 Settings</h2>
+      <div className="mt-4 flex items-start justify-between gap-4 rounded-2xl border border-border p-4">
+        <div>
+          <label htmlFor="v1-compare" className="text-sm font-medium">
+            v1 價格對照 / v1 price comparison
+          </label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            開啟：每次查價同時查 Travelpayouts v1，通知信列出 v1
+            對照（無資料時顯示「目前無資料」）。 關閉：不查 v1，通知信不顯示 v1 區塊。通知一律以 v3
+            價格觸發；自動查價於下次排程（最多 30 分鐘）套用，手動發送立即套用。
+          </p>
+          {settingQuery.data?.updatedAt && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              最後更新：{fmtDateTime(settingQuery.data.updatedAt)}
+            </p>
+          )}
+          {settingQuery.isError && (
+            <p className="mt-1 text-xs text-destructive">讀取設定失敗 Couldn't load setting</p>
+          )}
+          {mutation.isPending && (
+            <p className="mt-1 text-xs text-muted-foreground">儲存中… Saving…</p>
+          )}
+          {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+        </div>
+        <Switch
+          id="v1-compare"
+          checked={enabled}
+          disabled={settingQuery.isLoading}
+          // Ignore clicks while a save is in flight rather than greying the switch
+          // out; two overlapping saves could land out of order.
+          onCheckedChange={(checked) => {
+            if (!mutation.isPending) mutation.mutate(checked);
+          }}
+        />
+      </div>
+    </section>
   );
 }
 

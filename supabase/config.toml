@@ -45,6 +45,13 @@ verify_jwt = true
 import_map = "./functions/flight-admin-notify/deno.json"
 entrypoint = "./functions/flight-admin-notify/index.ts"
 
+# Admin: called by an admin user with their own JWT; checked against flight.admins inside.
+[functions.flight-admin-settings]
+enabled = true
+verify_jwt = true
+import_map = "./functions/flight-admin-settings/deno.json"
+entrypoint = "./functions/flight-admin-settings/index.ts"
+
 # M2: service-role bearer only (checked inside the function).
 [functions.flight-status-notification]
 enabled = true
