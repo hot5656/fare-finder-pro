@@ -1,0 +1,125 @@
+ ▐▛███▛█   Claude Code v2.1.280
+▝▜██████▀  Opus 5.5 · Claude Pro
+  ▝▝ ▝▝    ~/work/claude/fare-finder-pro
+
+  Opus 5.5 is now your default model and it draws down usage faster than Sonnet 5. Switch anytime with /model.
+
+❯ ask only: can admin set 使用綠界付款 or 不需付款?                             
+
+  Searched for 2 patterns, ran 3 shell commands (ctrl+o to expand)
+
+⏺ No, an admin can't switch between 使用綠界付款 and 不需付款 today. Every
+  subscription has to be paid through ECPay (綠界).
+
+  - The only admin setting is the v1 fare comparison. The /admin page's 設定
+    section has one switch, v1_compare_enabled. flight-admin-settings rejects
+    any other key with "unknown setting"
+    (supabase/functions/flight-admin-settings/index.ts:13).
+  - Every subscription goes through ECPay. flight-subscribe always creates a
+    pending_payment row and returns the ECPay checkout form. Only the verified
+    ECPay callbacks can set a row to active.
+  - The paywall is always on. flight-parser only sends fare alerts to paying
+    subscribers (active, or cancelled but still inside the paid period).
+
+  It could be added later using the existing flight.settings table (for example
+  a payment_required key). flight-subscribe would then need a free path that
+  sets the row to active without ECPay, and the free and paid states would have
+  to be kept apart in the paywall and lifecycle emails. Nothing like that exists
+  in the code yet.
+
+✻ Brewed for 24s · done 11:14 PM
+
+❯ ask only: can add a payment_required switch to admin settings?                
+
+⏺ Yes, the switch can be added. The on/off part is simple, because it would work
+  like the existing v1 comparison switch. Most of the work is giving free
+  subscriptions a way to exist outside ECPay.
+
+  The switch itself (small):
+  - Admin setting: add payment_required: "boolean" to the list of allowed keys
+    in flight-admin-settings.
+  - Default: add a migration that inserts a payment_required = true row, and
+    treat a missing row as "on".
+  - UI: add a second switch in the 設定 section on /admin.
+
+  Making "off" actually work (the real change):
+  - flight-subscribe: when the switch is off, set the row to active directly
+    instead of returning the ECPay form. It would return JSON, so the
+    dashboard's existing Content-Type branch mostly handles it.
+  - Mark free rows: add something like a payment_method = 'free' column, so paid
+    and free subscriptions can be told apart.
+  - current_period_end: flight-parser expires active rows 7 days after their
+    period end. Free rows need a null or far-future value, and the expiry logic
+    has to accept that.
+  - Cancel: ECPay would answer 90100150 (not found) for a free row, which
+    already cancels locally. Skipping the ECPay call for free rows would be
+    cleaner.
+  - Emails: skip or reword the welcome, renewed and payment-failed emails for
+    free rows.
+  - Dashboard text: hide the NT$300/month wording while the switch is off.
+
+  Decision needed from you: when the switch goes back on, what happens to
+  existing free subscribers? They could keep free alerts until they cancel,
+  expire straight away, or be asked to pay.
+
+  It's roughly one migration, three to four Edge Function edits and two
+  front-end files. Deploying the functions and applying the migration would be
+  copy-paste commands for you to run.
+
+✻ Churned for 9s · done 11:16 PM
+
+❯ ask only: disable 付款, 訂閱期為一個月 到期自動取消, 若取消馬上生效           
+  是否可行？                                                                    
+
+⏺ 可行，而且大部分沿用現有的訂閱流程，只是免費訂閱要有自己的規則。
+
+  1. 關閉付款（開關關閉時）
+  - flight-subscribe 不回傳綠界表單，直接寫入 active，並設定 current_period_end 
+    = now() + 1 個月。
+  - 需要標記這是免費訂閱，例如加一個 payment_method = 'free'
+    欄位，因為後面兩條規則都要靠它分辨。
+
+  2. 一個月到期自動取消
+  - 現在已經有到期機制：flight-parser 每 30 分鐘會先把逾期的訂閱轉成 expired
+    並寄到期信。
+  - 差別在寬限期。付費的 active 目前是到期後再等 7
+    天（RENEWAL_GRACE_DAYS），因為要等綠界續扣。免費訂閱沒有續扣，寬限期要設成
+    0，所以到期後最多 30 分鐘內失效。
+  - 到期信（expired）現在的文案應該是寫給付費用戶的，免費版要改寫，例如「訂閱期
+    已結束，可重新訂閱」。
+
+  3. 取消立即生效
+  - 付費訂閱取消後，服務會保留到
+    current_period_end。免費訂閱則改成取消時直接設為 expired，或把
+    current_period_end 改成 now。
+  - 這樣下一輪查價就不會再寄通知，因為 paywall 只寄給 active，以及還在付費期內的
+    cancelled。
+  - 免費訂閱要跳過呼叫綠界 CreditCardPeriodAction。
+
+  需要您決定的事
+  - 到期後能不能無限次重新訂閱？現在的流程允許從 expired
+    重新訂閱，所以預設就是可以無限續，每次一個月。
+  - 開關切回「需要付款」時，現有的免費訂閱是保留到到期，還是立即失效？
+
+  預估改動：一個
+  migration（新欄位加上設定的預設值）、flight-subscribe、flight-cancel-subscript
+  ion、flight-parser（到期規則）、flight-status-notification（信件文案），再加上
+  /admin 開關和 dashboard 文字兩個前端檔案。
+
+✻ Sautéed for 12s · done 11:19 PM
+
+❯ 紀錄 only: 可無限重新訂閱，切回付款時免費訂閱保留到到期                       
+
+  Ran 1 shell command, wrote 1 memory (ctrl+o to expand)
+
+⏺ 已記錄在我的 memory（free-mode-decisions.md），之後實作時會直接照這些規則做：
+
+  - 免費訂閱可以無限次重新訂閱，每次一個月。
+  - 開關切回「需要付款」時，現有的免費訂閱保留到各自的到期日。
+
+  設計規則也一起記下了：免費期一個月、到期不留寬限期、取消立即生效。
+
+  程式碼和 repo 都沒有改。如果要讓其他人或之後的 session
+  也看得到，我可以把它加進 docs/m1-session-handoff.md 的 backlog。
+
+✻ Worked for 15s · done 11:22 PM
