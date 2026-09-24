@@ -82,6 +82,18 @@ WHERE tgrelid = 'auth.users'::regclass AND NOT tgisinternal;
 
 三種都合法，因為都是「透過某個 app 自己的流程、且由使用者本人或管理員明確採取了一個動作才加入」，跟登入頁的隱含自動補標記（上面明文禁止的作法）性質不同。
 
+## 驗證信的寄件識別：每個 app 在 redirect_to 帶 `?app=`
+
+Supabase Auth 的 Send Email hook 整個 project 只能設一個，所有 app 的驗證信/重設信都經過同一支 `send-email`（本 repo 的 `supabase/functions/send-email/index.ts`）。它依下列順序決定寄件人、標題前綴與信中產品名稱：
+
+1. `redirect_to` 網址上的 `app` 查詢參數（例：``emailRedirectTo: `${origin}/?app=${APP_NAME}` ``、``resetPasswordForEmail(..., { redirectTo: `${origin}/auth/reset?app=${APP_NAME}` }) ``）。
+2. `user.user_metadata.app`（最後一次宣告的 app；共用帳號時可能不是這次觸發的 app）。
+3. 都對不到 → 通用的 "System Notification"。
+
+不看網域，所以換網域、Vercel preview、本機 localhost 都不影響。`redirect_to` 是使用者端可控的值，hook 只接受 `APPS` 白名單內的名稱。
+
+**新 app 要做兩件事**：前端所有會寄信的呼叫都帶 `?app=<APP_NAME>`；並在 `send-email` 的 `APPS` 加一筆。**只保留一份 `send-email` 程式碼**——兩個 repo 各自部署同一個 slug，後部署的會蓋掉前一個。
+
 ## 不要動的東西
 
 `public.handle_new_user()` / `public.profiles`（`on_auth_user_created` trigger）是另一個既有 app（`project-management`）的員工資料表，**不要去編輯它的程式碼**。

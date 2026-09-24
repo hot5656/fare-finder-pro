@@ -64,7 +64,8 @@ function AuthPage() {
       email,
       password,
       options: {
-        emailRedirectTo: window.location.origin,
+        // ?app= lets the shared send-email hook pick this app's sender and subject.
+        emailRedirectTo: `${window.location.origin}/?app=${APP_NAME}`,
         data: { app: APP_NAME },
       },
     });
@@ -97,7 +98,7 @@ function AuthPage() {
       // Password didn't match the existing account — only a click on the
       // emailed link can change it, never an unauthenticated guess.
       await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset`,
+        redirectTo: `${window.location.origin}/auth/reset?app=${APP_NAME}`,
       });
       setLoading(false);
       setNotice(

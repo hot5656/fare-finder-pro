@@ -77,5 +77,5 @@ Verification touches production data, so prefer rollback-only tests (a `DO` bloc
 
 - **Lovable sync** (`AGENTS.md`): never rewrite published git history (no force-push, rebase, amend or squash of pushed commits), and keep the pushed branch in a working state.
 - Test against `http://localhost:8080`; the Vercel site `fare-finder-pro.vercel.app` is not the final code, so don't test against or deploy to it unless asked. `/deploy_vercel` is the project's deploy command and confirms preview vs production first.
-- Supabase Auth Redirect URLs allow the Vercel domain, Vercel preview wildcard and `http://localhost:8080/**`; sign-up passes `emailRedirectTo: window.location.origin`.
+- Supabase Auth Redirect URLs allow the Vercel domain, Vercel preview wildcard and `http://localhost:8080/**`; sign-up passes `emailRedirectTo: ${origin}/?app=${APP_NAME}` (and password reset `/auth/reset?app=…`). The `?app=` is how the project-wide `send-email` hook picks each app's sender/subject (its `APPS` whitelist, falling back to `user_metadata.app`, then a generic identity); keep it on every auth-mail call.
 - Root-level `no_*_run_*.txt` files are exported session transcripts, not code.

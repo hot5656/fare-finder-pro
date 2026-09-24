@@ -129,9 +129,9 @@ Vercel Dashboard → 專案 → **Settings** → **Environment Variables**，把
 
 `src/routes/auth/index.tsx` 裡呼叫 `signUp()` 時：
 ```ts
-options: { emailRedirectTo: window.location.origin }
+options: { emailRedirectTo: `${window.location.origin}/?app=${APP_NAME}` }
 ```
-`window.location.origin` 是「使用者按下註冊那一刻，瀏覽器網址列的 origin」——不是寫死的，是動態抓的。這個值會直接塞進 Supabase 產生的驗證信連結（`redirect_to` 參數）裡。
+`window.location.origin` 是「使用者按下註冊那一刻，瀏覽器網址列的 origin」——不是寫死的，是動態抓的。這個值會直接塞進 Supabase 產生的驗證信連結（`redirect_to` 參數）裡。後面的 `?app=` 給共用的 `send-email` hook 判斷是哪個 app 寄的信（見 `docs/shared-supabase-auth.md`），不影響導向。
 
 Supabase 收到這個值後只做一件事：**比對白名單**：
 
@@ -356,8 +356,9 @@ Auth 的寄信動作，改成呼叫 Resend 的 API（不是走 SMTP 協定）寄
      ```
 
 6. **記得改寄件人網域**
-   `supabase/functions/send-email/index.ts` 裡的 `SENDER` 常數目前是佔位符
-   （`noreply@yourdomain.com`），要換成第 2 步在 Resend 驗證過的實際網域。
+   `supabase/functions/send-email/index.ts` 裡 `APPS` 與 `DEFAULT_APP` 的 `sender`
+   要用第 2 步在 Resend 驗證過的實際網域。每個 app 一筆（寄件人、產品名稱、標題前綴），
+   依 `redirect_to` 的 `?app=` 選用，見 `docs/shared-supabase-auth.md`。
 
 7. **測試**
    - 在 app 用新 email 註冊，確認收到信、Resend Dashboard 的 Logs 有出現這筆寄送紀錄
