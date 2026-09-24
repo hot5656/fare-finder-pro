@@ -1,0 +1,1516 @@
+ ▐▛███▛█   Claude Code v2.1.281
+▝▜██████▀  Opus 5.5 · Claude Pro
+  ▝▝ ▝▝    D:\work\run\claude\fare-finder-pro
+
+⚠ Your login expires in 1 day · run /login to renew
+
+  Get to finished work sooner with Opus 5.5. Switch anytime with /model.
+
+❯ read @no_13_payment_1_2026-09-23.txt                                          
+  ⎿  Read no_13_payment_1_2026-09-23.txt (125 lines)
+
+  Listed 1 directory (ctrl+o to expand)
+
+● That file is the exported transcript from the 2026-09-23 session. It only
+  contains questions and answers. No code or repo files were changed in it.
+
+  What was asked and answered:
+  1. Can an admin choose between 使用綠界付款 and 不需付款? Not today. The only
+     admin setting is v1_compare_enabled. Every subscription goes through ECPay,
+     and the paywall is always on.
+  2. Can a payment_required switch be added? Yes. The switch itself is small: a
+     new allowed key in flight-admin-settings, a default row set to on, and a
+     second switch on /admin. Most of the work is letting free subscriptions
+     skip ECPay, which touches flight-subscribe, needs a payment_method = 'free'
+     column, and affects current_period_end, cancel, the emails and the
+     dashboard text.
+  3. Can there be free mode with one-month subscriptions that expire 
+     automatically and cancel immediately? Yes:
+     - When payment is off, flight-subscribe sets the row to active directly
+       with current_period_end = now() + 1 month.
+     - Free rows expire with no grace period, so within about 30 minutes of the
+       end date instead of 7 days (RENEWAL_GRACE_DAYS).
+     - Cancelling a free row sets it to expired straight away and skips ECPay
+       CreditCardPeriodAction.
+     - The expired email wording needs a free-mode version.
+     - The work is one migration, four Edge Functions (flight-subscribe,
+       flight-cancel-subscription, flight-parser, flight-status-notification)
+       and two front-end files.
+  4. Decisions you made:
+     - Free subscribers can re-subscribe as many times as they like, one month
+       each time.
+     - When the switch goes back to requiring payment, existing free
+       subscriptions keep running until their own end date.
+
+  One gap: that session saved your decisions to memory as
+  free-mode-decisions.md, but it ran on another machine
+  (~/work/claude/fare-finder-pro). This project's memory folder here is empty,
+  so the decisions aren't recorded on this machine. I can save them here, or add
+  them to the backlog in docs/m1-session-handoff.md so every session and
+  machine can see them. Which would you like?
+
+✻ Worked for 18s · done 9:48 AM
+
+❯ do admin support set 使用綠界付款 or 不需付款, 依載入文件所述, 請先列出       
+  plan(中文), 我確認後再執行                                                    
+
+  Searched for 1 pattern, read 1 file, ran 4 shell commands (ctrl+o to expand)
+
+● 讀完相關程式碼了，以下是計畫，還沒改任何檔案。
+
+  計畫：admin 切換「使用綠界付款／不需付款」
+
+  目前狀況： 不支援。flight-admin-settings 只接受 v1_compare_enabled 這個設定。
+
+  依照上次 session 的決定：
+  - 免費訂閱一期一個月，到期不留寬限期。
+  - 免費訂閱取消後立即生效。
+  - 免費訂閱可以無限次重新訂閱。
+  - 開關切回「需要付款」時，現有的免費訂閱保留到各自的到期日。
+
+  1. Migration（新檔 
+  supabase/migrations/20260924100000_flight_payment_required.sql）
+
+  - flight.subscriptions 新增欄位 payment_method text not null default 
+    'ecpay'，值只能是 'ecpay' 或 'free'。現有的資料列都會是 ecpay。
+  - 在 flight.settings 寫入一筆 payment_required = 
+    true。沒有這筆資料時一律當成「需要付款」，比較安全。
+  - 新增一條 RLS policy：登入使用者可以讀 key = 'payment_required'
+    這一筆。dashboard 要靠它決定顯示文字，其他設定仍然只有 admin 能讀。
+
+  2. Edge Functions
+
+  - flight-admin-settings：允許的設定加上 payment_required: "boolean"。
+  - flight-subscribe：
+    - 如果沒有訂閱，或狀態是 expired／pending_payment，就讀 payment_required：
+      - 開啟（需要付款）：照現在的流程，回傳綠界表單。
+      - 關閉（不需付款）：直接寫入 active，payment_method = 
+        'free'，merchant_trade_no = null，current_period_end = 現在 + 1 
+        個月。回傳 JSON，並寄 welcome 信，帶上 free: true。
+    - 已經是 active 或 cancelled 的訂閱，照舊只更新目標價。
+  - flight-cancel-subscription：
+    - 免費訂閱：不呼叫綠界，直接改成 expired，current_period_end = 
+      現在，並寄免費版的取消信。
+    - 付費訂閱：流程不變。
+  - flight-parser：到期處理多一條規則：active、payment_method = 
+    'free'、current_period_end 已經過了，就改成 expired，原因是
+    free_period_ended。原本「active 過期 7 天才失效」的規則改成只套用在 ecpay。
+    這條規則不看開關，所以開關切回付款後，免費訂閱還是會照各自的到期日自然結束。
+  - flight-status-notification：welcome、cancel、expired
+    信件加上免費版文案，例如「免費試用一個月」、「已取消，通知即刻停止」、「免費
+    期已結束，可重新訂閱」。
+
+  3. 前端
+
+  - /admin（src/routes/_authenticated/admin/index.tsx）：
+    - 在「設定」區新增第二個開關：「使用綠界付款（關閉＝不需付款）」。
+    - 收入統計只計算 payment_method = 'ecpay' 的 active 訂閱，免費訂閱不算進 NT$
+      收入。
+  - dashboard.tsx：
+    - 讀取 payment_required。關閉時，按鈕和說明改成免費版文字，例如「開始免費追
+      蹤（一個月）」。
+    - 免費訂閱的狀態顯示「免費 · 有效至 X」。
+    - 取消確認文字改成「取消後立即停止通知」。
+    - flight-subscribe 回傳 JSON 時照現有邏輯重新整理頁面。
+
+  4. 文件
+
+  - 更新 CLAUDE.md 和
+    docs/m1-session-handoff.md，寫入這個開關和免費訂閱的生命週期。
+
+  5. 驗證
+
+  - 前端：執行 npx tsc --noEmit -p . 和 npm run lint。
+  - 部署：migration 和 5 個 functions 的部署指令我會整理成一段給你用 ! 執行（db 
+    query 之後接 migration repair，不使用 db push）。
+  - 本機 localhost:8080 實測：
+    - 開關關閉 → 訂閱馬上變成 active 的免費訂閱 → 取消後立即變成 expired。
+    - 開關打開 → 照常進入綠界付款。
+    - 把免費訂閱的 current_period_end 往前調，跑一次 parser，確認訂閱改成
+      expired 並寄出到期信。測完後還原測試資料。
+
+  有一點需要你確認： 開關切回「需要付款」時，免費訂閱的使用者如果在到期前更新目
+  標價，我計畫照舊直接更新，不要求付款，因為訂閱保留到到期。這樣可以嗎？
+
+  確認後我就開始實作。
+
+✻ Churned for 42s · done 9:53 AM
+
+❯ 可以，照計畫執行                                                              
+
+  Searched for 1 pattern, read 2 files (ctrl+o to expand)
+
+● Updated plan
+  ⎿  /plan to preview
+
+● User approved Claude's plan
+  ⎿  Plan saved to: C:\Users\RobertKao\.claude\plans\glittery-jumping-falcon.md 
+     · /plan to edit
+     計畫：admin 切換「使用綠界付款／不需付款」
+
+     Context
+
+     現在每個訂閱都一定要經過 ECPay 付款，admin 無法開放免費使用。使用者要在
+     /admin 加一個開關，關閉時不需付款即可訂閱。已確認的規則：
+     - 免費訂閱一期一個月，到期立即失效（不留寬限期），到期後可無限次重新訂閱。
+     - 免費訂閱取消後立即生效。
+     - 開關切回「需要付款」時，現有免費訂閱保留到各自的到期日；到期前更新目標價
+       照舊直接更新，不要求付款。
+
+     1. Migration — 
+     supabase/migrations/20260924100000_flight_payment_required.sql（新檔）
+
+     - alter table flight.subscriptions add column payment_method text not null 
+       default 'ecpay' check (payment_method in ('ecpay','free'))。
+     - insert into flight.settings (key, value) values ('payment_required', 
+       'true') on conflict do nothing；沒有資料列時一律當成 true。
+     - 新增 policy "users can read payment_required"：for select to 
+       authenticated using (key = 'payment_required')（和現有的 admin policy 以
+       OR 合併）。
+     - 手動在 src/integrations/supabase/types.ts 的 subscriptions
+       Row/Insert/Update 加上 payment_method（或用 Supabase MCP
+       generate_typescript_types 產生後只取這個欄位）。
+
+     2. Edge Functions
+
+     - flight-admin-settings/index.ts：SETTINGS 加上 payment_required: 
+       "boolean"。
+     - _shared/ecpay.ts：sendStatusEmail payload 型別加上 free?: boolean，reason
+       加上 "free_period_ended"。
+     - flight-subscribe/index.ts：
+       - 新訂閱、expired 或 pending_payment 時，讀 settings.payment_required（值
+         === false 才算關閉）。
+       - 關閉時：寫入 active、payment_method='free'、merchant_trade_no=null、pay
+         ment_failed_at=null、current_period_end = now + 1 month（沿用 cancel
+         函式的 setMonth(+1) 寫法）。接著 sendStatusEmail({event_type:"welcome",
+         free:true, ...})，回傳 JSON {status:"active", free:true, 
+         current_period_end}。
+       - 開啟時：照現在的流程（寫入 pending_payment 時也把 payment_method 設回
+         'ecpay'）。
+       - active 或 cancelled 時照舊只更新目標價。
+       - 更新檔頭註解（原本寫「只有 callbacks 會寫
+         active」，要改成加上免費模式的例外）。
+     - flight-cancel-subscription/index.ts：select 加上 payment_method。如果是
+       free 且 active，不呼叫 ECPay，直接更新成 expired 並把 current_period_end
+       設成 now，然後寄 cancel 信（free:true），回傳
+       {status:"expired"}。付費訂閱流程不變。
+     - flight-parser/index.ts（到期區塊，約第 191–238 行）：
+       - 新增第 3 條到期規則：active、payment_method='free'、current_period_end 
+         < now → 改成 expired，reason free_period_ended。
+       - 第 2 條規則（到期 7 天寬限期）加上 .eq("payment_method","ecpay")。
+       - 到期信 payload 帶上 reason。
+     - flight-status-notification/index.ts：Payload 加上 free 和新的
+       reason，加入免費版文案：
+       - welcome：「免費訂閱成功，服務期間至
+         X，到期後可隨時重新訂閱」，沒有扣款字樣。
+       - cancel（free）：「已取消，降價通知即刻停止」。
+       - expired（free_period_ended）：「一個月免費期已結束，可重新訂閱」加上重
+         新訂閱連結。
+     - ECPay callbacks（return/period/result）不需要改：免費訂閱沒有 trade
+       no，callbacks 不會碰到它。
+
+     3. 前端
+
+     - src/routes/_authenticated/admin/index.tsx：
+       - 沿用 v1_compare_enabled 的 Switch 寫法（第 307–400
+         行），加入第二個開關「使用綠界付款（關閉＝不需付款）」，key 是
+         payment_required，沒有資料時預設 on。可考慮把現有元件抽成接受 key 和
+         label 的參數化元件，兩個開關共用。
+       - 收入 StatCard 改成只計算 subscription_status==='active' && 
+         payment_method==='ecpay' 的訂閱。
+       - 訂閱列表加上一欄顯示 付費／免費。
+     - src/routes/_authenticated/dashboard.tsx：
+       - DashboardPage 查詢 settings.payment_required（maybeSingle，沒有資料時為
+         true），當作 paymentRequired 傳給 PlanCard。
+       - PlanCard 裡：
+         - badge：免費的 active 訂閱顯示「免費 · 有效至 X」。
+         - actionLabel：沒有訂閱或已 expired，且不需付款時，顯示「開始免費追蹤（
+           一個月）」和「免費重新訂閱」。
+         - 取消確認文字：免費訂閱顯示「取消後立即停止通知」，付費訂閱維持原文字
+           。
+         - JSON 回應照現有邏輯呼叫 onSubscribed()。
+
+     4. 文件
+
+     - CLAUDE.md 的後端架構加上 payment_required
+       開關和免費訂閱生命週期（active(free) → expired，沒有寬限期）。
+     - docs/m1-session-handoff.md 記錄已部署內容和待驗證項目。
+     - supabase/migrations/20260923110000_flight_settings.sql
+       不改（新設定的註解寫在新 migration）。
+
+     5. 驗證
+
+     1. 在本機執行 npx tsc --noEmit -p . 和 npm run lint。
+     2. 產生一段給使用者用 ! 執行的指令：
+        - supabase db query --linked --file 
+          supabase/migrations/20260924100000_flight_payment_required.sql
+        - supabase migration repair --status applied 20260924100000
+        - supabase functions deploy <fn> --use-api，對象是
+          flight-admin-settings、flight-subscribe、flight-cancel-subscription、f
+          light-parser、flight-status-notification（都是 verify_jwt=true
+          的函式，不加 --no-verify-jwt）。
+        - 之後查 supabase_migrations.schema_migrations，並用 functions list 
+          --output json 比對 ezbr_sha256 和 updated_at。
+     3. 在 http://localhost:8080 實測：
+        - /admin 關閉付款 → dashboard 顯示免費文字 → 訂閱後直接變成 active(free)
+          並收到 welcome 信 → 取消後立即變成 expired 並收到 cancel 信 →
+          重新訂閱成功。
+        - 用 SQL 把一筆免費訂閱的 current_period_end 調到過去 → 以 net.http_post
+          跑 parser（timeout 60000）→ 確認變成 expired 並寄出到期信。
+        - 開啟付款 → 訂閱時跳出 ECPay 表單（stage）；現有免費訂閱仍為
+          active，可以更新目標價。
+        - 用 MCP query_logs 查看函式 log。
+     4. 清理測試資料，並把開關恢復成 on（需要付款）。
+
+● Starting with the migration.
+
+● Write(supabase\migrations\20260924100000_flight_payment_required.sql)
+  ⎿  Wrote 29 lines to
+     supabase\migrations\20260924100000_flight_payment_required.sql
+       1 -- Admin switch: 使用綠界付款 (payment_required = true, the defa
+       2 --
+       3 -- payment_required (boolean, default true): when an admin turns
+       4 -- /admin, flight-subscribe activates new subscriptions straight
+          away as free
+         sing row reads
+       6 -- as true, so the paywall fails closed.
+       8 -- Free rows (payment_method = 'free'):
+       9 --   - current_period_end = subscribe time + 1 month, no renewal
+         ay grace)
+     … +28 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Bash(sed -i '142s/.*/&\n          payment_method: string/; '
+      src/integrations/supabase/types.ts && sed -i '159s/.*/&\n
+      payment_method?: string/' src/integra…)
+  ⎿        subscriptions: {
+             Row: {
+               created_at: string
+     … +46 lines (ctrl+o to expand)
+  ⎿  Updated src\integrations\supabase\types.ts (+3 -0)
+      140            id: string
+      141            merchant_trade_no: string | null
+      142            payment_failed_at: string | null
+      143 +          payment_method: string                              
+      144            plan_name: string
+      145            route: string
+      146            subscription_status: string
+     ...
+      157            id?: string
+      158            merchant_trade_no?: string | null
+      159            payment_failed_at?: string | null
+      160 +          payment_method?: string                             
+      161            plan_name: string
+      162            route: string
+      163            subscription_status?: string
+     ...
+      174            id?: string
+      175            merchant_trade_no?: string | null
+      176            payment_failed_at?: string | null
+      177 +          payment_method?: string                             
+      178            plan_name?: string
+      179            route?: string
+      180            subscription_status?: string
+
+● Now the Edge Functions.
+
+● Bash(sed -i 's/^  v1_compare_enabled: "boolean",$/  v1_compare_enabled:
+      "boolean",\n  payment_required: "boolean",/'
+      supabase/functions/flight-admin-settings/index.t…)
+  ⎿  14:const SETTINGS: Record<string, "boolean"> = {
+     15:  v1_compare_enabled: "boolean",
+     16:  payment_required: "boolean",
+  ⎿  Updated supabase\functions\flight-admin-settings\index.ts (+1 -0)
+      13  // key -> typeof its value
+      14  const SETTINGS: Record<string, "boolean"> = {
+      15    v1_compare_enabled: "boolean",
+      16 +  payment_required: "boolean",                                 
+      17  };
+      18  
+      19  const CORS = {
+
+● Update(supabase\functions\_shared\ecpay.ts)
+  ⎿  Added 3 lines, removed 1 line
+      159    route: string;
+      160    current_period_end?: string | null;
+      161    // "expired" only: why the service ended.
+      162 -  reason?: "period_ended" | "payment_lapsed";                 
+      162 +  reason?: "period_ended" | "payment_lapsed" | "free_period_en
+          +ded";                                                         
+      163 +  // "welcome" / "cancel": a free (payment_required off) subsc
+          +ription, no ECPay.                                            
+      164 +  free?: boolean;                                             
+      165    // "renewed" only: what was charged, and which charge it was
+            (1 = first).
+      166    amount?: number;
+      167    charge_no?: number;
+
+● Update(supabase\functions\flight-subscribe\index.ts)
+  ⎿  Added 15 lines, removed 4 lines
+       6  //
+       7  //   no row / expired / pending_payment -> row = pending_paymen
+          t + fresh
+       8  //       merchant_trade_no, respond text/html: an auto-submit f
+          orm to ECPay.
+       9 +//       Unless an admin switched payment off (flight.settings 
+      10 +//       payment_required = false): then row = active, payment_
+         +method 'free',                                                 
+      11 +//       one month long, respond application/json.             
+      12  //   active / cancelled (in grace), target_price change only ->
+           plain update,
+      10 -//       respond application/json, no new payment.             
+      13 +//       respond application/json, no new payment. This include
+         +s free rows                                                    
+      14 +//       after payment is switched back on: they keep running u
+         +ntil they end.                                                 
+      15  //
+      12 -// This function only ever writes pending_payment (or a target_
+         -price on an                                                    
+      13 -// already-paid row). Only the verified ECPay callbacks write `
+         -active`.                                                       
+      16 +// For paid rows this function only ever writes pending_payment
+         + (or a                                                         
+      17 +// target_price on an already-paid row); only the verified ECPa
+         +y callbacks                                                    
+      18 +// write `active` on those. The free path is the one exception.
+      19  
+      20  import { createClient } from "https://esm.sh/@supabase/supabase
+          -js@2";
+      16 -import { allowedOrigin, buildCheckoutForm, ECPAY_AMOUNT, newTra
+         -deNo } from "../_shared/ecpay.ts";                             
+      21 +import {                                                       
+      22 +  allowedOrigin,                                               
+      23 +  buildCheckoutForm,                                           
+      24 +  ECPAY_AMOUNT,                                                
+      25 +  newTradeNo,                                                  
+      26 +  sendStatusEmail,                                             
+      27 +} from "../_shared/ecpay.ts";                                  
+      28  
+      29  const SUPABASE_URL = Deno.env.get("SUPABASE_URL") as string;
+      30  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVIC
+          E_ROLE_KEY") as string;
+
+● Update(supabase\functions\flight-subscribe\index.ts)
+  ⎿  Added 44 lines
+      106      return json({ status: existing.subscription_status, target
+           _price: targetPrice });
+      107    }
+      108  
+      109 +  // Admin switch (/admin, flight.settings): only an explicit 
+          +false turns                                                   
+      110 +  // payment off; a missing row or a failed read keeps the pay
+          +wall on.                                                      
+      111 +  const { data: setting, error: settingError } = await admin  
+      112 +    .from("settings")                                         
+      113 +    .select("value")                                          
+      114 +    .eq("key", "payment_required")                            
+      115 +    .maybeSingle();                                           
+      116 +  if (settingError) console.error("failed to read payment_requ
+          +ired", settingError);                                         
+      117 +  if (setting?.value === false) {                             
+      118 +    const end = new Date();                                   
+      119 +    end.setMonth(end.getMonth() + 1);                         
+      120 +    const periodEnd = end.toISOString();                      
+      121 +    const freeRow = {                                         
+      122 +      user_id: user.id,                                       
+      123 +      email: user.email,                                      
+      124 +      plan_name: plan.plan_name,                              
+      125 +      route: plan.route,                                      
+      126 +      target_price: targetPrice,                              
+      127 +      currency: "TWD",                                        
+      128 +      subscription_status: "active",                          
+      129 +      payment_method: "free",                                 
+      130 +      merchant_trade_no: null,                                
+      131 +      current_period_end: periodEnd,                          
+      132 +      payment_failed_at: null,                                
+      133 +      total_success_times: null,                              
+      134 +      updated_at: new Date().toISOString(),                   
+      135 +    };                                                        
+      136 +    const { error: freeError } = existing                     
+      137 +      ? await admin.from("subscriptions").update(freeRow).eq("
+          +id", existing.id)                                             
+      138 +      : await admin.from("subscriptions").insert(freeRow);    
+      139 +    if (freeError) {                                          
+      140 +      console.error("free subscription write failed", freeErro
+          +r);                                                           
+      141 +      return json({ error: "could not subscribe" }, 500);     
+      142 +    }                                                         
+      143 +    sendStatusEmail({                                         
+      144 +      event_type: "welcome",                                  
+      145 +      email: user.email,                                      
+      146 +      route: plan.route,                                      
+      147 +      current_period_end: periodEnd,                          
+      148 +      free: true,                                             
+      149 +    });                                                       
+      150 +    return json({ status: "active", free: true, current_period
+          +_end: periodEnd, target_price: targetPrice });                
+      151 +  }                                                           
+      152 +                                                              
+      153    // New, expired, or still-unpaid: (re)start checkout with a 
+           fresh trade number.
+      154    const tradeNo = newTradeNo();
+      155    const row = {
+
+● Update(supabase\functions\flight-subscribe\index.ts)
+  ⎿  Added 1 line
+      160      target_price: targetPrice,
+      161      currency: "TWD",
+      162      subscription_status: "pending_payment",
+      163 +    payment_method: "ecpay",                                  
+      164      merchant_trade_no: tradeNo,
+      165      current_period_end: null,
+      166      updated_at: new Date().toISOString(),
+
+● Now the cancel function.
+
+● Update(supabase\functions\flight-cancel-subscription\index.ts)
+  ⎿  Added 1 line, removed 1 line
+      65  
+      66    const { data: row, error } = await admin
+      67      .from("subscriptions")
+      68 -    .select("id, email, route, subscription_status, merchant_tr
+         -ade_no, current_period_end")                                   
+      68 +    .select("id, email, route, subscription_status, payment_met
+         +hod, merchant_trade_no, current_period_end")                   
+      69      .eq("user_id", user.id)
+      70      .eq("plan_name", planName)
+      71      .maybeSingle();
+
+● Update(supabase\functions\flight-cancel-subscription\index.ts)
+  ⎿  Added 17 lines
+       81      return json({ error: `nothing to cancel (status: ${row.sub
+           scription_status})` }, 409);
+       82    }
+       83  
+       84 +  // Free rows (payment_required was off) have nothing at ECPa
+          +y and no paid                                                 
+       85 +  // period to honour: cancelling ends them now.              
+       86 +  if (row.payment_method === "free" && row.subscription_status
+          + === "active") {                                              
+       87 +    const nowIso = new Date().toISOString();                  
+       88 +    const { error: freeError } = await admin                  
+       89 +      .from("subscriptions")                                  
+       90 +      .update({ subscription_status: "expired", current_period
+          +_end: nowIso, updated_at: nowIso })                           
+       91 +      .eq("id", row.id)                                       
+       92 +      .eq("subscription_status", "active");                   
+       93 +    if (freeError) {                                          
+       94 +      console.error("free cancel update failed", freeError);  
+       95 +      return json({ error: "cancel failed" }, 500);           
+       96 +    }                                                         
+       97 +    sendStatusEmail({ event_type: "cancel", email: row.email, 
+          +route: row.route, free: true });                              
+       98 +    return json({ status: "expired", current_period_end: nowIs
+          +o });                                                         
+       99 +  }                                                           
+      100 +                                                              
+      101    if (row.merchant_trade_no) {
+      102      const params: Record<string, string> = {
+      103        MerchantID: ECPAY_MERCHANT_ID,
+● Update(supabase\functions\flight-cancel-subscription\index.ts)
+  ⎿  Added 1 line
+       5  //   2. subscription_status -> 'cancelled' (a grace state, NOT 
+          'expired'):
+       6  //      current_period_end is kept so alerts continue until the
+           paid month ends
+       7  //   3. hand a "cancel" email to flight-status-notification
+       8 +// A free row (payment_method 'free') skips ECPay and goes stra
+         +ight to 'expired'.                                             
+       9  //
+      10  // If ECPay refuses the cancel for a real reason we return an e
+          rror and leave
+      11  // the row untouched — otherwise the user could be charged with
+           no service. But if
+
+● Now the parser expiry rules.
+
+● Update(supabase\functions\flight-parser\index.ts)
+  ⎿  Added 1 line, removed 1 line
+      196    const expiredRows: Array<{
+      197      email: string;
+      198      route: string;
+      199 -    reason: "period_ended" | "payment_lapsed";                
+      199 +    reason: "period_ended" | "payment_lapsed" | "free_period_e
+          +nded";                                                        
+      200    }> = [];
+      201  
+      202    // 1) cancelled, and the period they paid for is over.
+
+● Update(supabase\functions\flight-parser\index.ts)
+  ⎿  Added 13 lines
+      216      .from("subscriptions")
+      217      .update({ subscription_status: "expired", updated_at: nowI
+           so })
+      218      .eq("subscription_status", "active")
+      219 +    .eq("payment_method", "ecpay")                            
+      220      .lt("current_period_end", lapsedBefore)
+      221      .select("email, route");
+      222    if (activeError) console.error("failed to expire lapsed acti
+           ve rows", activeError);
+      223    for (const r of endedActive ?? []) expiredRows.push({ ...r, 
+           reason: "payment_lapsed" });
+      224  
+      225 +  // 3) free (payment_required was off): one month, no renewal
+          + to wait for,                                                 
+      226 +  // so no grace period. Runs whatever the switch says now.   
+      227 +  const { data: endedFree, error: freeError } = await admin   
+      228 +    .from("subscriptions")                                    
+      229 +    .update({ subscription_status: "expired", updated_at: nowI
+          +so })                                                         
+      230 +    .eq("subscription_status", "active")                      
+      231 +    .eq("payment_method", "free")                             
+      232 +    .lt("current_period_end", nowIso)                         
+      233 +    .select("email, route");                                  
+      234 +  if (freeError) console.error("failed to expire ended free ro
+          +ws", freeError);                                              
+      235 +  for (const r of endedFree ?? []) expiredRows.push({ ...r, re
+          +ason: "free_period_ended" });                                 
+      236 +                                                              
+      237    for (const r of expiredRows) {
+      238      // Fire-and-forget; waitUntil lets it finish after we retu
+           rn. A failure here
+      239      // is only logged: the row is already expired, so there is
+            no retry.
+
+● Now the email copy.
+
+● Bash(python - <<'EOF'
+      p='supabase/functions/flight-status-notification/index.ts'…)
+  ⎿  warning: in the working copy of 'src/integrations/supabase/types.ts',
+     LF will be replaced by CRLF the next time Git touches it
+     warning: in the working copy of 'supabase/functions/flight-admin-setti
+     … +11 lines (ctrl+o to expand)
+  ⎿  Updated supabase\functions\flight-status-notification\index.ts (+161 
+     -141)
+        1 -// flight-status-notification: subscription lifecycle emails, 
+          -routed by                                                     
+        2 -// `event_type` ("welcome" | "cancel" | "expired" | "payment_f
+          -ailed" | "renewed").                                          
+        3 -// One function for all of them — like M1's single flight-noti
+          -fication. Called by                                           
+        4 -// flight-ecpay-return (welcome), flight-cancel-subscription (
+          -cancel),                                                      
+        5 -// flight-ecpay-period (renewed, payment_failed, expired) and 
+          -flight-parser                                                 
+        6 -// (expired); never scheduled itself.                         
+        7 -//                                                            
+        8 -// Body: { event_type, email, route, current_period_end?, reas
+          -on?, amount?, charge_no? }                                    
+        9 -//   amount / charge_no ("renewed" only): what was charged and
+          - which charge it was.                                         
+       10 -//   reason ("expired" only): "period_ended" (a cancelled subs
+          -cription ran out)                                             
+       11 -//   or "payment_lapsed" (renewals stopped succeeding).       
+       12 -//                                                            
+       13 -// verify_jwt = true, and the exact service-role bearer check 
+          -below is what                                                 
+       14 -// actually keeps random callers from sending email through us
+          -.                                                             
+       15 -                                                              
+       16 -import { createClient } from "https://esm.sh/@supabase/supabas
+          -e-js@2";                                                      
+       17 -import { Resend } from "https://esm.sh/resend@4.0.0";         
+       18 -                                                              
+       19 -const SUPABASE_URL = Deno.env.get("SUPABASE_URL") as string;  
+       20 -const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVI
+          -CE_ROLE_KEY") as string;                                      
+       21 -const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") as strin
+          -g;                                                            
+       22 -const ECPAY_AMOUNT = Deno.env.get("ECPAY_AMOUNT");            
+       23 -// Only used to build a 重新訂閱 link. Unset -> the email just
+          - has no link                                                  
+       24 -// (better than a localhost link in a real inbox).            
+       25 -const SITE_URL = Deno.env.get("SITE_URL")?.replace(/\/$/, "");
+       26 -                                                              
+       27 -const SENDER = "Flight Price Notifier <noreply@roberthut.com>"
+          -; // same as flight-notification                              
+       28 -const resend = new Resend(RESEND_API_KEY);                    
+       29 -                                                              
+       30 -const EVENT_TYPES = ["welcome", "cancel", "expired", "payment_
+          -failed", "renewed"] as const;                                 
+       31 -                                                              
+       32 -type Payload = {                                              
+       33 -  event_type: (typeof EVENT_TYPES)[number];                   
+       34 -  email: string;                                              
+       35 -  route: string;                                              
+       36 -  current_period_end?: string | null;                         
+       37 -  reason?: "period_ended" | "payment_lapsed";                 
+       38 -  amount?: number;                                            
+       39 -  charge_no?: number;                                         
+       40 -};                                                            
+     … 262 more lines (ctrl+o to expand)
+
+● Now the admin page.
+
+  Read 1 file (ctrl+o to expand)
+
+● I'll turn the v1 switch into a reusable BooleanSetting and render both
+  switches under 設定.
+
+● Bash(python - <<'EOF'
+      p='src/routes/_authenticated/admin/index.tsx'…)
+  ⎿  1:import { useMemo, useState, type ReactNode } from "react";
+     72:  const paidActiveCount = subscriptions.filter(
+     145:                value={`NT$${(paidActiveCount * MONTHLY_PRICE_TWD)
+     … +4 lines (ctrl+o to expand)
+  ⎿  1 file changed (binary, mode only or too large to show)
+
+● Now the dashboard.
+
+  Read 1 file (ctrl+o to expand)
+
+● Bash(python - <<'EOF'
+      p='src/routes/_authenticated/dashboard.tsx'…)
+  ⎿  D:\work\run\claude\fare-finder-pro\src\routes\_authenticated\dashboard
+     .tsx
+       183:6  warning  React Hook useEffect has a missing dependency: 'subs
+     … +6 lines (ctrl+o to expand)
+  ⎿  Updated src\routes\_authenticated\dashboard.tsx (+54 -17)
+      64      },
+      65    });
+      66  
+      67 +  // Admin switch (flight.settings payment_required). Only an e
+         +xplicit false                                                  
+      68 +  // means free; missing or unreadable keeps the paid wording, 
+         +like flight-subscribe.                                         
+      69 +  const paymentRequiredQuery = useQuery({                      
+      70 +    queryKey: ["flight", "settings", "payment_required"],      
+      71 +    queryFn: async () => {                                     
+      72 +      const { data, error } = await supabase                   
+      73 +        .from("settings")                                      
+      74 +        .select("value")                                       
+      75 +        .eq("key", "payment_required")                         
+      76 +        .maybeSingle();                                        
+      77 +      if (error) return true;                                  
+      78 +      return data?.value !== false;                            
+      79 +    },                                                         
+      80 +  });                                                          
+      81 +  const paymentRequired = paymentRequiredQuery.data ?? true;   
+      82 +                                                               
+      83    async function handleSignOut() {
+      84      await supabase.auth.signOut();
+      85      navigate({ to: "/", replace: true });
+     ...
+      133          )}
+      134          {purchase === "failed" && (
+      135            <p className="mt-6 rounded-lg bg-destructive/10 px-4
+            py-3 text-sm text-destructive">
+      120 -            付款未完成，你可以在下方點「完成付款」重試。 / Pay
+          -ment didn't go through — use “完成付款” to retry.             
+      136 +            付款未完成，你可以在下方點「完成付款」重試。 / Pay
+          +ment didn't go through — use                                  
+      137 +            “完成付款” to retry.                              
+      138            </p>
+      139          )}
+      140  
+     ...
+      144                key={route.plan_name}
+      145                route={route}
+      146                subscription={subscriptionsQuery.data?.find((s) 
+           => s.plan_name === route.plan_name)}
+      147 +              paymentRequired={paymentRequired}               
+      148                onSubscribed={invalidateSubscriptions}
+      149              />
+      150            ))}
+     ...
+      160    );
+      161  }
+     … 93 more lines (ctrl+o to expand)
+  ⎿  … 1 more file changed
+  ⎿  (timeout 5m)
+
+● Typecheck and lint pass, with the sole warning being pre-existing and
+  unrelated to my changes. I'll verify prettier didn't touch unrelated code,
+  then update the docs.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Prettier also reflowed three unrelated lines in dashboard.tsx. It's formatting
+  only and the project enforces prettier, so I'm leaving it. Now the docs.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(docs\m1-session-handoff.md)
+  ⎿  Added 24 lines
+      332  switch itself instead of trusting `last_offer_v1`, which may p
+           redate a flip. Alerts
+      333  always trigger on v3 regardless.
+      334  
+      335 +### M2 follow-up 7: admin switch 使用綠界付款 / 不需付款 (2026
+          +-09-24 — code written, NOT yet deployed or verified)          
+      336 +                                                              
+      337 +Migration `20260924100000_flight_payment_required.sql` adds `f
+          +light.settings`                                               
+      338 +`payment_required` (default `true`; a missing row or a failed 
+          +read keeps the paywall on),                                   
+      339 +an RLS policy so every signed-in user can read that one key (t
+          +he dashboard picks its                                        
+      340 +wording from it), and `flight.subscriptions.payment_method` (`
+          +'ecpay'` default | `'free'`).                                 
+      341 +`/admin` 設定 now has two switches (shared `BooleanSetting` co
+          +mponent).                                                     
+      342 +                                                              
+      343 +Rules the user decided (2026-09-23/24):                       
+      344 +- Off: `flight-subscribe` writes new / expired / pending rows 
+          +straight to `active`,                                         
+      345 +  `payment_method = 'free'`, no trade number, `current_period_
+          +end` = now + 1 month,                                         
+      346 +  answers JSON and sends a free `welcome` email.              
+      347 +- Free rows get no grace: `flight-parser` expires them as soon
+          + as the period ends                                           
+      348 +  (reason `free_period_ended`); the 7-day `RENEWAL_GRACE_DAYS`
+          + rule is now ecpay-only.                                      
+      349 +- Cancelling a free row expires it immediately and never calls
+          + ECPay.                                                       
+      350 +- Re-subscribing from `expired` is unlimited, one month each t
+          +ime.                                                          
+      351 +- Switching payment back on leaves free rows running until the
+          +y end, and they can still                                     
+      352 +  change their target price; their next subscribe after expiry
+          + goes through ECPay.                                          
+      353 +- `/admin` MRR counts only `active` rows with `payment_method 
+          += 'ecpay'`.                                                   
+      354 +                                                              
+      355 +Deploy: the migration (+ `migration repair`), then `flight-adm
+          +in-settings`,                                                 
+      356 +`flight-subscribe`, `flight-cancel-subscription`, `flight-pars
+          +er`,                                                          
+      357 +`flight-status-notification` (all `verify_jwt = true`).       
+      358 +                                                              
+      359  ## Project / environment facts (don't re-derive these)
+      360  
+      361  - **Shared multi-app Supabase project.** Other apps' migration
+           s live in the
+
+● Update(CLAUDE.md)
+  ⎿  Added 2 lines
+      58  
+      59  Subscription lifecycle: `pending_payment → active → cancelled (
+          grace, still alerted) → expired`, with re-subscribe from `expir
+          ed` creating a new trade number.
+      60  
+      61 +Admin switch `flight.settings.payment_required` (使用綠界付款, 
+         +default on; only an explicit `false` turns it off). Off: `fligh
+         +t-subscribe` skips ECPay and writes a free row (`payment_method
+         + = 'free'`, `active`, one month, no trade number). Free rows ex
+         +pire at period end with no grace (`flight-parser`), cancel stra
+         +ight to `expired` without calling ECPay, and can re-subscribe w
+         +ithout limit; switching payment back on leaves them running unt
+         +il they end. This is the one place besides the ECPay callbacks 
+         +that writes `active`.                                          
+      62 +                                                               
+      63  Conventions that matter:
+      64  - The service-role functions (`flight-parser`, `flight-notifica
+          tion`, `flight-status-notification`) have `verify_jwt = true`, 
+          but the gateway accepts any project JWT (e.g. the anon key), so
+           each also checks `Authorization === Bearer ${SERVICE_ROLE_KEY}
+          ` inside. Keep both.
+      65  - Client write access to `flight.subscriptions` was revoked in 
+          M2 (`authenticated` has SELECT only). New writes must go throug
+          h an Edge Function using the service role.
+
+● Code is done. Ready for you to deploy.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The whole-repo lint fails with 8,148 errors, and they come from the Windows
+  checkout, not this change: CRLF line endings (Delete ␍) across the repo. The
+  two front-end files I changed lint clean except for the one warning that was
+  already there.
+
+  I've implemented the admin switch, but nothing is deployed or tested against
+  the real project yet. The typecheck passes. The Edge Functions can't be
+  typechecked locally, so the deploy below is their first compile check.
+
+  What changed
+
+  - Migration (supabase/migrations/20260924100000_flight_payment_required.sql):
+    - A new setting, payment_required, defaults to on. It only counts as off
+      when it is explicitly false.
+    - A new column, subscriptions.payment_method, is either ecpay or free.
+    - An RLS policy lets signed-in users read that one setting, so the dashboard
+      can show the right text. All other settings stay admin-only.
+  - flight-admin-settings: now accepts payment_required.
+  - flight-subscribe: with the switch off, it writes a free active row that
+    lasts one month, sends a welcome email and returns JSON. With it on, nothing
+    changes.
+  - flight-cancel-subscription: a free row becomes expired right away, and ECPay
+    is not called.
+  - flight-parser: a free row expires as soon as its period ends. The 7-day
+    grace period now only applies to ECPay rows.
+  - flight-status-notification: free versions of the welcome, cancel and expired
+    emails.
+  - /admin:
+    - The 設定 section now has two switches.
+    - Monthly revenue (MRR) only counts paid active subscriptions.
+    - The subscriptions table has a new column showing 免費 or 綠界.
+  - Dashboard: free subscriptions show 「免費 · 有效至 X」, the button reads
+    「開始免費追蹤（一個月）」 or 「免費重新訂閱」, and cancelling a free
+    subscription warns that alerts stop immediately.
+  - Docs: I updated CLAUDE.md and added follow-up 7 to
+    docs/m1-session-handoff.md, marked not yet deployed.
+
+  Deploy (run these yourself)
+
+  ! supabase db query --linked --file 
+  supabase/migrations/20260924100000_flight_payment_required.sql
+  ! supabase migration repair --status applied 20260924100000
+  ! supabase functions deploy flight-admin-settings --use-api
+  ! supabase functions deploy flight-subscribe --use-api
+  ! supabase functions deploy flight-cancel-subscription --use-api
+  ! supabase functions deploy flight-parser --use-api
+  ! supabase functions deploy flight-status-notification --use-api
+
+  Once those finish, tell me. I'll check the migration record and each
+  function's ezbr_sha256, then run through the tests in the plan on
+  localhost:8080:
+  1. Switch payment off.
+  2. Subscribe for free.
+  3. Cancel, which should expire immediately.
+  4. Re-subscribe.
+  5. Force a free row past its end date and run the parser to check it expires.
+  6. Switch payment back on and confirm ECPay checkout appears.
+
+  Afterwards I'll clean up the test data and turn the switch back on. Nothing
+  has been committed.
+
+✻ Churned for 3m 30s · done 10:08 AM
+
+※ recap: The admin switch between 使用綠界付款 and 不需付款 is built and typechecks, but nothing is deployed or tested yet. Next, run the migration and five function deploy commands I listed, then tell me so I can test on localhost. (disable recaps in /config)
+
+!  supabase db query --linked --file                                            
+  supabase/migrations/20260924100000_flight_payment_required.sql                
+  ⎿  Initialising login role...
+     {
+       "boundary": "03b86131ff5bfdf9877428f44b938207",
+     … +5 lines (ctrl+o to expand)
+
+  Called Supabase (ctrl+o to expand)
+
+● The migration applied correctly. I checked the database:
+  - The payment_method column exists and defaults to 'ecpay'. All 7 existing
+    subscriptions are ecpay.
+  - payment_required = true.
+  - The settings table has both policies: admins can read settings and users can
+    read payment_required.
+  - The migration history doesn't have this version yet, so the repair step
+    still needs to run.
+
+  Next, run these:
+  ! supabase migration repair --status applied 20260924100000
+  ! supabase functions deploy flight-admin-settings --use-api
+  ! supabase functions deploy flight-subscribe --use-api
+  ! supabase functions deploy flight-cancel-subscription --use-api
+  ! supabase functions deploy flight-parser --use-api
+  ! supabase functions deploy flight-status-notification --use-api
+
+  When they finish, tell me. I'll confirm the migration history entry and each
+  function's ezbr_sha256/updated_at, then start the tests on localhost:8080.
+
+✻ Cogitated for 33s · done 10:18 AM
+
+!  supabase migration repair --status applied 20260924100000                    
+  ⎿  Initialising login role...
+     Connecting to remote database...
+     Repaired migration history: [20260924100000] => applied
+     … +8 lines (ctrl+o to expand)
+
+  Called Supabase (ctrl+o to expand)
+● The migration is now recorded in the history as 20260924100000 
+  flight_payment_required, so the migration step is complete.
+
+  Next, deploy the 5 functions:
+  ! supabase functions deploy flight-admin-settings --use-api
+  ! supabase functions deploy flight-subscribe --use-api
+  ! supabase functions deploy flight-cancel-subscription --use-api
+  ! supabase functions deploy flight-parser --use-api
+  ! supabase functions deploy flight-status-notification --use-api
+
+  When they're done, tell me. I'll check each function's ezbr_sha256 and
+  updated_at, then start the tests.
+
+✻ Sautéed for 15s · done 10:18 AM
+
+!  supabase functions deploy flight-admin-settings --use-api                    
+  ⎿  Uploading asset (flight-admin-settings): supabase/functions/flight-adm
+     in-settings/deno.json
+     Uploading asset (flight-admin-settings): supabase/functions/flight-adm
+     … +10 lines (ctrl+o to expand)
+
+● flight-admin-settings is deployed. Four functions are left:
+  ! supabase functions deploy flight-subscribe --use-api
+  ! supabase functions deploy flight-cancel-subscription --use-api
+  ! supabase functions deploy flight-parser --use-api
+  ! supabase functions deploy flight-status-notification --use-api
+
+✻ Crunched for 5s · done 10:18 AM
+
+!  supabase functions deploy flight-subscribe --use-api                         
+  ⎿  Uploading asset (flight-subscribe): supabase/functions/flight-subscrib
+     e/deno.json
+     Uploading asset (flight-subscribe): supabase/functions/flight-subscrib
+     … +12 lines (ctrl+o to expand)
+
+● flight-subscribe is deployed. Three functions are left:
+  ! supabase functions deploy flight-cancel-subscription --use-api
+  ! supabase functions deploy flight-parser --use-api
+  ! supabase functions deploy flight-status-notification --use-api
+
+  The change to _shared/ecpay.ts only touched type declarations, so the three
+  ECPay callback functions (flight-ecpay-return, -period, -result) don't need a
+  redeploy.
+
+✻ Worked for 6s · done 10:19 AM
+
+!  supabase functions deploy flight-cancel-subscription --use-api               
+  ⎿  Uploading asset (flight-cancel-subscription): supabase/functions/fligh
+     t-cancel-subscription/deno.json
+     Uploading asset (flight-cancel-subscription): supabase/functions/fligh
+     … +12 lines (ctrl+o to expand)
+
+● flight-cancel-subscription is deployed. Two functions are left:
+  ! supabase functions deploy flight-parser --use-api
+  ! supabase functions deploy flight-status-notification --use-api
+
+✻ Cooked for 6s · done 10:19 AM
+
+!  supabase functions deploy flight-parser --use-api                            
+  ⎿  Uploading asset (flight-parser): supabase/functions/flight-parser/deno
+     .json
+     Uploading asset (flight-parser): supabase/functions/flight-parser/inde
+     … +10 lines (ctrl+o to expand)
+
+● flight-parser is deployed. One function is left:
+  ! supabase functions deploy flight-status-notification --use-api
+
+✻ Churned for 4s · done 10:19 AM
+
+!  supabase functions deploy flight-status-notification --use-api               
+  ⎿  Uploading asset (flight-status-notification):
+     supabase/functions/flight-status-notification/deno.json
+     Uploading asset (flight-status-notification):
+     supabase/functions/flight-status-notification/index.ts
+     {
+       "project_ref": "luugfvsrawnuzwpjvddt",
+       "functions": [
+         "flight-status-notification"
+       ],
+       "dashboard_url":
+     "https://supabase.com/dashboard/project/luugfvsrawnuzwpjvddt/functions",
+       "message": "Deployed Functions."
+     }
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● All 5 functions were redeployed at 02:18–02:19 UTC (10:18–10:19 Taiwan time)
+  with verify_jwt = true set. Now I'll check if the local dev server is running
+  so I can start testing.
+
+  Called claude-in-chrome 2 times, ran 1 shell command (ctrl+o to expand)
+
+● I was about to start the browser tests, but Chrome blocked localhost:8080:
+  "This site is blocked by your site permissions." All the deploy steps are
+  done; only these tests are left.
+
+  This needs a decision from you:
+
+  1. Allow the site: in the Claude in Chrome extension's site permissions, allow
+     http://localhost:8080, then tell me and I'll run the planned end-to-end
+     tests in the browser. This needs a Chrome session already signed in to an
+     account that is an admin, and it will send real test emails to that
+     account.
+  2. Test it yourself: I'll write a short checklist and you click through it.
+     Afterwards I can check the database, emails and function logs for you.
+  3. Database checks only: I test the expiry rule and the free-cancel/expire
+     logic with SQL and a manual parser run, so no browser is needed. The
+     subscribe and cancel screens wouldn't be tested this way.
+
+  Which do you prefer?
+
+✻ Churned for 34s · done 10:20 AM
+
+❯ please try use chrome-devtools , I will login the admin for you               
+
+  Called chrome-devtools (ctrl+o to expand)
+
+● I've opened the local sign-in page, http://localhost:8080/auth, in the
+  chrome-devtools browser. It's page 2.
+
+  Please sign in there with the admin account. I won't enter the password for
+  you.
+
+  Once you're signed in, tell me and I'll start testing:
+  1. On /admin, turn off 使用綠界付款.
+  2. Subscribe for free on the dashboard.
+  3. Cancel, which should expire immediately.
+  4. Re-subscribe for free.
+  5. Push the free subscription past its end date and run the parser to confirm
+     it expires.
+  6. Turn payment back on and confirm the ECPay form appears.
+
+  These tests send real test emails (welcome, cancel, expired) to the admin
+  account. When I'm done, I'll clean up the test data and turn the switch back
+  on.
+
+✻ Brewed for 10s · done 10:21 AM
+
+❯ I login already                                                               
+
+  Called chrome-devtools 3 times (ctrl+o to expand)
+
+● The admin page looks correct: the new switch is on, a Payment column appears,
+  and MRR shows NT$900 (3 paid subscriptions × NT$300). Now I'll check which
+  account is signed in and its subscriptions.
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+● The signed-in account's subscriptions are all ECPay rows still within their
+  paid period, so flight-subscribe won't trigger the free path—I need an expired
+  route to test it. I'll back up the TPE-LON row, temporarily set it to expired
+  for testing, then restore it exactly afterward.
+
+  Read 1 file, called Supabase 2 times (ctrl+o to expand)
+
+● I've backed up TPE-LON and temporarily set it to expired. Now I'm switching
+  payment off on /admin.
+
+  Called chrome-devtools, Supabase 5 times (ctrl+o to expand)
+
+● The switch is still saving. I'll check the database again to see whether the
+  save went through.
+
+  Called Supabase (ctrl+o to expand)
+
+● The admin switch works: payment_required = false was saved through
+  flight-admin-settings. Next is the dashboard.
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+● With payment off, the dashboard shows 「免費重新訂閱」 on the expired London
+  row. The cancelled paid rows still show 「更新目標價」. I'm clicking
+  免費重新訂閱 next.
+
+  Called chrome-devtools, Supabase 3 times (ctrl+o to expand)
+
+● Free subscribe works: the row is now active / free, has no trade number, and
+  ends 2026-10-24, one month out. The dashboard shows 「免費 · 有效至
+  2026/10/24」. Next I'm testing cancel.
+
+  Called chrome-devtools, Supabase 5 times (ctrl+o to expand)
+
+● 取消免費訂閱功能正常，狀態已變成 expired，按鈕也顯示「免費重新訂閱」了。接下來
+  我會重新訂閱，把到期日改到過去，再跑一次解析程式測試。
+
+  Called chrome-devtools, Supabase 3 times (ctrl+o to expand)
+
+● Re-subscribing worked and the row is active/free again with its end date set
+  one minute in the past. Since I'm not supposed to run the parser manually,
+  I'll wait for the next scheduled cron run (~10:30 Taiwan time) to expire the
+  row.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● While that runs, I'll turn payment back on. This also tests that free rows
+  keep working after the switch goes back on, and that the expiry rule runs
+  regardless of the switch.
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+● The admin page confirms free rows are excluded from MRR: Active shows 4 but
+  MRR is still NT$900, and the London row shows 「免費 Free」. Turning payment
+  back on:
+
+  Called chrome-devtools, Supabase 2 times (ctrl+o to expand)
+
+● Payment is back on (payment_required = true). The free London row stays active
+  for now; the 10:30 cron run should expire it. I'll check back when the
+  background poll reports.
+
+  Read 1 file (ctrl+o to expand)
+
+● Passed so far:
+  - Admin switch: turning 使用綠界付款 off and back on both save correctly.
+  - Free subscribe: creates an active / free row with no trade number that runs
+    for one month.
+  - Free cancel: the row goes straight to expired.
+  - Re-subscribe after expiry: works.
+  - After switching payment back on: the free subscription keeps running, and
+    MRR doesn't count it.
+  - Dashboard wording: 開始免費追蹤 / 免費重新訂閱, 免費 · 有效至, and the
+    cancel warning all show correctly.
+
+  Still waiting on:
+  1. Automatic expiry: the free London row's end date is now in the past, and
+     I'm waiting for the 10:30 cron run to set it to expired and send the expiry
+     email.
+  2. Once it has expired, I'll confirm that re-subscribing now leads to the
+     ECPay form.
+  3. After that, I'll put the London row back to its original ECPay cancelled
+     state.
+
+  Test emails sent to kyp001@gmail.com: two free welcome emails and one free
+  cancel email so far, with one expiry email still to come. Please check that
+  the wording looks right.
+
+✻ Baked for 3m 14s · done 10:25 AM
+
+※ recap: The admin 付款/免費 switch is deployed, and all the switch, free-subscribe and cancel tests pass. I'm waiting for the 10:30 cron run to expire the free test row, then I'll check the ECPay form and restore the London row. (disable recaps in /config)
+
+● Background command "Poll until the cron parser run expires the test row"
+completed (exit code 0)
+
+  Read 1 file (ctrl+o to expand)
+
+● The row expired at 10:30:13 Taiwan time, on the cron run. Next I'm checking
+  the logs to confirm the expiry email was sent.
+
+  Called Supabase (ctrl+o to expand)
+
+● The logs show all four emails were accepted: welcome ×2, cancel, and expired
+  (10:30:05). Last check: with payment on, re-subscribing should go to ECPay.
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+● With payment back on, the button is the normal 「重新訂閱」 again. Clicking it
+  should load the ECPay stage checkout page. I'll stop there without paying.
+
+  Called chrome-devtools, Supabase 3 times (ctrl+o to expand)
+
+● The paid path is confirmed working — the order shows pending_payment/ecpay
+  with a new trade number and the browser reached ECPay's checkout page. I won't
+  complete payment, and I'll now restore the London row back to its original
+  state.
+
+  Read 1 file, called Supabase, chrome-devtools 2 times (ctrl+o to expand)
+
+● The London row is back to exactly its backed-up values. Last step: marking
+  follow-up 7 in the handoff doc as deployed and verified.
+
+● Update(docs\m1-session-handoff.md)
+  ⎿  Added 1 line, removed 1 line
+      332  switch itself instead of trusting `last_offer_v1`, which may p
+           redate a flip. Alerts
+      333  always trigger on v3 regardless.
+      334  
+      335 -### M2 follow-up 7: admin switch 使用綠界付款 / 不需付款 (2026
+          --09-24 — code written, NOT yet deployed or verified)          
+      335 +### M2 follow-up 7: admin switch 使用綠界付款 / 不需付款 (2026
+          +-09-24 — deployed and verified)                               
+      336  
+      337  Migration `20260924100000_flight_payment_required.sql` adds `f
+           light.settings`
+      338  `payment_required` (default `true`; a missing row or a failed 
+           read keeps the paywall on),
+
+● Update(docs\m1-session-handoff.md)
+  ⎿  Added 10 lines, removed 1 line
+      354  
+      355  Deploy: the migration (+ `migration repair`), then `flight-adm
+           in-settings`,
+      356  `flight-subscribe`, `flight-cancel-subscription`, `flight-pars
+           er`,
+      357 -`flight-status-notification` (all `verify_jwt = true`).       
+      357 +`flight-status-notification` (all `verify_jwt = true`). All de
+          +ployed 2026-09-24 02:18–02:19Z.                               
+      358  
+      359 +Verified 2026-09-24 on localhost:8080 as kyp001@gmail.com (adm
+          +in), using the TPE-LON row                                    
+      360 +temporarily set to `expired` and restored afterwards to its ex
+          +act backed-up values:                                         
+      361 +switch off saved → dashboard 「免費重新訂閱」 → row `active`/`
+          +free`, no trade no, +1 month,                                 
+      362 +「免費 · 有效至」 → cancel → `expired` immediately → free re-s
+          +ubscribe → back-dated                                         
+      363 +`current_period_end`, the 02:30Z cron run expired it (`free_pe
+          +riod_ended`) → switch on while                                
+      364 +the free row was still active (MRR excluded it, Payment column
+          + 「免費 Free」) → 「重新訂閱」                                
+      365 +opened the ECPay stage cashier with a fresh `pending_payment` 
+          +row. Welcome ×2, cancel and                                   
+      366 +expired emails all logged as sent. `payment_required` is left 
+          +`true`.                                                       
+      367 +                                                              
+      368  ## Project / environment facts (don't re-derive these)
+      369  
+      370  - **Shared multi-app Supabase project.** Other apps' migration
+           s live in the
+
+● Admins can now switch between 使用綠界付款 and 不需付款 on /admin. It's
+  deployed, tested end to end on localhost:8080, and the switch is back to
+  「需要付款」.
+
+  ┌────────────────────┬────────────────────────────────────────────────────┐
+  │        Test        │                       Result                       │
+  ├────────────────────┼────────────────────────────────────────────────────┤
+  │ Switch             │                                                    │
+  │ 使用綠界付款       │ ✅ Both directions saved                           │
+  │ off/on on /admin   │                                                    │
+  ├────────────────────┼────────────────────────────────────────────────────┤
+  │ Subscribe with     │ ✅ Subscription is active and free with no ECPay   │
+  │ payment off        │ trade number, runs until 2026/10/24, dashboard     │
+  │                    │ shows 「免費 · 有效至」                            │
+  ├────────────────────┼────────────────────────────────────────────────────┤
+  │ Cancel a free      │ ✅ Warns 「取消後立即停止通知」 and ends           │
+  │ subscription       │ immediately                                        │
+  ├────────────────────┼────────────────────────────────────────────────────┤
+  │ Re-subscribe free  │ ✅ Works                                           │
+  │ after it ends      │                                                    │
+  ├────────────────────┼────────────────────────────────────────────────────┤
+  │ Free subscription  │ ✅ The 10:30 scheduled price check ended it and    │
+  │ reaches its end    │ sent the expiry email                              │
+  │ date               │                                                    │
+  ├────────────────────┼────────────────────────────────────────────────────┤
+  │ Switch payment     │ ✅ The existing free subscription kept running     │
+  │ back on            │ until its end date; MRR doesn't count it and the   │
+  │                    │ Payment column shows 「免費 Free」                 │
+  ├────────────────────┼────────────────────────────────────────────────────┤
+  │ Re-subscribe with  │ ✅ Goes to the ECPay test checkout page            │
+  │ payment on         │                                                    │
+  ├────────────────────┼────────────────────────────────────────────────────┤
+  │ Emails             │ ✅ Two welcome, one cancel and one expiry email    │
+  │                    │ all sent to kyp001@gmail.com                       │
+  └────────────────────┴────────────────────────────────────────────────────┘
+
+  Test data: your TPE-LON subscription was the one used for testing. It's
+  restored to exactly its backed-up state (ECPay, cancelled, paid through
+  2026/10/19). The last test also started an ECPay test checkout that was never
+  paid; that session is left over on the ECPay side and doesn't affect any data.
+
+  Please check the wording of the 4 test emails in kyp001@gmail.com's inbox.
+
+  Not done: nothing is committed yet. Changed files are 1 migration, 5 Edge
+  Functions, _shared/ecpay.ts, types.ts, the /admin and dashboard pages,
+  CLAUDE.md and docs/m1-session-handoff.md. Should I commit to the multi-app
+  branch?
+
+✻ Brewed for 1m 8s · done 10:31 AM
+
+※ recap: Admins can now switch between 使用綠界付款 and 不需付款 on /admin; it's deployed, tested end to end, and payment is back on. Next: confirm whether I should commit the changes to the multi-app branch. (disable recaps in /config)
+
+❯ email as @flight_0924_1.png                                                   
+  ⎿  Read flight_0924_1.png (69.3KB)
+
+● Your screenshot shows all 4 test emails arrived, and the wording matches the
+  free-plan versions:
+
+  ┌───────┬─────────┬───────────────────────────────────────────────────────┐
+  │ Time  │  Email  │                        Content                        │
+  ├───────┼─────────┼───────────────────────────────────────────────────────┤
+  │       │         │ 「已取消 台北 → 倫敦 的降價通知訂閱」 and             │
+  │ 10:24 │ Cancel  │ 「你的免費訂閱已取消，降價通知即刻停止。」 (no        │
+  │       │         │ mention of a paid period)                             │
+  ├───────┼─────────┼───────────────────────────────────────────────────────┤
+  │ 10:25 │         │ 「✈️ 免費訂閱成功！台北 → 倫敦 降價通知已開始」.      │
+  │  (×2) │ Welcome │ Gmail grouped the two welcome emails (10:24 and       │
+  │       │         │ 10:25) into one thread, hence the 2.                  │
+  ├───────┼─────────┼───────────────────────────────────────────────────────┤
+  │ 10:30 │ Expiry  │ 「台北 → 倫敦 降價通知已結束」 and                    │
+  │       │         │ 「一個月免費訂閱期已結束」 (the free-plan reason)     │
+  └───────┴─────────┴───────────────────────────────────────────────────────┘
+
+  None of them mention charges or NT$300, so this feature is fully tested.
+
+  Nothing is committed yet. Should I commit these changes to the multi-app
+  branch?
+
+✻ Churned for 4s · done 10:47 AM
+❯ 我若更改 url for my company , the notify url will auto change ?               
+  台北 → 倫敦 降價通知已結束                                                    
+  收件匣                                                                        
+                                                                                
+  Flight Price Notifier                                                         
+  上午10:30 (19 分鐘前)                                                         
+  寄給 我                                                                       
+                                                                                
+  台北 → 倫敦 降價通知已結束                                                    
+  你的 台北 → 倫敦 一個月免費訂閱期已結束，我們不會再寄降價通知。               
+                                                                                
+  想繼續收到通知，隨時可以到 https://fare-finder-pro.vercel.app/dashboard       
+  重新訂閱。                                                                    
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● No, it won't change automatically. The address in that email doesn't come from
+  the page you're browsing. It comes from an Edge Function secret, SITE_URL,
+  which is currently set to https://fare-finder-pro.vercel.app
+  (flight-status-notification/index.ts:28, :108). You have to change it
+  yourself.
+
+  If you move to your company's domain (say https://flights.yourco.com), four 
+  things need updating:
+
+  1. The link in emails (required). Set the secret; Edge Functions pick up the
+     new value, no redeploy needed:
+  ! supabase secrets set SITE_URL=https://flights.yourco.com
+     This also changes where users land after paying if the ECPay return can't
+     tell which site they came from (flight-ecpay-result).
+  2. The ECPay return allowlist (recommended). _shared/ecpay.ts:29-33 hard-codes
+     the Vercel domain in the list of allowed origins. SITE_URL is always
+     allowed automatically, so a single domain works with just step 1. If you
+     keep both the old and new domains running, add the new one to that list and
+     redeploy flight-subscribe and flight-ecpay-result.
+  3. Supabase Auth settings (required, Dashboard → Authentication → URL 
+     Configuration). Add https://flights.yourco.com/** to Redirect URLs,
+     otherwise the sign-up confirmation and password-reset links will be
+     rejected.
+  4. Vercel. Add the custom domain to the project and point your company's DNS
+     at it. The Vercel environment variables don't change, because they point at
+     Supabase, not at your own domain.
+
+  The fare-alert emails (flight-notification) don't include a link back to the
+  site, so they aren't affected.
+
+  When you have the new domain, I can make the step 2 code change and give you
+  the full set of commands. Also, the free-mode changes still aren't committed;
+  should I commit them to multi-app?
+
+✻ Cooked for 12s · done 10:51 AM
+
+❯ 幫我將 change url 需要修改的地方 找一個地方紀錄(中文)                         
+
+  Listed 1 directory, ran 1 shell command (ctrl+o to expand)
+
+● Write(docs\change-site-url.md)
+  ⎿  Wrote 72 lines to docs\change-site-url.md
+      1 # 更換網站網址（改用公司網域）檢查清單
+      2 
+      3 把前端從 `https://fare-finder-pro.vercel.app` 換成公司網域（下文
+        方都列在這裡。信件裡的網址、付款後導回的網址都不是從瀏覽器當下的
+        網址抓的，而是來自 Edge Function secret 或程式碼裡的清單。
+      4 
+      5 最後整理：2026-09-24。
+      7 ## 必改
+      8 
+      9 ### 1. Edge Function secret `SITE_URL`
+     … +95 lines (ctrl+o to expand)
+
+● Update(docs\project-files-index.md)
+  ⎿  Added 1 line
+      18  | --- | --- |
+      19  | `docs/m1-session-handoff.md` | 專案的 living 狀態文件：目前部
+          署了什麼、已驗證過什麼、留下的測試資料、經驗教訓、待辦（backlog
+          ，例如 B-1 admin 存取控制）。動 payment / cron / Edge Functions
+           前必讀。 |
+      20  | `docs/shared-supabase-auth.md` | 共用 Supabase 專案下的 auth 
+          隔離慣例說明：`apps` tag 只是 client 宣告、不能當作授權依據，真
+          正的存取控制要用 `auth.uid()`。 |
+      21 +| `docs/change-site-url.md` | 更換網站網址（例如改用公司網域） 
+         +時要改的地方：`SITE_URL` secret、Supabase Auth Redirect URLs、V
+         +ercel 網域、ECPay 導回 origin 允許清單，以及不用改的項目與驗證 
+         +步驟。 |                                                       
+      22  | `docs/test-plan.md` | 手動測試計畫：把 M1/M2 驗收清單、handof
+          f 記錄整理成可重複執行的測試項目（無自動化測試框架）。 |
+      23  | `docs/test-report.md` | 對應 `test-plan.md` 的測試報告，彙整
+          已執行/未執行的用例結果。 |
+      24  | `docs/ppt-outline.md` | 產品功能介紹簡報的投影片大綱（18 張、
+          20–25 分鐘），含截圖存放路徑與遮蔽帳號的提醒。 |
+
+● Update(CLAUDE.md)
+  ⎿  Added 1 line, removed 1 line
+      65  - Client write access to `flight.subscriptions` was revoked in 
+          M2 (`authenticated` has SELECT only). New writes must go throug
+          h an Edge Function using the service role.
+      66  - Follow-up emails use `EdgeRuntime.waitUntil` (see `sendStatus
+          Email` in `_shared/ecpay.ts`) so the request isn't cut off afte
+          r replying to ECPay. Empty-string fields must stay in the Check
+          MacValue.
+      67  - Function URLs are the slug (`/functions/v1/flight-ecpay-retur
+          n`), and the URLs handed to ECPay must use the full slugs.
+      68 -- ECPay runs on the shared **stage** merchant (`ECPAY_ENV=stage
+         -`; public test HashKey/HashIV). Going live also needs real merc
+         -hant credentials, `ECPAY_ENV=prod` and a real `SITE_URL` (the f
+         -allback landing site and the resubscribe link in emails; curren
+         -tly set to the Vercel URL, and it defaults to `http://localhost
+         -:8080` when unset; it is separate from the Supabase Auth "Site 
+         -URL"). Edge secrets (`RESEND_API_KEY`, `SEND_EMAIL_HOOK_SECRET`
+         -, `TRAVELPAYOUTS_TOKEN`, `ECPAY_*`, optional `SITE_URL`) are se
+         -t with `supabase secrets set`; do not paste `supabase secrets l
+         -ist` output (use `--output json` and print names only).        
+      68 +- ECPay runs on the shared **stage** merchant (`ECPAY_ENV=stage
+         +`; public test HashKey/HashIV). Going live also needs real merc
+         +hant credentials, `ECPAY_ENV=prod` and a real `SITE_URL` (the f
+         +allback landing site and the resubscribe link in emails; curren
+         +tly set to the Vercel URL, and it defaults to `http://localhost
+         +:8080` when unset; it is separate from the Supabase Auth "Site 
+         +URL"). Moving the site to another domain is a checklist, not au
+         +tomatic: see `docs/change-site-url.md`. Edge secrets (`RESEND_A
+         +PI_KEY`, `SEND_EMAIL_HOOK_SECRET`, `TRAVELPAYOUTS_TOKEN`, `ECPA
+         +Y_*`, optional `SITE_URL`) are set with `supabase secrets set`;
+         + do not paste `supabase secrets list` output (use `--output jso
+         +n` and print names only).                                      
+      69  - Reading logs: the CLI has no `functions logs`; use the Supaba
+          se MCP `query_logs` (`function_edge_logs` for status codes, `fu
+          nction_logs` for `console.log`). Logs lag about a minute.
+      70  - To run `flight-parser` from SQL with `net.http_post`, pass `t
+          imeout_milliseconds := 60000`, otherwise the default 5s timeout
+           hides the response. `matches` in its reply is the cleanest pay
+          wall test.
+      71  
+
+● 換網域要改的地方已經整理成中文文件 docs/change-site-url.md，也從
+  docs/project-files-index.md 和 CLAUDE.md 連到這份文件，之後的 session
+  都找得到。
+
+  內容：
+  - 必改：
+    a. SITE_URL secret：改了信裡「重新訂閱」的連結和付款後的導回網址才會變。
+    b. Supabase Auth 的 Redirect URLs
+       要加上新網域，不然註冊驗證信、密碼重設信的連結會失效。
+    c. 在 Vercel 綁定網域。
+  - 新舊網域並存時必改： _shared/ecpay.ts 的
+    ALLOWED_ORIGINS（付款後允許導回的網址清單）要加上新網域，再重新部署
+    flight-subscribe 和 flight-ecpay-result。
+  - 不用改： 降價通知信、Auth 寄信 hook（send-email）、ECPay
+    回呼網址、前端程式碼。
+  - 選擇性： 寄件人 noreply@roberthut.com 要改成公司網域的話，要先在 Resend
+    驗證網域。
+  - 換完後的驗證步驟： 共 4 步，寫在文件最後。
+
+  整理時發現一個風險，也寫進了文件：這個 Supabase 專案是多個 app 共用的，secret
+  對整個專案生效。改 SITE_URL 之前，要先確認 project-management 和 udemy-coupon
+  的 Edge Functions 沒有讀這個 secret，不然會一起被改掉。這兩個 app
+  的程式碼不在這個 repo，我沒辦法幫你查。
+
+  目前免費模式的功能加上這份文件都還沒 commit。要一起 commit 到 multi-app 嗎？
+
+✻ Brewed for 46s · done 10:55 AM
+
+※ recap: The free-mode switch for /admin is deployed and tested, and the domain-change checklist is written up in docs/change-site-url.md. Next I need your go-ahead to commit all of these changes to the multi-app branch.
+
+❯ commit it                                                                     
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● I committed the free-mode switch and the site-URL checklist to multi-app as
+  996c6a2 ("Let admins switch off ECPay payment for free one-month
+  subscriptions"). It covers 14 files: the migration, 5 Edge Functions plus
+  _shared/ecpay.ts, the /admin and dashboard pages, types.ts, and the updated
+  docs, including the new docs/change-site-url.md.
+
+  I left two files uncommitted because they're yours rather than code:
+  - flight_0924_1.png, the Gmail screenshot
+  - no_14_sendmail_ref_app_name_2026-09-24.txt, an exported session transcript
+    (earlier transcripts were committed along with an entry in the doc index)
+
+  Nothing has been pushed. Because of the Lovable sync, pushed commits can't be
+  rewritten afterwards, so tell me when you want to push.
+
+✻ Sautéed for 27s · done 4:25 PM
+
+❯  /export                                                                      
+
+● Because of the leading space, /export was sent to me as a normal message, so
+  the command didn't run. It's a built-in Claude Code command, and I can't run
+  it for you.
+
+  Type it again with no space in front:
+
+  /export
+
+  It lets you copy the conversation or save it to a file. To follow the existing
+  naming, you could call it no_15_payment_switch_2026-09-24.txt.
+
+  Once the file is saved, I can add it to the session-transcripts list in
+  docs/project-files-index.md along with no_14_... and commit them together.
+
+✻ Churned for 4s · done 4:32 PM

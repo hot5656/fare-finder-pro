@@ -30,6 +30,7 @@
 **結論：M1 與 M2 的後端功能與安全性驗收通過**（M2 checklist 21／21，含 ECPay 排程真實續扣 B4）；
 阻擋項 F（使用者不能自我啟用付費）通過。
 2026-09-21 補測後，**沒有任何用例失敗，也沒有用例缺少執行記錄**；仍有 3 項只驗到一部分（🟡，見第 7 章）。
+2026-09-24 新增免費模式開關（計畫 8.8）10 項，9 項通過；P10（非 admin 只讀得到 `payment_required`）尚未實測。
 補測同時找到幾個**需要決定或處理的問題**（K-6～K-9，見第 6 章），最值得注意的是：**註冊確認信會進垃圾郵件**（K-6，已改善：範本改版部署後，在另一個信箱進了收件匣；建議再加 DMARC 並持續觀察）、
 **註冊時「密碼相符」即自動補標記（不需驗證信箱）與文件描述不一致**（K-3，已由實測確認，並已於 2026-09-21 把文件改成描述實際行為）。
 此外尚未使用正式 ECPay 特店，因此**可進入 M3 的後端條件已具備，但上線前仍需處理第 6、7 章所列項目**。
@@ -55,6 +56,7 @@
 | 2026-09-21（稍後） | **補測（登入相關）**：使用者於 chrome-devtools 視窗自行登入（`k***@gmail.com`，帶 `fare-finder-pro` 標記）後：dashboard 行動版（FE-02 剩餘）、非法 `target_price`（A5）、登出與路由守衛（FE-12）；FE-04 於 Vercel 站台再確認 | 通過；FE-06 首次嘗試因帳號已帶標記而無效（見下一列） |
 | 2026-09-21（再稍後） | **FE-06 重測**：先以唯讀 SQL 確認 `pm3.demo@example.com` 的 `apps` 只有 `project-management`、從未登入過，再由使用者自行輸入密碼登入 | 通過 |
 | 2026-09-21 07:12–07:52Z | **註冊／重設／金流負面案例補測**：建立一次性測試帳號 `k***+fe07a@gmail.com`（id `8b7871c2-…`）。07:12 FE-07 註冊；07:26 使用者點確認信連結（FE-11）；07:40–07:41 G5／G6／C3（自簽回呼）；07:45 E6（測試帳號 JWT 呼叫取消）；07:47 FE-09（錯誤密碼註冊）；07:49 使用者點重設連結並設新密碼（FE-09／FE-11）；07:51 FE-08（密碼相符註冊）。寫入資料庫的動作（測試列、去除標記）皆由使用者以 `supabase db query` 執行 | 全部通過；發現 K-6～K-9 |
+| 2026-09-24 02:23–02:32Z | **免費模式開關（計畫 8.8，P1–P9）**：部署後在 `localhost:8080` 以 chrome-devtools 由使用者登入 admin 帳號 `k***@gmail.com` 操作。暫時把該帳號的 TPE-LON 列（原為 ECPay `cancelled`）改成 `expired` 當測試列，測完依備份逐欄還原；`payment_required` 測完已切回 `true` | 通過（P10 未測） |
 
 ---
 
@@ -65,9 +67,10 @@
 | 6 前端與登入（FE） | 12 | 12 | 0 | 0 | 0 |
 | 7 M1（A–L） | 28 | 27 | 1 | 0 | 0 |
 | 8 M2（A–G） | 38 | 38 | 0 | 0 | 0 |
+| 8.8 免費模式開關（P） | 10 | 9 | 0 | 1 | 0 |
 | 9 資料庫與 auth trigger（DB） | 5 | 5 | 0 | 0 | 0 |
 | 10 安全（SEC） | 8 | 6 | 2 | 0 | 0 |
-| **合計** | **91** | **88** | **3** | **0** | **0** |
+| **合計** | **101** | **97** | **3** | **1** | **0** |
 
 圖例：✅ 有實測證據　🟡 僅程式碼審查或只驗證一部分　⬜ 沒有測試記錄
 
@@ -206,6 +209,25 @@
 10:05 ⚠️ 本期扣款失敗 · 10:06 已結束。每封信都對得上一行 log，Gmail 依主旨分組的計數也對應「每次測試各一封」，
 **沒有重複寄出**。「已結束」兩種文案（`period_ended`、`payment_lapsed`）皆完整看過；寄件人 `noreply@roberthut.com`。
 
+### 4.3a 免費模式開關（計畫 8.8）— 2026-09-24
+
+測試列：admin 帳號 `k***@gmail.com` 的 TPE-LON（id `289e1288-…`）。原為 ECPay `cancelled`（期限 2026-10-19），先整列備份，改成 `expired` 讓免費路徑可以觸發；測完依備份把每個欄位（含 `merchant_trade_no`、`current_period_end`、`updated_at`）還原，並以 `to_jsonb` 比對與備份一致。
+
+| ID | 結果 | 證據 |
+|---|:-:|---|
+| P1 開關儲存 | ✅ | 02:23:52Z 切關 → `payment_required = false`；02:25:40Z 切開 → `true`（皆經 `flight-admin-settings`）。403／400 分支為程式碼審查 |
+| P2 dashboard 文字 | ✅ | 關閉時 London（`expired`）按鈕為「免費重新訂閱」；Tokyo／Seoul（ECPay `cancelled`）仍為「更新目標價」 |
+| P3 免費訂閱 | ✅ | 02:24:24Z：`active`／`free`、`merchant_trade_no` null、`current_period_end` 2026-10-24 02:24Z；卡片「免費 · 有效至 2026/10/24」；log `welcome email sent … (TPE-LON)` |
+| P4 免費取消 | ✅ | 確認文字「確定要取消訂閱？取消後立即停止通知。」；02:24:48Z 列 → `expired`、`current_period_end` ＝ 取消當下；log `cancel email sent`；該時段無 ECPay cancel log |
+| P5 免費重新訂閱 | ✅ | 02:25:09Z 再次 `active`／`free`；log 第二封 welcome |
+| P6 到期不留寬限 | ✅ | 把 `current_period_end` 改成 1 分鐘前；02:30Z cron：log `expired 1 subscription(s)`（02:30:03Z）、`expired email sent`（02:30:05Z），列為 `expired` |
+| P7 切回付款後免費列保留 | ✅ | 02:25:40Z 切回開啟時免費列仍 `active`，直到 P6 的到期處理 |
+| P8 admin 統計 | ✅ | 免費列有效時 Active 4、MRR 仍為 NT$900（3 筆付費 × 300）；Payment 欄顯示「免費 Free」 |
+| P9 付款開啟時重新訂閱 | ✅ | 按「重新訂閱」→ 瀏覽器進入 ECPay stage 收銀台「選擇支付方式」；列 → `pending_payment`／`ecpay`、新 trade no `FPMUEX0AIE3M0O10`（未付款，之後還原列；該筆 stage 結帳作廢，不影響資料） |
+| P10 非 admin 只讀得到 `payment_required` | ⬜ | 未測（RLS policy 已建立，查 `pg_policies` 可見 `users can read payment_required`） |
+
+**信箱對帳**（Gmail，使用者提供截圖，UTC+8）：10:24 已取消（免費版）· 10:25 免費訂閱成功 ×2（Gmail 併成一串）· 10:30 降價通知已結束（「一個月免費訂閱期已結束」，附 `SITE_URL` 的重新訂閱連結）。四封皆無扣款或 NT$300 字樣。
+
 ### 4.4 資料庫與 auth trigger（計畫第 9 章）
 
 | ID | 結果 | 證據 |
@@ -316,12 +338,12 @@
 4. 取消信、扣款失敗信、降價信的完整內文（只看過主旨與摘要；歡迎信與「已結束」兩種、「本期已扣款」的內文已確認）；ECPay 廠商後台顯示系列已終止（證據僅為 `RtnCode=1`；定期定額查詢頁在 stage 回傳 500／空白，無法作為證據）。
 5. 「skipped (deduped)」log 行本身沒有親眼看到（以無新 history、無新信推論）。
 
-**沒有測試記錄的計畫用例：無。** 2026-09-21 已補測 20 項：FE-01、02、03、05、06、07、08、09、10、11、12、A4、A5、B6、C3、E6、G5、G6、SEC-02、SEC-07（見 4.6、4.7）。
+**沒有測試記錄的計畫用例：P10**（2026-09-24 新增，非 admin 使用者只讀得到 `payment_required`；policy 已建立但未以非 admin 身分實際讀取）。2026-09-21 已補測 20 項：FE-01、02、03、05、06、07、08、09、10、11、12、A4、A5、B6、C3、E6、G5、G6、SEC-02、SEC-07（見 4.6、4.7）。
 **仍為 🟡 的 3 項**：H3（USD 取價失敗仍以 TWD-only 交付，僅程式碼審查）、SEC-04（body 夾帶他人 email／user_id，僅驗證了亂送 `route` 被忽略，email／user_id 取自 JWT 為程式碼審查）、SEC-06（無 policy 的 `notification_history` 未以使用者身分實際讀取）。
 DB-04 已於 2026-09-21 改列 ✅（使用者確認）。
 
 **環境限制**
-- 全部金流測試在 ECPay stage 共用特店，**未使用正式特店與 `ECPAY_ENV=prod`**；`SITE_URL` 未設（預設 `localhost:8080`）。
+- 全部金流測試在 ECPay stage 共用特店，**未使用正式特店與 `ECPAY_ENV=prod`**；`SITE_URL` 當時未設（預設 `localhost:8080`），目前已設為 Vercel 網址。
 - 沒有自動化測試；每次驗證需人工執行（含使用者以 `!` 執行正式環境 DDL、部署與手動 parser、以及寫入測試資料）。自動模式會擋下助理對共用正式資料庫的寫入與「讀出憑證再使用」的動作。
 - **Supabase CLI 登入帳號**：2026-09-21 第一次 `supabase db query --linked` 回 403（CLI 帳號看不到專案 `luugfvsrawnuzwpjvddt`，只列出 `blog_robert_hut`、`apps_product`）；之後可以執行。CLI 目前版本 2.115.0（有 2.117.0 可更新）。部署或 migration 前應先確認 CLI 登入的是擁有該專案的帳號。
 - Gmail 搜尋工具看不到垃圾郵件匣，需請使用者確認信件位置。

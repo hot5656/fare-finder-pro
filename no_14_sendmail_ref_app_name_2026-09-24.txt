@@ -1,0 +1,1250 @@
+ ▐▛███▛█   Claude Code v2.1.281
+▝▜██████▀  Opus 5.5 · Claude Pro
+  ▝▝ ▝▝    D:\work\run\claude\fare-finder-pro
+
+⚠ Your login expires in 1 day · run /login to renew
+
+  Get to finished work sooner with Opus 5.5. Switch anytime with /model.
+
+❯ pull from github                                                              
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● I fast-forwarded multi-app from 05a431e to 532dc3e. There were no conflicts
+  and your working tree was clean. Your local main branch isn't updated yet
+  (it's behind origin/main).
+
+  What came in (15 files, +3101/−60):
+  - Two new migrations: 20260923100000_flight_routes_offer_details.sql and
+    20260923110000_flight_settings.sql.
+  - A new flight-admin-settings Edge Function, plus an admin page at
+    src/routes/_authenticated/admin/index.tsx.
+  - Big changes to existing functions: flight-notification, flight-parser and
+    flight-admin-notify. The session transcript filename mentions a "v3 API"
+    change.
+  - Smaller changes: types.ts, dashboard.tsx, supabase/config.toml, and new
+    entries in docs/m1-session-handoff.md.
+  - Two new session transcripts: no_12_… and no_13_….
+
+  This pull changed the local code only. I haven't checked whether the two
+  migrations are already applied or the changed functions are already deployed.
+  The new entries in docs/m1-session-handoff.md should say whether that work
+  happened in the other session. I can compare it against
+  supabase_migrations.schema_migrations and supabase functions list if you want.
+
+✻ Cooked for 13s · done 8:35 AM
+
+❯ 我如果把 url 改為 flight.vercel.app 會影響到此 app function(因為此為          
+  multi-app supabase 架構)                                                      
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+● 不會。Edge Functions
+  本身和網域無關，改網域只需要處理下面幾個地方。有一個設定是所有 app
+  共用的，要特別小心。
+
+  不受影響的部分
+  - 綠界回呼：ReturnURL、PeriodReturnURL、OrderResultURL 指的都是 Supabase
+    function 的網址（fnUrl()，見 _shared/ecpay.ts:41），跟前端網域無關。
+  - send-email hook：信件連結依請求帶的 redirect_to 產生，不寫死任何網域。
+  - Vercel 環境變數：VITE_SUPABASE_* 這些指向 Supabase，不用改。
+  - 其他 app 的 functions：flight-* 的程式碼不會碰到它們。
+
+  需要改的地方（都只影響這個 app）
+  1. 付款後的導回網址（supabase/functions/_shared/ecpay.ts:29）：ALLOWED_ORIGINS
+     目前只有 localhost 和 fare-finder-pro.vercel.app。
+     - 如果不加新網域，從新網域付款後會被導回 SITE_URL，不會回到原站。
+     - 加進去之後，要重新部署 flight-subscribe 和
+       flight-ecpay-result，兩者共用這個模組。
+  2. SITE_URL secret：它是保底的導回網址，也是到期通知信裡「重新訂閱」連結的網址
+     ，改成新網域即可（SITE_URL 會自動加進白名單）。
+     - 注意：Edge secrets 是整個 Supabase project 共用的。如果另一個 app 的
+       function 也讀 SITE_URL，也會一起被改到。改之前可以先查那些 app
+       的程式有沒有用到這個名稱。
+
+  ⚠️ 會影響其他 app 的地方：Supabase Auth 的 Site URL
+
+  Site URL 是整個 project 只有一個的設定，project-management 和 udemy-coupon
+  也共用。註冊確認信和重設密碼信的 redirect_to，如果不在 Redirect URLs
+  名單內，就會退回 Site URL。
+
+  - 建議做法：不要動 Site URL，只在 Redirect URLs 新增
+    https://flight.vercel.app/**。只加不改，不影響別的 app。本 app 註冊時用的是
+    window.location.origin，只要新網域在名單內就能正常導回。
+  - 目前 README 記錄的 Site URL 已經是 fare-finder-pro.vercel.app，所以其他 app
+    現在的保底網址其實是本站。改成 flight.vercel.app 也只是換成本 app
+    的另一個網址，不會讓情況變差，但仍然不是其他 app 自己的網址。
+  - 舊的 Redirect URLs 規則在確定不再使用舊網域之前先保留。
+
+  另外兩點
+  - flight.vercel.app 這麼短的子網域很可能已被別人使用，要先在 Vercel
+    確認能不能改成這個專案名稱。
+  - 文件也要一起更新：CLAUDE.md、README.md、docs/m1-session-handoff.md
+    都寫了舊網域。
+
+  需要的話，我可以先改白名單和文件，再給你部署和設定 secret 的指令，讓你用 !
+  執行。
+
+✻ Cogitated for 30s · done 8:48 AM
+
+❯ app name 相關處理不會受影響?                                                  
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● 不會受影響。app name 和網域是兩件互不相關的事。
+
+  依據（我搜尋了 src/ 和 supabase/）
+  - APP_NAME = "fare-finder-pro" 是寫死在
+    src/integrations/supabase/app-scope.ts:15 的字串常數，不是從網址或 hostname
+    讀出來的。
+  - 用到它的地方只有三處：
+    - hasAppAccess()：比對 raw_app_meta_data.apps 裡有沒有這個字串。
+    - 註冊時送出的 data: { app: APP_NAME 
+      }（src/routes/auth/index.tsx:68、:91）。
+    - 重設密碼時送出的同一份資料（src/routes/auth/reset.tsx:35）。
+  - 資料庫 trigger flight.tag_app_metadata_on_signup() 只把使用者資料裡的 app
+    值複製到 raw_app_meta_data.apps，也跟網域無關。
+  - Edge Functions 完全沒用到 app 標籤，權限都靠 JWT 和 RLS 的 auth.uid() = 
+    user_id 判斷。
+
+  所以改成 flight.vercel.app
+  之後，已經標記過的帳號照樣能登入，新註冊的帳號也會照樣標上 fare-finder-pro。
+
+  不要改 APP_NAME 本身。 如果想讓 app 名稱跟新網域一致而改掉它，所有已標記
+  fare-finder-pro 的現有帳號都會被登入頁擋在外面，除非同時用 migration
+  幫它們補上新標籤。這個 app 名稱只是內部識別字，不需要跟網域一致。
+
+✻ Cooked for 10s · done 8:53 AM
+
+❯ 例如 supabase 送確認信的 title(依不同 app 觸發)                               
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● 這個問題我查了程式碼，現況和你想的不一樣：目前的確認信不是依 app 
+  決定的。改網域不會影響信件內容。
+
+  現況（supabase/functions/send-email/index.ts）
+  - 信件標題 SUBJECTS 只依 email_action_type 決定（signup、recovery 等），寄件者
+    SENDER 和內文用的產品名稱 PRODUCT 都寫死成 "Flight Price Notifier"。
+  - 整支 hook 完全沒讀 app 名稱，也沒讀 redirect_to 的網域，所以改成
+    flight.vercel.app 不會改變信件的標題和內容。
+  - 信件連結用的是 SUPABASE_URL/auth/v1/verify?...&redirect_to=...。redirect_to
+    原樣帶過去，換網域照樣能用，前提是新網域已加進 Redirect URLs。
+
+  但有一個問題已經存在，跟改網域無關
+
+  Supabase 的 Send Email hook 是整個 project 只能設一個。如果
+  project-management、udemy-coupon 也用同一個 project 的 Auth
+  寄信，它們的使用者收到的確認信現在也會顯示 "Flight Price
+  Notifier（機票降價通知）"。這點值得去確認。
+
+  如果要做成依 app 顯示不同標題，有兩種判斷方式：
+
+  判斷依據: user.user_metadata.app（hook payload 內有完整 user）
+  優點: 跟網域無關，改網域不受影響
+  缺點: 已被多個 app 共用的舊帳號，這個欄位是「最後一次宣告的 app」。從 A app
+  忘記密碼時，可能顯示成 B app 的名稱
+  ────────────────────────────────────────
+  判斷依據: redirect_to 的 origin
+  優點: 能準確反映「這封信是從哪個站觸發的」
+  缺點: 會和網域綁在一起，改網域時就必須同步更新對照表
+
+  我建議以 redirect_to 的 origin 為主，查不到時再改用 user_metadata.app，最後才
+  用通用標題。這樣的話，以後換網域就是要記得更新的項目之一。
+
+  要我改 send-email 嗎？部署時用 --no-verify-jwt，指令我會給你用 ! 執行。
+
+✻ Cooked for 16s · done 8:54 AM
+
+※ recap: You're checking whether moving the site to flight.vercel.app affects the shared Supabase setup; it doesn't, and confirmation emails are identical for every app. Next: tell me whether to make send-email show each app's name. (disable recaps in /config)
+
+❯ 我有另外一個 supabase edge function 如下                                      
+  // Supabase Auth "Send Email" hook.                                           
+  // Receives the webhook Supabase Auth fires instead of sending mail itself,   
+  // verifies it, and sends the actual email through Resend's API.              
+  //                                                                            
+  // Env vars required (set via `supabase secrets set`):                        
+  //   RESEND_API_KEY        - Resend API key                                   
+  //   SEND_EMAIL_HOOK_SECRET - the secret shown when you create the hook in    
+  //                            Authentication → Hooks → Send Email (Supabase   
+  //                            prefixes it with "v1,whsec_"; pass it as-is)    
+  //                                                                            
+  // SUPABASE_URL and SUPABASE_ANON_KEY are injected automatically by the       
+  // Supabase Edge Functions runtime — no need to set them yourself.            
+                                                                                
+  import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";              
+  import { Resend } from "https://esm.sh/resend@4.0.0";                         
+                                                                                
+  const resend = new Resend(Deno.env.get("RESEND_API_KEY") as string);          
+  const hookSecret = (Deno.env.get("SEND_EMAIL_HOOK_SECRET") as                 
+  string).replace(                                                              
+    "v1,whsec_",                                                                
+    "",                                                                         
+  );                                                                            
+  // The verify link must point at the Supabase project's own API domain (not   
+  // the app's site_url) and must carry an apikey — the browser hits this       
+  // endpoint directly via a clicked link, so it can't send an apikey header.   
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL") as string;                  
+  const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") as string;        
+                                                                                
+  // 用 redirect_to 網域裡的關鍵字判斷寄件識別，而不是完全比對網域字串——        
+  // Vercel preview 網域是動態產生的，沒辦法窮舉；本機開發時兩個 app 常常都是   
+  // localhost，網域完全比對在這兩種情況下都會失效，改用「網域包含關鍵字」      
+  // 加上 fallback 才夠穩。                                                     
+  const SENDER_BY_KEYWORD: Array<{ keyword: string; sender: string }> = [       
+    { keyword: "project-management", sender: "案件管理系統                      
+  <noreply@roberthut.com>" },                                                   
+    { keyword: "fare-finder", sender: "Flight Price Notifier                    
+  <noreply@roberthut.com>" },                                                   
+  ];                                                                            
+  const DEFAULT_SENDER = "System Notification <noreply@roberthut.com>"; //      
+  對不到關鍵字時的保底（例如本機 localhost 測試）                               
+                                                                                
+  function resolveSender(redirectTo: string | undefined): string {              
+    if (!redirectTo) return DEFAULT_SENDER;                                     
+    let hostname: string;                                                       
+    try {                                                                       
+      hostname = new URL(redirectTo).hostname.toLowerCase();                    
+    } catch {                                                                   
+      return DEFAULT_SENDER;                                                    
+    }                                                                           
+    return (                                                                    
+      SENDER_BY_KEYWORD.find(({ keyword }) => hostname.includes(keyword))       
+        ?.sender ?? DEFAULT_SENDER                                              
+    );                                                                          
+  }                                                                             
+                                                                                
+  const SUBJECTS: Record<string, string> = {                                    
+    signup: "確認你的帳號 / Confirm your account",                              
+    recovery: "重設密碼 / Reset your password",                                 
+    email_change: "確認變更 email / Confirm your new email",                    
+    magiclink: "登入連結 / Your sign-in link",                                  
+    invite: "邀請你加入 / You've been invited",                                 
+  };                                                                            
+                                                                                
+  function buildHtml(actionType: string, confirmUrl: string): string {          
+    const subject = SUBJECTS[actionType] ?? "驗證通知 / Verification";          
+    return `                                                                    
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">  
+        <h2>${subject}</h2>                                                     
+        <p>請點擊以下按鈕完成操作：</p>                                         
+        <p>                                                                     
+          <a href="${confirmUrl}"                                               
+             style="display:inline-block;padding:12px                           
+  20px;background:#7c3aed;color:#fff;                                           
+                    border-radius:8px;text-decoration:none;font-weight:600;">   
+            繼續 / Continue                                                     
+          </a>                                                                  
+        </p>                                                                    
+        <p style="color:#666;font-size:13px;">                                  
+          如果按鈕無法點擊，請複製以下連結到瀏覽器：<br/>                       
+          <a href="${confirmUrl}">${confirmUrl}</a>                             
+        </p>                                                                    
+      </div>                                                                    
+    `;                                                                          
+  }                                                                             
+                                                                                
+  Deno.serve(async (req) => {                                                   
+    if (req.method !== "POST") {                                                
+      return new Response("Method not allowed", { status: 405 });               
+    }                                                                           
+                                                                                
+    const payload = await req.text();                                           
+    const headers = Object.fromEntries(req.headers);                            
+    const wh = new Webhook(hookSecret);                                         
+                                                                                
+    try {                                                                       
+      const {                                                                   
+        user,                                                                   
+        email_data: { token_hash, redirect_to, email_action_type },             
+      } = wh.verify(payload, headers) as {                                      
+        user: { email: string };                                                
+        email_data: {                                                           
+          token_hash: string;                                                   
+          redirect_to: string;                                                  
+          email_action_type: string;                                            
+        };                                                                      
+      };                                                                        
+                                                                                
+      const confirmUrl =                                                        
+  `${SUPABASE_URL}/auth/v1/verify?token=${token_hash}&type=${email_action_type} 
+  &redirect_to=${redirect_to}&apikey=${SUPABASE_ANON_KEY}`;                     
+                                                                                
+      const { error } = await resend.emails.send({                              
+        from: resolveSender(redirect_to),                                       
+        to: [user.email],                                                       
+        subject: SUBJECTS[email_action_type] ?? "驗證通知 / Verification",      
+        html: buildHtml(email_action_type, confirmUrl),                         
+      });                                                                       
+                                                                                
+      if (error) {                                                              
+        throw error;                                                            
+      }                                                                         
+    } catch (error) {                                                           
+      return new Response(                                                      
+        JSON.stringify({                                                        
+          error: {                                                              
+            http_code: 500,                                                     
+            message: error instanceof Error ? error.message : "Unknown error",  
+          },                                                                    
+        }),                                                                     
+        { status: 500, headers: { "Content-Type": "application/json" } },       
+      );                                                                        
+    }                                                                           
+                                                                                
+    return new Response(JSON.stringify({}), {                                   
+      status: 200,                                                              
+      headers: { "Content-Type": "application/json" },                          
+    });                                                                         
+  });                                                                           
+
+  Called Supabase (ctrl+o to expand)
+  ⎿  Interrupted · What should Claude do instead?
+
+✻ Baked for 6s · done 9:12 AM
+
+❯ ask only:目前我們的不是 你有建議的方法, 有辦法依 send 的 app name 選擇 title  
+  ?                                                                             
+
+● 可以。最穩的方法是讓每個 app 觸發寄信時，自己在 redirect_to 帶上 app 
+  名稱，hook 再從網址讀出來選標題。這樣跟網域完全脫鉤。
+
+  做法：在 redirect_to 加上 ?app=
+
+  1. 前端觸發寄信時，在網址後面加上 app 參數：
+  // 註冊
+  emailRedirectTo: `${window.location.origin}/?app=${APP_NAME}`
+  // 忘記密碼
+  resetPasswordForEmail(email, { redirectTo:
+  `${window.location.origin}/auth/reset?app=${APP_NAME}` })
+  2. hook 讀這個參數，再到白名單裡查對應的名稱：
+  const APPS: Record<string, { sender: string; product: string }> = {
+    "fare-finder-pro": { sender: "Flight Price Notifier 
+  <noreply@roberthut.com>", product: "機票降價通知" },
+    "project-management": { sender: "案件管理系統 <noreply@roberthut.com>",
+  product: "案件管理系統" },
+  };
+  function resolveApp(redirectTo?: string, user?: { user_metadata?: { app?:
+  string } }) {
+    let app: string | null = null;
+    try { app = new URL(redirectTo ?? "").searchParams.get("app"); } catch {}
+    app ??= user?.user_metadata?.app ?? null;   // 其次：使用者資料裡的 app
+    return (app && APPS[app]) || null;          // 對不到就用通用標題
+  }
+     標題可以寫成 `${cfg.product}｜確認你的帳號`。
+
+  這樣做的好處
+  - 不受網域影響：改成 flight.vercel.app、Vercel preview 網址、localhost
+    都能正確判斷，也能分辨兩個都跑在 localhost 的 app。
+  - 判斷的是「這次是哪個 app 寄的」：忘記密碼時也準確。如果只看
+    user_metadata.app，多個 app 共用的帳號會顯示成最後一次註冊的那個 app。
+  - 只接受白名單裡的 app：redirect_to 是使用者端可以改的值，所以不能把參數直接放
+    進信件標題。對不到白名單就用通用標題，避免有人塞入任意文字。
+
+  要注意的地方
+  - 兩邊都要改：每個 app 的前端都要加上 ?app=。還沒改的 app 會先退回讀
+    user_metadata.app，最後才用通用標題，不會直接壞掉。
+  - Redirect URLs 規則：帶了查詢參數之後，https://domain/**
+    這類規則應該還是能通過，但建議先在 localhost 實測一次，確認沒有被退回 Site
+    URL。
+  - Send Email hook 整個 project 只有一個：你貼的版本和本 repo 的 send-email
+    如果都部署到同一個 slug，後部署的會蓋掉先部署的。建議合併成一支共用的
+    hook，放在一個地方維護。
+  - 你貼的這版會受改網域影響：它用網域關鍵字判斷，flight.vercel.app 不含
+    fare-finder，改網域後會變成 "System Notification"。改用上面的 ?app=
+    做法就不會有這個問題。
+
+✻ Crunched for 19s · done 9:14 AM
+
+❯ 幫我改本 repo 的 send-email 和前端加 ?app=                                    
+
+  Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+● Update(supabase\functions\send-email\index.ts)
+  ⎿  Added 61 lines, removed 13 lines
+      25  const SUPABASE_URL = Deno.env.get("SUPABASE_URL") as string;
+      26  const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") as 
+          string;
+      27  
+      28 -const SENDER = "Flight Price Notifier <noreply@roberthut.com>";
+         - // TODO: replace with your verified Resend domain             
+      28 +// This hook is project-wide: every app sharing this Supabase p
+         +roject sends its                                               
+      29 +// auth mail through it, so the sender and product name are pic
+         +ked per app.                                                   
+      30 +// The app is read from an `app` query param each front-end app
+         +ends to its                                                    
+      31 +// redirect_to (domain-independent: works on localhost, Vercel 
+         +previews and after                                             
+      32 +// a domain change), then from user_metadata.app (the app that 
+         +last declared the                                              
+      33 +// account; can be wrong for a shared account), else a generic 
+         +identity.                                                      
+      34 +// redirect_to is client-controlled, so only names listed here 
+         +are honoured.                                                  
+      35 +type AppIdentity = { sender: string; product: string; short: st
+         +ring };                                                        
+      36 +const APPS: Record<string, AppIdentity> = {                    
+      37 +  "fare-finder-pro": {                                         
+      38 +    sender: "Flight Price Notifier <noreply@roberthut.com>",   
+      39 +    product: "Flight Price Notifier（機票降價通知）",          
+      40 +    short: "機票降價通知",                                     
+      41 +  },                                                           
+      42 +  "project-management": {                                      
+      43 +    sender: "案件管理系統 <noreply@roberthut.com>",            
+      44 +    product: "案件管理系統",                                   
+      45 +    short: "案件管理系統",                                     
+      46 +  },                                                           
+      47 +};                                                             
+      48 +const DEFAULT_APP: AppIdentity = {                             
+      49 +  sender: "System Notification <noreply@roberthut.com>",       
+      50 +  product: "本服務",                                           
+      51 +  short: "",                                                   
+      52 +};                                                             
+      53  
+      54 +function resolveApp(redirectTo: string | undefined, metadataApp
+         +: unknown): AppIdentity {                                      
+      55 +  let app: string | null = null;                               
+      56 +  try {                                                        
+      57 +    app = new URL(redirectTo ?? "").searchParams.get("app");   
+      58 +  } catch {                                                    
+      59 +    // not a URL; fall through to user_metadata                
+      60 +  }                                                            
+      61 +  if (app && APPS[app]) return APPS[app];                      
+      62 +  if (typeof metadataApp === "string" && APPS[metadataApp]) ret
+         +urn APPS[metadataApp];                                         
+      63 +  return DEFAULT_APP;                                          
+      64 +}                                                              
+      65 +                                                               
+      66  const SUBJECTS: Record<string, string> = {
+      67    signup: "確認你的帳號 / Confirm your account",
+      68    recovery: "重設密碼 / Reset your password",
+     ...
+       71    invite: "邀請你加入 / You've been invited",
+       72  };
+       73  
+       74 +function subjectFor(actionType: string, app: AppIdentity): str
+          +ing {                                                         
+       75 +  const base = SUBJECTS[actionType] ?? "驗證通知 / Verificatio
+          +n";                                                           
+       76 +  return app.short ? `${app.short}｜${base}` : base;          
+       77 +}                                                             
+       78 +                                                              
+       79  // A bare "click Continue" mail with no product name and no re
+           ason looks like phishing
+       80  // to spam filters (and to people), so every mail says who we 
+           are, why they got it and
+       81  // that it can be ignored.
+       41 -const PRODUCT = "Flight Price Notifier（機票降價通知）";      
+       42 -const INTROS: Record<string, string> = {                      
+       43 -  signup: `你剛剛用這個 email 在 ${PRODUCT}註冊了帳號。請點擊 
+          -下方按鈕確認你的 email，完成註冊。`,                          
+       44 -  recovery: `我們收到重設你 ${PRODUCT}帳號密碼的請求。請點擊下
+          -方按鈕設定新密碼。`,                                          
+       45 -  email_change: `你要求變更 ${PRODUCT}帳號使用的 email。請點擊
+          -下方按鈕確認這項變更。`,                                      
+       46 -  magiclink: `你要求用登入連結登入 ${PRODUCT}。請點擊下方按鈕 
+          -登入。`,                                                      
+       47 -  invite: `有人邀請你加入 ${PRODUCT}。請點擊下方按鈕接受邀請。
+          -`,                                                            
+       48 -};                                                            
+       49 -const DEFAULT_INTRO = `請點擊下方按鈕完成 ${PRODUCT}的驗證。`;
+       82 +function introFor(actionType: string, product: string): string
+          + {                                                            
+       83 +  switch (actionType) {                                       
+       84 +    case "signup":                                            
+       85 +      return `你剛剛用這個 email 在 ${product}註冊了帳號。請點
+          +擊下方按鈕確認你的 email，完成註冊。`;                        
+       86 +    case "recovery":                                          
+       87 +      return `我們收到重設你 ${product}帳號密碼的請求。請點擊 
+          +下方按鈕設定新密碼。`;                                        
+       88 +    case "email_change":                                      
+       89 +      return `你要求變更 ${product}帳號使用的 email。請點擊下 
+          +方按鈕確認這項變更。`;                                        
+       90 +    case "magiclink":                                         
+       91 +      return `你要求用登入連結登入 ${product}。請點擊下方按鈕 
+          +登入。`;                                                      
+       92 +    case "invite":                                            
+       93 +      return `有人邀請你加入 ${product}。請點擊下方按鈕接受邀 
+          +請。`;                                                        
+       94 +    default:                                                  
+       95 +      return `請點擊下方按鈕完成 ${product}的驗證。`;         
+       96 +  }                                                           
+       97 +}                                                             
+       98  const IGNORE_NOTE = "如果這不是你本人的操作，請直接忽略這封信
+           ，你的帳號不會有任何變更。";
+       99  
+       52 -function buildHtml(actionType: string, confirmUrl: string): st
+          -ring {                                                        
+       53 -  const subject = SUBJECTS[actionType] ?? "驗證通知 / Verifica
+          -tion";                                                        
+       54 -  const intro = INTROS[actionType] ?? DEFAULT_INTRO;          
+      100 +function buildHtml(actionType: string, confirmUrl: string, app
+          +: AppIdentity): string {                                      
+      101 +  const subject = subjectFor(actionType, app);                
+      102 +  const intro = introFor(actionType, app.product);            
+      103    return `
+      104      <div style="font-family: sans-serif; max-width: 480px; mar
+           gin: 0 auto;">
+      105        <h2>${subject}</h2>
+
+● Update(supabase\functions\send-email\index.ts)
+  ⎿  Added 3 lines, removed 3 lines
+      123  // Plain-text alternative. HTML-only mail is one of the signal
+           s mailbox providers
+      124  // weigh against a message (the confirmation mail landed in Gm
+           ail's spam folder while
+      125  // flight-status-notification, which sends both parts, reached
+            the inbox).
+      126 -function buildText(actionType: string, confirmUrl: string): st
+          -ring {                                                        
+      127 -  const subject = SUBJECTS[actionType] ?? "驗證通知 / Verifica
+          -tion";                                                        
+      128 -  const intro = (INTROS[actionType] ?? DEFAULT_INTRO).replace(
+          -"下方按鈕", "以下連結");                                      
+      126 +function buildText(actionType: string, confirmUrl: string, app
+          +: AppIdentity): string {                                      
+      127 +  const subject = subjectFor(actionType, app);                
+      128 +  const intro = introFor(actionType, app.product).replace("下 
+          +方按鈕", "以下連結");                                         
+      129    return `${subject}\n\n${intro}\n${confirmUrl}\n\n${IGNORE_NO
+           TE}\n`;
+      130  }
+      131  
+
+● Update(supabase\functions\send-email\index.ts)
+  ⎿  Added 9 lines, removed 6 lines
+      143        user,
+      144        email_data: { token_hash, redirect_to, email_action_type
+            },
+      145      } = wh.verify(payload, headers) as {
+      146 -      user: { email: string };                                
+      146 +      user: { email: string; user_metadata?: { app?: unknown }
+          + };                                                           
+      147        email_data: {
+      148          token_hash: string;
+      149          redirect_to: string;
+     ...
+      151        };
+      152      };
+      153  
+      154 -    const confirmUrl = `${SUPABASE_URL}/auth/v1/verify?token=$
+          -{token_hash}&type=${email_action_type}&redirect_to=${redirect_
+          -to}&apikey=${SUPABASE_ANON_KEY}`;                             
+      154 +    const app = resolveApp(redirect_to, user.user_metadata?.ap
+          +p);                                                           
+      155 +    // redirect_to now carries its own query string (?app=…), 
+          +so encode it to keep                                          
+      156 +    // it a single parameter of the verify URL.               
+      157 +    const confirmUrl = `${SUPABASE_URL}/auth/v1/verify?token=$
+          +{token_hash}&type=${email_action_type}&redirect_to=${encodeURI
+          +Component(redirect_to)}&apikey=${SUPABASE_ANON_KEY}`;         
+      158  
+      159      const { error } = await resend.emails.send({
+      157 -      from: SENDER,                                           
+      160 +      from: app.sender,                                       
+      161        to: [user.email],
+      159 -      subject: SUBJECTS[email_action_type] ?? "驗證通知 / Veri
+          -fication",                                                    
+      160 -      html: buildHtml(email_action_type, confirmUrl),         
+      161 -      text: buildText(email_action_type, confirmUrl),         
+      162 +      subject: subjectFor(email_action_type, app),            
+      163 +      html: buildHtml(email_action_type, confirmUrl, app),    
+      164 +      text: buildText(email_action_type, confirmUrl, app),    
+      165      });
+      166  
+      167      if (error) {
+
+● Now the front-end:
+
+● Update(src\routes\auth\index.tsx)
+  ⎿  Added 2 lines, removed 1 line
+      64        email,
+      65        password,
+      66        options: {
+      67 -        emailRedirectTo: window.location.origin,               
+      67 +        // ?app= lets the shared send-email hook pick this app'
+         +s sender and subject.                                          
+      68 +        emailRedirectTo: `${window.location.origin}/?app=${APP_
+         +NAME}`,                                                        
+      69          data: { app: APP_NAME },
+      70        },
+      71      });
+
+● Update(src\routes\auth\index.tsx)
+  ⎿  Added 1 line, removed 1 line
+       98        // Password didn't match the existing account — only a c
+           lick on the
+       99        // emailed link can change it, never an unauthenticated 
+           guess.
+      100        await supabase.auth.resetPasswordForEmail(email, {
+      101 -        redirectTo: `${window.location.origin}/auth/reset`,   
+      101 +        redirectTo: `${window.location.origin}/auth/reset?app=
+          +${APP_NAME}`,                                                 
+      102        });
+      103        setLoading(false);
+      104        setNotice(
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+● Updated plan  ⎿  /plan to preview
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Typecheck passed, and the lint errors are unrelated to my changes—just CRLF
+  line endings and two pre-existing formatting issues. Now I'll check the docs.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Updating the docs now (README, CLAUDE.md, shared-supabase-auth.md).
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Update(docs\shared-supabase-auth.md)
+  ⎿  Added 12 lines
+      82  
+      83  三種都合法，因為都是「透過某個 app 自己的流程、且由使用者本人或
+          管理員明確採取了一個動作才加入」，跟登入頁的隱含自動補標記（上
+          面明文禁止的作法）性質不同。
+      84  
+      85 +## 驗證信的寄件識別：每個 app 在 redirect_to 帶 `?app=`        
+      86 +                                                               
+      87 +Supabase Auth 的 Send Email hook 整個 project 只能設一個，所有 
+         +app 的驗證信/重設信都經過同一支 `send-email`（本 repo 的 `supab
+         +ase/functions/send-email/index.ts`）。它依下列順序決定寄件人、 
+         +標題前綴與信中產品名稱：                                       
+      88 +                                                               
+      89 +1. `redirect_to` 網址上的 `app` 查詢參數（例：`emailRedirectTo:
+         + \`${origin}/?app=${APP_NAME}\``、`resetPasswordForEmail(..., {
+         + redirectTo: \`${origin}/auth/reset?app=${APP_NAME}\` })`）。  
+      90 +2. `user.user_metadata.app`（最後一次宣告的 app；共用帳號時可能
+         +不是這次觸發的 app）。                                         
+      91 +3. 都對不到 → 通用的 "System Notification"。                   
+      92 +                                                               
+      93 +不看網域，所以換網域、Vercel preview、本機 localhost 都不影響。
+         +`redirect_to` 是使用者端可控的值，hook 只接受 `APPS` 白名單內的
+         +名稱。                                                         
+      94 +                                                               
+      95 +**新 app 要做兩件事**：前端所有會寄信的呼叫都帶 `?app=<APP_NAME
+         +>`；並在 `send-email` 的 `APPS` 加一筆。**只保留一份 `send-emai
+         +l` 程式碼**——兩個 repo 各自部署同一個 slug，後部署的會蓋掉前一 
+         +個。                                                           
+      96 +                                                               
+      97  ## 不要動的東西
+      98  
+      99  `public.handle_new_user()` / `public.profiles`（`on_auth_user_c
+          reated` trigger）是另一個既有 app（`project-management`）的員工
+          資料表，**不要去編輯它的程式碼**。
+
+● Update(README.md)
+  ⎿  Added 2 lines, removed 2 lines
+      129  
+      130  `src/routes/auth/index.tsx` 裡呼叫 `signUp()` 時：
+      131  ```ts
+      132 -options: { emailRedirectTo: window.location.origin }          
+      132 +options: { emailRedirectTo: `${window.location.origin}/?app=${
+          +APP_NAME}` }                                                  
+      133  ```
+      134 -`window.location.origin` 是「使用者按下註冊那一刻，瀏覽器網址 
+          -列的 origin」——不是寫死的，是動態抓的。這個值會直接塞進 Supaba
+          -se 產生的驗證信連結（`redirect_to` 參數）裡。                 
+      134 +`window.location.origin` 是「使用者按下註冊那一刻，瀏覽器網址 
+          +列的 origin」——不是寫死的，是動態抓的。這個值會直接塞進 Supaba
+          +se 產生的驗證信連結（`redirect_to` 參數）裡。後面的 `?app=` 給
+          +共用的 `send-email` hook 判斷是哪個 app 寄的信（見 `docs/share
+          +d-supabase-auth.md`），不影響導向。                           
+      135  
+      136  Supabase 收到這個值後只做一件事：**比對白名單**：
+      137  
+
+● Update(README.md)
+  ⎿  Added 3 lines, removed 2 lines
+      356       ```
+      357  
+      358  6. **記得改寄件人網域**
+      359 -   `supabase/functions/send-email/index.ts` 裡的 `SENDER` 常數
+          -目前是佔位符                                                  
+      360 -   （`noreply@yourdomain.com`），要換成第 2 步在 Resend 驗證過
+          -的實際網域。                                                  
+      359 +   `supabase/functions/send-email/index.ts` 裡 `APPS` 與 `DEFA
+          +ULT_APP` 的 `sender`                                          
+      360 +   要用第 2 步在 Resend 驗證過的實際網域。每個 app 一筆（寄件 
+          +人、產品名稱、標題前綴），                                    
+      361 +   依 `redirect_to` 的 `?app=` 選用，見 `docs/shared-supabase-
+          +auth.md`。                                                    
+      362  
+      363  7. **測試**
+      364     - 在 app 用新 email 註冊，確認收到信、Resend Dashboard 的 L
+           ogs 有出現這筆寄送紀錄
+
+● Update(CLAUDE.md)
+  ⎿  Added 1 line, removed 1 line
+      77  
+      78  - **Lovable sync** (`AGENTS.md`): never rewrite published git h
+          istory (no force-push, rebase, amend or squash of pushed commit
+          s), and keep the pushed branch in a working state.
+      79  - Test against `http://localhost:8080`; the Vercel site `fare-f
+          inder-pro.vercel.app` is not the final code, so don't test agai
+          nst or deploy to it unless asked. `/deploy_vercel` is the proje
+          ct's deploy command and confirms preview vs production first.
+      80 -- Supabase Auth Redirect URLs allow the Vercel domain, Vercel p
+         -review wildcard and `http://localhost:8080/**`; sign-up passes 
+         -`emailRedirectTo: window.location.origin`.                     
+      80 +- Supabase Auth Redirect URLs allow the Vercel domain, Vercel p
+         +review wildcard and `http://localhost:8080/**`; sign-up passes 
+         +`emailRedirectTo: ${origin}/?app=${APP_NAME}` (and password res
+         +et `/auth/reset?app=…`). The `?app=` is how the project-wide `s
+         +end-email` hook picks each app's sender/subject (its `APPS` whi
+         +telist, falling back to `user_metadata.app`, then a generic ide
+         +ntity); keep it on every auth-mail call.                       
+      81  - Root-level `no_*_run_*.txt` files are exported session transc
+          ripts, not code.
+
+● Update(docs\shared-supabase-auth.md)
+  ⎿  Added 1 line, removed 1 line
+      86  
+      87  Supabase Auth 的 Send Email hook 整個 project 只能設一個，所有 
+          app 的驗證信/重設信都經過同一支 `send-email`（本 repo 的 `supab
+          ase/functions/send-email/index.ts`）。它依下列順序決定寄件人、
+          標題前綴與信中產品名稱：
+      88  
+      89 -1. `redirect_to` 網址上的 `app` 查詢參數（例：`emailRedirectTo:
+         - \`${origin}/?app=${APP_NAME}\``、`resetPasswordForEmail(..., {
+         - redirectTo: \`${origin}/auth/reset?app=${APP_NAME}\` })`）。  
+      89 +1. `redirect_to` 網址上的 `app` 查詢參數（例：``emailRedirectTo
+         +: `${origin}/?app=${APP_NAME}` ``、``resetPasswordForEmail(...,
+         + { redirectTo: `${origin}/auth/reset?app=${APP_NAME}` }) ``）。
+      90  2. `user.user_metadata.app`（最後一次宣告的 app；共用帳號時可能
+          不是這次觸發的 app）。
+      91  3. 都對不到 → 通用的 "System Notification"。
+      92  
+
+● I've changed send-email and the front-end to use ?app=. Typecheck passes;
+  eslint only reports Windows line endings and two lines that were already
+  mis-formatted. Nothing is deployed, tested or committed yet.
+
+  supabase/functions/send-email/index.ts
+  - How the hook picks the app: it first reads the app value from redirect_to.
+    If that's missing, it falls back to user.user_metadata.app. If neither is on
+    the APPS list, the mail goes out as "System Notification".
+  - The APPS list: it has fare-finder-pro and project-management so far. Each
+    entry sets the sender, the product name in the mail body and a subject
+    prefix. For this app the subject reads 機票降價通知｜確認你的帳號 / Confirm 
+    your account.
+  - Link fix: the redirect_to inside the verify link is now URL-encoded, so its
+    own ?app=… can't break the link.
+  - udemy-coupon isn't on the list yet: I don't have its app name, so its mail
+    still goes out as "System Notification".
+
+  src/routes/auth/index.tsx
+  - Sign-up now passes emailRedirectTo: ${origin}/?app=${APP_NAME}.
+  - Password reset now passes redirectTo: ${origin}/auth/reset?app=${APP_NAME}.
+
+  Docs: I updated docs/shared-supabase-auth.md (a new section on the convention
+  each app must follow), README.md and CLAUDE.md.
+
+  Deploy (production, so run it yourself):
+  ! supabase functions deploy send-email --use-api --no-verify-jwt
+  ! supabase functions list --output json
+  In the list output, check that ezbr_sha256 and updated_at for send-email have
+  changed.
+
+  ⚠️ The other app's repo has its own send-email. Whichever copy is deployed to
+  this slug last is the one that runs. After this deploy, that repo should stop
+  deploying its copy, or switch to this one. Its front-end also needs to add
+  ?app=project-management; until it does, its mail falls back to
+  user_metadata.app.
+
+  Test on http://localhost:8080 after deploying:
+  1. Sign up with a new email. The subject should start with 機票降價通知｜. The
+     link should land on http://localhost:8080/?app=fare-finder-pro, not the
+     Site URL. That confirms Supabase's Redirect URLs still accept the link now
+     that it carries ?app=. I haven't been able to check this.
+  2. Password reset. The link should land on /auth/reset?app=… and the "set new
+     password" form should appear.
+
+  Should I commit? I haven't pushed anything.
+
+✻ Crunched for 7m 5s · done 9:24 AM
+
+!  supabase functions deploy send-email --use-api --no-verify-jwt               
+  ⎿  Uploading asset (send-email): supabase/functions/send-email/index.ts
+     {
+       "project_ref": "luugfvsrawnuzwpjvddt",
+     … +7 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The new send-email is live. It shows ACTIVE, was updated just now (2026-09-24
+  01:29 UTC) and has verify_jwt=false, which the Auth hook needs. From now on,
+  every auth email for all apps sharing this Supabase project goes out through
+  this version.
+
+  It hasn't been tested with a real email yet. Please try it on
+  http://localhost:8080 (start it with npm run dev):
+
+  1. Sign up with a new email address (for example yourname+appfix1@gmail.com).
+     - The subject should start with 機票降價通知｜, and the sender should be
+       "Flight Price Notifier".
+     - After you click the link, the address bar should show
+       http://localhost:8080/?app=fare-finder-pro. If you land on the Vercel
+       Site URL instead, Supabase is rejecting the redirect because of the added
+       ?app=, and I'll need to change the approach.
+  2. Password reset: on the sign-up page, enter an existing email with the wrong
+     password. The link should go to /auth/reset?app=fare-finder-pro and show
+     the "set new password" form.
+
+  Tell me what you see and I can check the send-email logs. The code changes are
+  not committed yet.
+
+✻ Crunched for 15s · done 9:29 AM
+
+!  supabase functions list --output json                                        
+  ⎿  [
+       {
+         "created_at": 1788445168130,
+         "entrypoint_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_eea29822-2cc7-412f-99eb-4c28d2285
+     62b_11/source/supabase/functions/send-email/index.ts",
+         "ezbr_sha256":
+     "3e86a43bc45875f0e22d7bce83e1d4d571661cab78a3181ff5af171d26653ebb",
+         "id": "eea29822-2cc7-412f-99eb-4c28d228562b",
+         "import_map": false,
+         "name": "send-email",
+         "slug": "send-email",
+         "status": "ACTIVE",
+         "updated_at": 1790213343295,
+         "verify_jwt": false,
+         "version": 11
+       },
+       {
+         "created_at": 1789630022689,
+         "entrypoint_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_b98ef28b-8cca-48b4-bc92-c35c40d60
+     f74_14/source/supabase/functions/flight-parser/index.ts",
+         "ezbr_sha256":
+     "8f3ec9117fd4fb72494d3def0665321f34d645eccdde6005c8d3889d6f379d75",
+         "id": "b98ef28b-8cca-48b4-bc92-c35c40d60f74",
+         "import_map": true,
+         "import_map_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_b98ef28b-8cca-48b4-bc92-c35c40d60
+     f74_14/source/supabase/functions/flight-parser/deno.json",
+         "name": "flight-parser",
+         "slug": "flight-parser",
+         "status": "ACTIVE",
+         "updated_at": 1790175414291,
+         "verify_jwt": true,
+         "version": 14
+       },
+       {
+         "created_at": 1789630032882,
+         "entrypoint_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_e30c06d0-5737-494a-bc5d-980420446
+     972_15/source/supabase/functions/flight-notification/index.ts",
+         "ezbr_sha256":
+     "e616e87386e034882d8de217d5ac294890afabcd9c6ebcdcb0a94e610b530f89",
+         "id": "e30c06d0-5737-494a-bc5d-980420446972",
+         "import_map": true,
+         "import_map_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_e30c06d0-5737-494a-bc5d-980420446
+     972_15/source/supabase/functions/flight-notification/deno.json",
+         "name": "flight-notification",
+         "slug": "flight-notification",
+         "status": "ACTIVE",
+         "updated_at": 1790175386946,
+         "verify_jwt": true,
+         "version": 15
+       },
+       {
+         "created_at": 1789821625024,
+         "entrypoint_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_e1b26bf7-062b-4524-bcae-81ba11c6b
+     470_4/source/supabase/functions/flight-subscribe/index.ts",
+         "ezbr_sha256":
+     "1e35d72e36e1c3bad10d0d4cea953e4d408caecd0c3b8d66d4c6fa6b1c6f0f15",
+         "id": "e1b26bf7-062b-4524-bcae-81ba11c6b470",
+         "import_map": true,
+         "import_map_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_e1b26bf7-062b-4524-bcae-81ba11c6b
+     470_4/source/supabase/functions/flight-subscribe/deno.json",
+         "name": "flight-subscribe",
+         "slug": "flight-subscribe",
+         "status": "ACTIVE",
+         "updated_at": 1790002220170,
+         "verify_jwt": true,
+         "version": 5
+       },
+       {
+         "created_at": 1789821629388,
+         "entrypoint_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_77472a12-d7ec-478c-b95b-8b7ad6427
+     e87_2/source/supabase/functions/flight-cancel-subscription/index.ts",
+         "ezbr_sha256":
+     "56be8226321245c04098a73217770c9e127756e5aae1006acb175062c62b2b6c",
+         "id": "77472a12-d7ec-478c-b95b-8b7ad6427e87",
+         "import_map": true,
+         "import_map_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_77472a12-d7ec-478c-b95b-8b7ad6427
+     e87_2/source/supabase/functions/flight-cancel-subscription/deno.json",
+         "name": "flight-cancel-subscription",
+         "slug": "flight-cancel-subscription",
+         "status": "ACTIVE",
+         "updated_at": 1789880974563,
+         "verify_jwt": true,
+         "version": 3
+       },
+       {
+         "created_at": 1789821641451,
+         "entrypoint_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_6ac09f45-a2e0-49d6-b5be-ca79b015d
+     7b9_3/source/supabase/functions/flight-status-notification/index.ts",
+         "ezbr_sha256":
+     "94e9af150fb6dda5b18b797392f9df59baaaf4f34ec398349555561962c289ad",
+         "id": "6ac09f45-a2e0-49d6-b5be-ca79b015d7b9",
+         "import_map": true,
+         "import_map_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_6ac09f45-a2e0-49d6-b5be-ca79b015d
+     7b9_3/source/supabase/functions/flight-status-notification/deno.json",
+         "name": "flight-status-notification",
+         "slug": "flight-status-notification",
+         "status": "ACTIVE",
+         "updated_at": 1789879642733,
+         "verify_jwt": true,
+         "version": 4
+       },
+       {
+         "created_at": 1789821685133,
+         "entrypoint_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_ab911475-4f22-4ee5-b7bc-ff240a3ec
+     cf3_2/source/supabase/functions/flight-ecpay-return/index.ts",
+         "ezbr_sha256":
+     "71e8440f147c76cad7926221f448c5b2edcb21bc35306cc3985a2f4ae0cf6122",
+         "id": "ab911475-4f22-4ee5-b7bc-ff240a3eccf3",
+         "import_map": true,
+         "import_map_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_ab911475-4f22-4ee5-b7bc-ff240a3ec
+     cf3_2/source/supabase/functions/flight-ecpay-return/deno.json",
+         "name": "flight-ecpay-return",
+         "slug": "flight-ecpay-return",
+         "status": "ACTIVE",
+         "updated_at": 1789879684597,
+         "verify_jwt": false,
+         "version": 3
+       },
+       {
+         "created_at": 1789821689902,
+         "entrypoint_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_1922d65a-5bb3-4b62-b8e7-9232c595f
+     746_4/source/supabase/functions/flight-ecpay-period/index.ts",
+         "ezbr_sha256":
+     "5fee48810069119a1ac06200ab738d0b5b0568095d6ad4733d00056dfc1266ad",
+         "id": "1922d65a-5bb3-4b62-b8e7-9232c595f746",
+         "import_map": true,
+         "import_map_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_1922d65a-5bb3-4b62-b8e7-9232c595f
+     746_4/source/supabase/functions/flight-ecpay-period/deno.json",
+         "name": "flight-ecpay-period",
+         "slug": "flight-ecpay-period",
+         "status": "ACTIVE",
+         "updated_at": 1789981383379,
+         "verify_jwt": false,
+         "version": 5
+       },
+       {
+         "created_at": 1789821694509,
+         "entrypoint_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_97da8e18-093a-443a-b038-78c30bbba
+     145_2/source/supabase/functions/flight-ecpay-result/index.ts",
+         "ezbr_sha256":
+     "20cad9b8e8cb99132743d8a42d73560b5632f1b00420d1b5a6fd6ce16fa23cde",
+         "id": "97da8e18-093a-443a-b038-78c30bbba145",
+         "import_map": true,
+         "import_map_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_97da8e18-093a-443a-b038-78c30bbba
+     145_2/source/supabase/functions/flight-ecpay-result/deno.json",
+         "name": "flight-ecpay-result",
+         "slug": "flight-ecpay-result",
+         "status": "ACTIVE",
+         "updated_at": 1790002281499,
+         "verify_jwt": false,
+         "version": 3
+       },
+       {
+         "created_at": 1790062309607,
+         "entrypoint_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_6b4611c0-8788-49c2-bd9e-a3b0920c0
+     683_6/source/supabase/functions/flight-admin-notify/index.ts",
+         "ezbr_sha256":
+     "ab572828352c5c1f12200383fad54139000be83209f0afb6ced277ba842bb329",
+         "id": "6b4611c0-8788-49c2-bd9e-a3b0920c0683",
+         "import_map": true,
+         "import_map_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_6b4611c0-8788-49c2-bd9e-a3b0920c0
+     683_6/source/supabase/functions/flight-admin-notify/deno.json",
+         "name": "flight-admin-notify",
+         "slug": "flight-admin-notify",
+         "status": "ACTIVE",
+         "updated_at": 1790175400279,
+         "verify_jwt": true,
+         "version": 6
+       },
+       {
+         "created_at": 1790175371764,
+         "entrypoint_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_d0e69e72-b712-4bc5-a9a6-cf855cf37
+     44b_1/source/supabase/functions/flight-admin-settings/index.ts",
+         "ezbr_sha256":
+     "3a6ca8a003b792483670714821d76cb04191ec346bf8adabaf01b96797a951c2",
+         "id": "d0e69e72-b712-4bc5-a9a6-cf855cf3744b",
+         "import_map": true,
+         "import_map_path":
+     "file:///tmp/user_fn_luugfvsrawnuzwpjvddt_d0e69e72-b712-4bc5-a9a6-cf855cf37
+     44b_1/source/supabase/functions/flight-admin-settings/deno.json",
+         "name": "flight-admin-settings",
+         "slug": "flight-admin-settings",
+         "status": "ACTIVE",
+         "updated_at": 1790175371764,
+         "verify_jwt": true,
+         "version": 1
+       }
+     ]
+
+● The deploy went through. send-email shows updated_at 2026-09-24 01:29 UTC,
+  ezbr_sha256 3e86a43b…, and verify_jwt: false, so the new version is running.
+
+  From this list:
+  - Only one send-email exists in this project. The other app's hook deploys to
+    the same slug, so the two overwrite each other. If that repo deploys again,
+    it will replace this version and bring back the domain-keyword logic. Stop
+    deploying send-email from that repo, or copy this version over.
+  - The functions from this morning's pull are already deployed.
+    flight-admin-settings (new), flight-parser, flight-notification and
+    flight-admin-notify were all updated 2026-09-23 around 21:00 UTC. That fits
+    the last session deploying them. I haven't checked whether the two new
+    migrations are applied.
+
+  Next is the email test on localhost: sign up once and request one password
+  reset, as I described above. Tell me the subject, the sender and the address
+  you land on after clicking the link, and I'll check the logs if anything looks
+  off.
+
+✻ Worked for 6s · done 9:29 AM
+
+❯ http://localhost:8080/ 現在無法執行?                                          
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Nothing is listening on port 8080. The dev server isn't running, so I'll start
+  it.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● The site wasn't down; the dev server just wasn't running, since nothing was
+  listening on port 8080. I started it with npm run dev, and
+  http://localhost:8080/ now returns HTTP 200.
+
+  The first load may be a little slow while Vite finishes bundling. The server
+  is running as a background task in this Claude session, so it stops when the
+  session ends. If you want to keep testing afterwards, run npm run dev in your
+  own terminal.
+
+  You can now do the email test from before: sign up once and request a password
+  reset once.
+
+✻ Worked for 1m 35s · done 9:33 AM
+
+❯ 我用已有帳號 密碼重設 也是 ok?                                                
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● 可以，而且這正好是本 app 會寄重設信的唯一路徑。本站沒有獨立的「忘記密碼」連結
+  ，重設信只在一種情況下寄出：
+
+  操作方式
+  1. 在 http://localhost:8080/auth 切到註冊。
+  2. 輸入已存在的 
+     email，搭配一個錯的密碼，送出。如果密碼剛好正確，會直接登入，不會寄信。
+  3. 畫面會顯示「此 email 已有帳號。我們已寄送一封密碼重設信…」。
+
+  要確認的三點
+  - 信件標題開頭是 機票降價通知｜重設密碼 / Reset your password。
+  - 寄件人是 "Flight Price Notifier"。
+  - 點連結後，網址列是 http://localhost:8080/auth/reset?app=fare-finder-pro，而
+    且頁面出現「設定新密碼」表單。
+
+  注意
+  - 不必真的送出新密碼。 上面三點確認完就算測試通過，直接關掉頁面即可。
+  - 真的送出的話，新密碼會同步套用到所有共用這個帳號的
+    app。另外，如果這個帳號原本不屬於本 app，送出後它會被加上 fare-finder-pro
+    標籤。
+  - 所以最好用本 app 自己的測試帳號，不要拿 project-management 的真實帳號來測。
+
+✻ Cogitated for 17s · done 9:36 AM
+
+❯ 收到信 如下                                                                   
+  信件檢視畫面                                                                  
+  機票降價通知｜重設密碼 / Reset your password                                  
+  收件匣                                                                        
+                                                                                
+  收件匣                                                                        
+  信件。若使用 JAWS，請視需要開啟虛擬電腦游標。                                 
+                                                                                
+  Flight Price Notifier                                                         
+  收件人：  我                                                                  
+   ·                                                                            
+  9月24日週四 於 上午9:34                                                       
+  信件內文                                                                      
+  機票降價通知｜重設密碼 / Reset your password                                  
+  我們收到重設你 Flight Price                                                   
+  Notifier（機票降價通知）帳號密碼的請求。請點擊下方按鈕設定新密碼。            
+                                                                                
+  繼續 / Continue                                                               
+                                                                                
+  如果按鈕無法點擊，請複製以下連結到瀏覽器：                                    
+  https://luugfvsrawnuzwpjvddt.supabase.co/auth/v1/verify?token=940675b6291c2c1 
+  b66b5902ca93ca5693838c58013280dd9e7d35ee2&type=recovery&redirect_to=http%3A%2 
+  F%2Flocalhost%3A8080%2Fauth%2Freset%3Fapp%3Dfare-finder-pro&apikey=sb_publish 
+  able_XRb6Mb3nc9xbeGdxKVTzkA_QIl2h4kF                                          
+                                                                                
+  如果這不是你本人的操作，請直接忽略這封信，你的帳號不會有任何變更。            
+
+● 信件本身正確，?app= 的判斷生效了：
+
+  - 標題：機票降價通知｜重設密碼 / Reset your password ✅
+  - 寄件人：Flight Price Notifier ✅
+  - 內文：產品名稱是「Flight Price Notifier（機票降價通知）」✅
+  - 連結：redirect_to 已正確編碼成
+    http%3A%2F%2Flocalhost%3A8080%2Fauth%2Freset%3Fapp%3Dfare-finder-pro
+    ✅。信裡的 redirect_to 保留了 localhost 和 ?app=，沒有被換成 Site
+    URL。這代表 Supabase 的 Redirect URLs 規則很可能已接受帶參數的網址。
+
+  最後一步：點「繼續」，確認兩件事：
+  1. 網址列是 http://localhost:8080/auth/reset?app=fare-finder-pro，後面可能跟著
+     #access_token=…。
+  2. 頁面出現「設定新密碼」表單，而不是一直顯示「正在確認重設連結…」。
+
+  兩項都對就算通過，不用真的送出新密碼。之後再用新 email
+  註冊一次，確認註冊信也正確，就可以 commit 了。
+
+✻ Brewed for 7s · done 9:37 AM
+❯ http://localhost:8080/auth/reset?app=fare-finder-pro#                         
+  Set a new password．設定新密碼                                                
+  注意：這組新密碼將成為您在所有共用此帳號系統之服務的登入密碼。                
+                                                                                
+  New password                                                                  
+
+● 密碼重設流程全部通過：
+
+  - 點連結後回到 http://localhost:8080/auth/reset?app=fare-finder-pro。結尾的 #
+    是 supabase-js 讀完 token 後把網址列清掉留下的，屬於正常現象。
+  - 「設定新密碼」表單有出現，代表 ?app= 沒有干擾 Supabase 的重設流程。
+
+  所以 ?app= 能通過 Supabase 的 Redirect URLs 規則，hook
+  也依它選對了寄件人和標題。這個分頁可以直接關掉，不用送出新密碼。
+
+  還剩一項：註冊信。 用一個全新的 email 註冊，例如
+  yourname+appfix2@gmail.com，確認兩點：
+  - 標題開頭是 機票降價通知｜確認你的帳號。
+  - 點連結後落在 http://localhost:8080/?app=fare-finder-pro，帳號變成已驗證。
+
+  註冊也通過的話，要我 commit 嗎？會包含 send-email、auth/index.tsx
+  和三份文件，只 commit、不 push。
+
+✻ Brewed for 5s · done 9:38 AM
+
+❯ 收到信                                                                        
+  機票降價通知｜確認你的帳號 / Confirm your account                             
+  收件匣                                                                        
+                                                                                
+  Flight Price Notifier                                                         
+  上午9:40 (0 分鐘前)                                                           
+  寄給 kyp001+appfix2                                                           
+                                                                                
+  機票降價通知｜確認你的帳號 / Confirm your account                             
+  你剛剛用這個 email 在 Flight Price                                            
+  Notifier（機票降價通知）註冊了帳號。請點擊下方按鈕確認你的 email，完成註冊。  
+                                                                                
+  繼續 / Continue                                                               
+                                                                                
+  如果按鈕無法點擊，請複製以下連結到瀏覽器：                                    
+  https://luugfvsrawnuzwpjvddt.supabase.co/auth/v1/verify?token=b9a9aefc88da084 
+  29ec91fd3059e901fc9988f251ce6b4f321aa1d09&type=signup&redirect_to=http%3A%2F% 
+  2Flocalhost%3A8080%2F%3Fapp%3Dfare-finder-pro&apikey=sb_publishable_XRb6Mb3nc 
+  9xbeGdxKVTzkA_QIl2h4kF                                                        
+                                                                                
+  如果這不是你本人的操作，請直接忽略這封信，你的帳號不會有任何變更。            
+
+● The confirmation email is correct:
+
+  - Subject: 機票降價通知｜確認你的帳號 / Confirm your account ✅
+  - Sender: Flight Price Notifier ✅
+  - Body: the sign-up intro with the product name ✅
+  - Link: redirect_to=http%3A%2F%2Flocalhost%3A8080%2F%3Fapp%3Dfare-finder-pro,
+    still the localhost address with ?app= on it ✅
+
+  Last step: click "繼續 / Continue" and check that:
+  1. The address bar shows http://localhost:8080/?app=fare-finder-pro. A
+     trailing # or #access_token=… is normal. You should not end up on
+     fare-finder-pro.vercel.app.
+  2. You're signed in. The header should show you as logged in, and /dashboard
+     should open.
+
+  If both look right, the whole change is verified. Once you're done testing,
+  kyp001+appfix2 can be deleted; tell me if you'd like me to do that. Should I
+  also commit? It's the send-email hook, auth/index.tsx and the three docs,
+  committed but not pushed.
+
+✻ Cogitated for 4s · done 9:41 AM
+
+❯ url :http://localhost:8080/?app=fare-finder-pro#                              
+
+● The confirmation link landed on http://localhost:8080/?app=fare-finder-pro#.
+  The empty # means supabase-js read the token and cleared it from the address
+  bar, so the account should now be confirmed and signed in.
+
+  So ?app= works in both flows:
+
+  ┌─────────────┬───────────────────────────┬───────────────────────────────┐
+  │    Test     │ Email subject and sender  │ Page after clicking the link  │
+  ├─────────────┼───────────────────────────┼───────────────────────────────┤
+  │ Password    │ 機票降價通知｜重設密碼,   │ /auth/reset?app=fare-finder-p │
+  │ reset       │ from Flight Price         │ ro, and the new-password form │
+  │             │ Notifier ✅               │  appeared ✅                  │
+  ├─────────────┼───────────────────────────┼───────────────────────────────┤
+  │ Sign-up con │ 機票降價通知｜確認你的帳  │                               │
+  │ firmation   │ 號, from Flight Price     │ /?app=fare-finder-pro ✅      │
+  │             │ Notifier ✅               │                               │
+  └─────────────┴───────────────────────────┴───────────────────────────────┘
+
+  The shared hook now picks the app from the ?app= value, not from the domain.
+  Changing to flight.vercel.app later won't change these emails.
+
+  What's left:
+  1. Commit. It covers the send-email hook, src/routes/auth/index.tsx, and three
+     docs (CLAUDE.md, README.md, docs/shared-supabase-auth.md). I'd commit on
+     multi-app without pushing. Should I go ahead?
+  2. The project-management repo: add ?app=project-management to its front-end,
+     and stop deploying its own send-email. That deploy would overwrite this
+     version.
+  3. Test account: kyp001+appfix2 can be deleted whenever you like.
+
+✻ Sautéed for 6s · done 9:43 AM
+
+❯ commit                                                                        
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● I committed the change on multi-app as 2da3e54 and haven't pushed it. The
+  commit includes the send-email hook, src/routes/auth/index.tsx and three docs
+  (CLAUDE.md, README.md, docs/shared-supabase-auth.md), and the working tree is
+  clean.
+
+  When you want to push, run ! git push.
+
+  Two follow-ups:
+  - project-management repo: add ?app=project-management to its sign-up and
+    reset links. Stop deploying its own send-email there, because that would
+    replace the version now running.
+  - Test account: kyp001+appfix2 can be deleted whenever you like.
+
+✻ Baked for 14s · done 9:45 AM

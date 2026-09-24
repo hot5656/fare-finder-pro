@@ -21,6 +21,7 @@
 3. 透過 ECPay 信用卡定期定額付費（NT$300／月），只有付費者收得到降價通知。
 4. `pg_cron` 每 30 分鐘觸發 `flight-parser` 抓最低價，達標者經 `flight-notification` 去重後寄信。
 5. 訂閱生命週期 `pending_payment → active → cancelled（寬限期）→ expired` 與對應 email。
+6. admin 關閉「使用綠界付款」（`flight.settings.payment_required = false`）時的免費訂閱：`active（free，一個月）→ expired`，到期不留寬限期、取消立即失效。
 
 ### 1.2 範圍內
 | 層級 | 項目 |
@@ -52,7 +53,7 @@
 
 ### 2.1 前置條件
 - `.env` 含 `VITE_SUPABASE_URL`、`VITE_SUPABASE_PUBLISHABLE_KEY`、`SUPABASE_URL`、`SUPABASE_PUBLISHABLE_KEY`（兩組指向同一專案）。
-- Edge secrets 已設定：`RESEND_API_KEY`、`SEND_EMAIL_HOOK_SECRET`、`TRAVELPAYOUTS_TOKEN`、`ECPAY_MERCHANT_ID`、`ECPAY_HASH_KEY`、`ECPAY_HASH_IV`、`ECPAY_ENV`、`ECPAY_AMOUNT`（`SITE_URL` 未設，預設 `http://localhost:8080`）。
+- Edge secrets 已設定：`RESEND_API_KEY`、`SEND_EMAIL_HOOK_SECRET`、`TRAVELPAYOUTS_TOKEN`、`ECPAY_MERCHANT_ID`、`ECPAY_HASH_KEY`、`ECPAY_HASH_IV`、`ECPAY_ENV`、`ECPAY_AMOUNT`、`SITE_URL`（目前為 Vercel 網址；未設時預設 `http://localhost:8080`，換網域見 `docs/change-site-url.md`）。
 - Vault 內有 `flight_service_role_key`（cron 用）。
 - Supabase Auth 的 Redirect URLs 包含 `http://localhost:8080/**`。
 - 三支 ECPay 回呼函式 `verify_jwt = false`；其餘見 `supabase/config.toml`。
@@ -259,6 +260,23 @@
 | G5 | 成功回呼缺 `TotalSuccessTimes` | 延長期間但**不寄**信（寧可漏寄也不重複） | 已於 2026-09-21 執行，見測試報告 |
 | G6 | **失敗**回呼且 `TotalSuccessTimes >= ExecTimes`（排程次數已用完） | `flight-ecpay-period` 轉 `expired` 並寄 `expired` 信（同一事件也會先寄一封 `payment_failed`）；重送相同回呼不再寄。此路徑只在失敗回呼上，成功的最後一期不會轉 `expired` | 已於 2026-09-21 執行，見測試報告 |
 
+### 8.8 免費模式開關（P）
+
+2026-09-24 新增（migration `20260924100000_flight_payment_required.sql`）。`payment_required` 是全站設定，測試期間所有新訂閱都會免費，**測完務必切回開啟**；用來測試的訂閱列要先備份、測完還原。
+
+| ID | 用例 | 預期 | 狀態 |
+|---|---|---|---|
+| P1 | `/admin` 設定區切換「使用綠界付款」關／開 | `flight.settings.payment_required` 依序變 `false`／`true`，`updated_at` 更新；非 admin 呼叫 `flight-admin-settings` → `403`，未知 key → `400` | ✅（403／400 為程式碼審查） |
+| P2 | 開關關閉時開 dashboard | 無訂閱或 `expired`／`pending_payment` 的卡片按鈕為「開始免費追蹤（一個月）」或「免費重新訂閱」；已付費的 `active`／`cancelled` 仍為「更新目標價」 | ✅ |
+| P3 | 開關關閉時訂閱 | 回 `application/json`（非 ECPay 表單）；列 → `active`、`payment_method = 'free'`、`merchant_trade_no` 為 null、`current_period_end` ＝ 現在 +1 個月；卡片顯示「免費 · 有效至 …」；寄免費版 welcome 信（無扣款字樣） | ✅ |
+| P4 | 免費訂閱按取消 | 確認文字為「取消後立即停止通知」；**不呼叫 ECPay**；列直接 → `expired`、`current_period_end` ＝ 現在；寄免費版取消信（「降價通知即刻停止」） | ✅ |
+| P5 | 免費訂閱 `expired` 後再免費重新訂閱 | 再次 `active`／`free`、+1 個月（可無限次） | ✅ |
+| P6 | 把免費列 `current_period_end` 調到過去，等下一次 cron（或手動跑 parser） | 同一輪就轉 `expired`（**無** 7 天寬限），寄「一個月免費訂閱期已結束」（reason `free_period_ended`）；付費 `active` 列的 7 天寬限規則不受影響 | ✅ |
+| P7 | 免費訂閱仍有效時把開關切回開啟 | 免費列維持 `active` 到自己的到期日；可照常更新目標價；到期後重新訂閱走 ECPay | ✅ |
+| P8 | `/admin` 統計 | `MRR` 只計 `active` 且 `payment_method = 'ecpay'`；訂閱列表 Payment 欄顯示「免費 Free」／「綠界 ECPay」 | ✅ |
+| P9 | 開關開啟時從 `expired` 重新訂閱 | 回 ECPay 表單，列 → `pending_payment`、`payment_method = 'ecpay'`、新 `merchant_trade_no` | ✅ |
+| P10 | 已登入但非 admin 的使用者讀 `flight.settings` | 只讀得到 `payment_required` 這一筆，其他 key（如 `v1_compare_enabled`）讀不到 | 程式碼已實作，建議補測 |
+
 ---
 
 ## 9. 資料庫與 auth 觸發器
@@ -300,7 +318,8 @@
 6. 以登入使用者嘗試 `update`／`insert` `flight.subscriptions` → `42501`（F1）。
 7. 登入 → dashboard → 開 `flight-subscribe` 結帳表單確認 cashier 接受（CMV 正確）。
 8. 若動到 migration：確認 `schema_migrations` 已登錄。
-9. 若動到 `_shared/ecpay.ts`：所有引用它的函式都要重新部署，並確認 `PeriodType=M`、`ExecTimes=999`（測試後務必還原）。
+9. 若動到 `flight-subscribe`／`flight-parser`／`flight-cancel-subscription`：確認 `payment_required` 為 `true`（開啟），測試後務必切回。
+10. 若動到 `_shared/ecpay.ts`：所有引用它的函式都要重新部署，並確認 `PeriodType=M`、`ExecTimes=999`（測試後務必還原）。
 
 ---
 

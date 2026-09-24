@@ -1,8 +1,9 @@
 # M1 Flight Price Checker — Session Handoff
 
-Updated 2026-09-19 (adds the M2 ECPay paywall — see "M2 status" and "Lessons
-learned" below; supersedes the 2026-09-17 version, which described a
-half-built state that no longer applies).
+Updated 2026-09-24 (latest: M2 follow-up 7, the admin switch for free
+one-month subscriptions). The 2026-09-19 revision added the M2 ECPay paywall
+(see "M2 status" and "Lessons learned" below) and superseded the 2026-09-17
+version, which described a half-built state that no longer applies.
 
 ## Where things stand
 
@@ -11,7 +12,9 @@ project (`luugfvsrawnuzwpjvddt`, "demo_app"). The verification checklist is
 `.claude/skills/m1-code-flight-price-checker-checklist/SKILL.md`; it was run on
 2026-09-18. Subscribe → 30-min scheduled fetch → deduplicated email all work.
 M1 shipped with no payment gate; **M2 (2026-09-19) added the paywall on top**,
-so today only paying (or cancelled-but-paid-through) subscribers are alerted.
+so today only paying (or cancelled-but-paid-through) subscribers are alerted,
+plus free one-month subscribers while an admin has payment switched off
+(follow-up 7).
 
 | Area | Status | Evidence |
 |---|---|---|

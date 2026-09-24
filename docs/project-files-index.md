@@ -49,3 +49,5 @@ Claude Code 對話紀錄的匯出檔，非程式碼，依序記錄各次開發�
 | `no_11_check_tickets_raw_data_2026-09.txt` | 查票價掃描（`flight-parser`）觸發機制與手動測試腳本（`supabase/scripts/manual-flight-parser-run.sql`）；修掉 `routeTree.gen.ts` 因行尾符號造成的假 diff（新增 `.gitattributes`）；臨時加 log 撈 Travelpayouts 原始回應後移除並重新部署。 |
 | `no_12_change_to_v3_api_2026-09-23.txt` | 查手動通知信「看不到」的原因（Gmail 同主旨併入對話串、送達延遲）；改用 Travelpayouts v3 API 觸發通知，信中列出航班詳情（航空公司、航班號、去回程起降時間、飛行時間、轉機、機場）並附 v1 對照（`flight.routes.last_offer_v3` / `last_offer_v1`）；信中註明來回票價僅適用所列日期、dashboard 標示「來回」；`/admin` 新增 v1 對照開關（`flight.settings`、`flight-admin-settings`）。 |
 | `no_13_payment_1_2026-09-23.txt` | 討論（未實作）admin「是否需要付款」開關：關閉時免費訂閱一個月、到期自動取消、取消立即生效；決定可無限重新訂閱，切回付款時免費訂閱保留到到期。 |
+| `no_14_sendmail_ref_app_name_2026-09-24.txt` | 討論換網址對 app 判斷的影響；共用的 `send-email` hook 改成依 `redirect_to` 的 `?app=` 選擇各 app 的寄件人與信件標題（`APPS` 白名單，找不到時用 `user_metadata.app`，再不行用通用身分），前端註冊、密碼重設都帶上 `?app=`，並實測驗證信與重設信。 |
+| `no_15_payment_2_2026-09-24.txt` | 實作 no_13 的 admin「使用綠界付款／不需付款」開關：`flight.settings.payment_required`、`subscriptions.payment_method`（`ecpay`／`free`）、免費訂閱一個月、到期不留寬限期、取消立即失效、`/admin` 營收只計付費；部署後用 chrome-devtools 端對端驗證（含 cron 到期與四封狀態信）。另整理換公司網域的檢查清單 `docs/change-site-url.md`。 |

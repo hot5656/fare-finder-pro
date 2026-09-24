@@ -158,6 +158,8 @@ http://localhost:8080/**
 | `https://fare-finder-pro-*-roberts-projects-2b1cd09b.vercel.app/**` | Vercel 每次 PR / 分支自動產生的 preview 網址（如 `fare-finder-2r1ppz0jz-roberts-projects-2b1cd09b.vercel.app`） | 這些網址每次部署都不同、帶隨機 hash，不可能一條一條加；用 `*` 卡住中間隨機那段，讓任何 preview 部署上測註冊流程都能正常導回同一個 preview |
 | `http://localhost:8080/**` | 本機開發測試（`npm run dev` 實際跑的 port） | 讓本機開發也能完整測完整個註冊/驗證流程，不用每次都部署到 Vercel 才能測；是 **8080**，不是 Lovable 預覽環境殘留的 **3000**（那個 port 跟這個專案的 vite dev server 無關） |
 
+**換網域時**（例如改用公司網域）：除了在這裡加上新網域的 Redirect URL，還要改 Edge Function secret `SITE_URL`（信裡的重新訂閱連結、付款後的導回網址），完整清單見 `docs/change-site-url.md`。
+
 **常見症狀**：Site URL/Redirect URLs 沒設對時，驗證信連結點下去會出現 `#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired`，或是明明驗證成功卻被導回一個打不開的網址（例如導回 `localhost:3000`，但使用者電腦上根本沒在跑那個 port）。
 
 ### 共用 Supabase 專案的跨 app 登入隔離慣例
