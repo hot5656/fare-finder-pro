@@ -198,6 +198,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_list_app_users: {
+        Args: { p_limit?: number; p_offset?: number; p_search?: string }
+        Returns: {
+          created_at: string
+          email: string
+          email_confirmed_at: string
+          id: string
+          is_admin: boolean
+          last_sign_in_at: string
+          paying_count: number
+          subscription_count: number
+          total_count: number
+        }[]
+      }
       is_admin: { Args: never; Returns: boolean }
     }
     Enums: {

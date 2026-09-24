@@ -1,7 +1,8 @@
 # M1 Flight Price Checker — Session Handoff
 
-Updated 2026-09-24 (latest: M2 follow-up 7, the admin switch for free
-one-month subscriptions). The 2026-09-19 revision added the M2 ECPay paywall
+Updated 2026-09-24 (latest: M2 follow-up 8, the four-page `/admin` with paging,
+the registered-users list and the force-expire test switch; before that follow-up 7,
+the admin switch for free one-month subscriptions). The 2026-09-19 revision added the M2 ECPay paywall
 (see "M2 status" and "Lessons learned" below) and superseded the 2026-09-17
 version, which described a half-built state that no longer applies.
 
@@ -367,6 +368,60 @@ switch off saved → dashboard 「免費重新訂閱」 → row `active`/`free`,
 the free row was still active (MRR excluded it, Payment column 「免費 Free」) → 「重新訂閱」
 opened the ECPay stage cashier with a fresh `pending_payment` row. Welcome ×2, cancel and
 expired emails all logged as sent. `payment_required` is left `true`.
+
+### M2 follow-up 8: `/admin` split into pages, users list, force-expire switch (2026-09-24 — deployed and verified)
+
+`/admin` is now four pages under one layout (`admin/route.tsx`: header + tabs + `<Outlet />`):
+
+| Tab | Route | Content |
+|---|---|---|
+| 總覽 Overview | `/admin` | stat cards, 設定 switches, routes' latest price |
+| 註冊用戶 Users | `/admin/users` | accounts tagged `fare-finder-pro` |
+| 所有訂閱 Subscriptions | `/admin/subscriptions` | search (email / route code / Chinese route name) + status filter |
+| 通知紀錄 Notification history | `/admin/notifications` | alert history |
+
+- Users, Subscriptions and Notifications page **in the database**, 20 rows per page
+  (`PAGE_SIZE` in `src/components/admin/shared.ts`), with a shared `Pager`
+  (`src/components/admin/AdminUI.tsx`). The old single page loaded whole tables and
+  would have been cut off silently at PostgREST's 1,000-row cap. Notification emails are
+  resolved per page from `subscriptions` (`user_id in (...)`); a user with history but no
+  subscription row still falls back to the UUID.
+- Route columns show `flight.routes.display_name` (台北 ✈ 東京) instead of the code; the
+  code stays the fallback.
+- **Tab lag fix.** Both guards now return early when TanStack passes `cause: "stay"`
+  (the route was already matched): `_authenticated` reuses the local session instead of
+  `getUser()`, and `admin/route.tsx` skips the `is_admin` RPC. Tab switches went from a
+  visible pause to ~25 ms. The full checks still run on entry (dashboard → Admin ~0.5 s).
+  Both are UI guards only; RLS / `flight.is_admin()` stay the real boundary.
+- **Users list.** Migration `20260924110000_flight_admin_app_users.sql` adds
+  `flight.admin_list_app_users(p_search, p_limit, p_offset)`, SECURITY DEFINER: raises
+  `admin only` (42501) unless `flight.is_admin()`, returns only
+  `raw_app_meta_data.apps ? 'fare-finder-pro'` accounts with email, created / confirmed /
+  last sign-in, admin flag, subscription count and paying count (same rule as the parser),
+  plus `total_count`. EXECUTE: `postgres`, `authenticated` only. The function signature was
+  added to `src/integrations/supabase/types.ts` by hand (14 lines; don't prettier that file).
+- **Force-expire test switch.** `flight.settings.force_expire_enabled`, **default off**
+  (a missing row is off, unlike the other switches; `useBoolSetting(key, defaultEnabled)`
+  and `BooleanSetting defaultEnabled={false}`). While on, each `cancelled` row on the
+  Subscriptions page has 強制到期 (with a confirm). It calls the new Edge Function
+  `flight-admin-expire` (admin JWT, checked against `flight.admins`; re-reads the switch and
+  requires exactly `true`), which sets `expired` + `current_period_end = now` guarded on
+  `subscription_status = 'cancelled'` and sends the `expired` email (reason `period_ended`).
+  ECPay is not called: the series was already stopped when the row was cancelled.
+  `flight-admin-settings` allowlists the new key.
+
+Deploy: the migration (+ `migration repair`, history row confirmed), then
+`flight-admin-settings` and `flight-admin-expire` (`verify_jwt = true`). All done 2026-09-24.
+
+Verified 2026-09-24 on localhost:8080 as kyp001@gmail.com (admin): tabs and paging
+(notifications 44 rows → 3 pages, page 3 shows 41–44); subscriptions search `yahoo` +
+`active` → 2 rows, `東京` → the 3 Tokyo rows; users page lists 7 of the project's 27
+accounts (matches a direct count of tagged users), admin badge, counts match the
+subscriptions page. Force-expire: switch off → direct call 403; switch on (saved
+14:20:48Z) → button on exactly the 5 cancelled rows; the user expired kyp741@gmail.com's
+TPE-SEL row (`6a7d8a6b…`) at 14:22:22Z, `expired email sent to kyp741@gmail.com (TPE-SEL)`
+logged; a second call on the same row → 409, no second email.
+**`force_expire_enabled` was left `true`** — turn it off in 總覽 → 設定 when testing is done.
 
 ## Project / environment facts (don't re-derive these)
 

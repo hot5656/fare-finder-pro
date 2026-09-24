@@ -46,6 +46,13 @@ import_map = "./functions/flight-admin-notify/deno.json"
 entrypoint = "./functions/flight-admin-notify/index.ts"
 
 # Admin: called by an admin user with their own JWT; checked against flight.admins inside.
+[functions.flight-admin-expire]
+enabled = true
+verify_jwt = true
+import_map = "./functions/flight-admin-expire/deno.json"
+entrypoint = "./functions/flight-admin-expire/index.ts"
+
+# Admin: called by an admin user with their own JWT; checked against flight.admins inside.
 [functions.flight-admin-settings]
 enabled = true
 verify_jwt = true
