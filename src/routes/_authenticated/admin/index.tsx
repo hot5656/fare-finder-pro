@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -68,6 +68,10 @@ function AdminPage() {
   }, [subscriptions]);
 
   const activeCount = statusCounts["active"] ?? 0;
+  // Free rows (payment_required was off) bring in no money.
+  const paidActiveCount = subscriptions.filter(
+    (s) => s.subscription_status === "active" && s.payment_method !== "free",
+  ).length;
   const paymentFailedCount = subscriptions.filter((s) => s.payment_failed_at != null).length;
 
   // notification_history has user_id but no email column and no FK PostgREST can
@@ -138,7 +142,7 @@ function AdminPage() {
               <StatCard label="有效訂閱 Active" value={activeCount} />
               <StatCard
                 label="預估月營收 MRR"
-                value={`NT$${(activeCount * MONTHLY_PRICE_TWD).toLocaleString()}`}
+                value={`NT$${(paidActiveCount * MONTHLY_PRICE_TWD).toLocaleString()}`}
               />
               <StatCard label="總訂閱數 Total" value={subscriptions.length} />
               <StatCard
@@ -154,7 +158,7 @@ function AdminPage() {
               ))}
             </div>
 
-            <V1CompareSetting />
+            <SettingsSection />
 
             {/* Routes / last price */}
             <section className="mt-10">
@@ -223,6 +227,7 @@ function AdminPage() {
                       <th className="px-4 py-2">Route</th>
                       <th className="px-4 py-2">Target price</th>
                       <th className="px-4 py-2">Status</th>
+                      <th className="px-4 py-2">Payment</th>
                       <th className="px-4 py-2">Period end</th>
                       <th className="px-4 py-2">Payment failed</th>
                       <th className="px-4 py-2">Renewals</th>
@@ -240,7 +245,7 @@ function AdminPage() {
                     ))}
                     {filteredSubscriptions.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="px-4 py-6 text-center text-muted-foreground">
+                        <td colSpan={10} className="px-4 py-6 text-center text-muted-foreground">
                           No matching subscriptions.
                         </td>
                       </tr>
@@ -304,23 +309,61 @@ function AdminPage() {
   );
 }
 
-const SETTING_KEY = ["admin", "settings", "v1_compare_enabled"];
-type V1Setting = { enabled: boolean; updatedAt: string | null };
+type BoolSetting = { enabled: boolean; updatedAt: string | null };
 
-// Admin switch for the Travelpayouts v1 comparison (flight.settings
-// v1_compare_enabled). Read through RLS (admins only); written through
-// flight-admin-settings. A missing row means on, matching flight-parser.
-function V1CompareSetting() {
+// Admin switches (flight.settings). Read through RLS (admins read every key);
+// written through flight-admin-settings. A missing row means on, matching the
+// Edge Functions that read them.
+function SettingsSection() {
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-bold">設定 Settings</h2>
+      <BooleanSetting
+        settingKey="payment_required"
+        label="使用綠界付款 / Require ECPay payment"
+        description={
+          <>
+            開啟：訂閱需經綠界信用卡定期定額付款（NT$300/月）。
+            關閉：不需付款，訂閱立即生效一個月，到期自動結束（可再免費重新訂閱），取消立即生效。
+            切回開啟時，現有的免費訂閱保留到各自的到期日。立即套用於之後的新訂閱。
+          </>
+        }
+      />
+      <BooleanSetting
+        settingKey="v1_compare_enabled"
+        label="v1 價格對照 / v1 price comparison"
+        description={
+          <>
+            開啟：每次查價同時查 Travelpayouts v1，通知信列出 v1
+            對照（無資料時顯示「目前無資料」）。 關閉：不查 v1，通知信不顯示 v1 區塊。通知一律以 v3
+            價格觸發；自動查價於下次排程（最多 30 分鐘）套用，手動發送立即套用。
+          </>
+        }
+      />
+    </section>
+  );
+}
+
+function BooleanSetting({
+  settingKey,
+  label,
+  description,
+}: {
+  settingKey: string;
+  label: string;
+  description: ReactNode;
+}) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const queryKey = ["admin", "settings", settingKey];
 
   const settingQuery = useQuery({
-    queryKey: SETTING_KEY,
-    queryFn: async (): Promise<V1Setting> => {
+    queryKey,
+    queryFn: async (): Promise<BoolSetting> => {
       const { data, error } = await supabase
         .from("settings")
         .select("value, updated_at")
-        .eq("key", "v1_compare_enabled")
+        .eq("key", settingKey)
         .maybeSingle();
       if (error) throw error;
       return { enabled: data?.value !== false, updatedAt: data?.updated_at ?? null };
@@ -332,7 +375,7 @@ function V1CompareSetting() {
   const mutation = useMutation({
     mutationFn: async (enabled: boolean) => {
       const res = await callFunction("flight-admin-settings", {
-        key: "v1_compare_enabled",
+        key: settingKey,
         value: enabled,
       });
       const data = await res.json();
@@ -341,65 +384,59 @@ function V1CompareSetting() {
     },
     onMutate: async (enabled) => {
       setError(null);
-      await queryClient.cancelQueries({ queryKey: SETTING_KEY });
-      const previous = queryClient.getQueryData<V1Setting>(SETTING_KEY);
-      queryClient.setQueryData<V1Setting>(SETTING_KEY, {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<BoolSetting>(queryKey);
+      queryClient.setQueryData<BoolSetting>(queryKey, {
         enabled,
         updatedAt: previous?.updatedAt ?? null,
       });
       return { previous };
     },
     onSuccess: (data) =>
-      queryClient.setQueryData<V1Setting>(SETTING_KEY, {
+      queryClient.setQueryData<BoolSetting>(queryKey, {
         enabled: data.value !== false,
         updatedAt: data.updated_at,
       }),
     onError: (e, _enabled, context) => {
-      if (context?.previous) queryClient.setQueryData(SETTING_KEY, context.previous);
+      if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
       setError(e instanceof Error ? e.message : "儲存失敗 Save failed");
     },
   });
 
   const enabled = settingQuery.data?.enabled ?? true;
+  const id = `setting-${settingKey}`;
 
   return (
-    <section className="mt-10">
-      <h2 className="text-lg font-bold">設定 Settings</h2>
-      <div className="mt-4 flex items-start justify-between gap-4 rounded-2xl border border-border p-4">
-        <div>
-          <label htmlFor="v1-compare" className="text-sm font-medium">
-            v1 價格對照 / v1 price comparison
-          </label>
+    <div className="mt-4 flex items-start justify-between gap-4 rounded-2xl border border-border p-4">
+      <div>
+        <label htmlFor={id} className="text-sm font-medium">
+          {label}
+        </label>
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+        {settingQuery.data?.updatedAt && (
           <p className="mt-1 text-xs text-muted-foreground">
-            開啟：每次查價同時查 Travelpayouts v1，通知信列出 v1
-            對照（無資料時顯示「目前無資料」）。 關閉：不查 v1，通知信不顯示 v1 區塊。通知一律以 v3
-            價格觸發；自動查價於下次排程（最多 30 分鐘）套用，手動發送立即套用。
+            最後更新：{fmtDateTime(settingQuery.data.updatedAt)}
           </p>
-          {settingQuery.data?.updatedAt && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              最後更新：{fmtDateTime(settingQuery.data.updatedAt)}
-            </p>
-          )}
-          {settingQuery.isError && (
-            <p className="mt-1 text-xs text-destructive">讀取設定失敗 Couldn't load setting</p>
-          )}
-          {mutation.isPending && (
-            <p className="mt-1 text-xs text-muted-foreground">儲存中… Saving…</p>
-          )}
-          {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
-        </div>
-        <Switch
-          id="v1-compare"
-          checked={enabled}
-          disabled={settingQuery.isLoading}
-          // Ignore clicks while a save is in flight rather than greying the switch
-          // out; two overlapping saves could land out of order.
-          onCheckedChange={(checked) => {
-            if (!mutation.isPending) mutation.mutate(checked);
-          }}
-        />
+        )}
+        {settingQuery.isError && (
+          <p className="mt-1 text-xs text-destructive">讀取設定失敗 Couldn't load setting</p>
+        )}
+        {mutation.isPending && (
+          <p className="mt-1 text-xs text-muted-foreground">儲存中… Saving…</p>
+        )}
+        {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
       </div>
-    </section>
+      <Switch
+        id={id}
+        checked={enabled}
+        disabled={settingQuery.isLoading}
+        // Ignore clicks while a save is in flight rather than greying the switch
+        // out; two overlapping saves could land out of order.
+        onCheckedChange={(checked) => {
+          if (!mutation.isPending) mutation.mutate(checked);
+        }}
+      />
+    </div>
   );
 }
 
@@ -468,6 +505,9 @@ function SubscriptionRow({
         >
           {s.subscription_status}
         </span>
+      </td>
+      <td className="px-4 py-2 text-muted-foreground">
+        {s.payment_method === "free" ? "免費 Free" : "綠界 ECPay"}
       </td>
       <td className="px-4 py-2 text-muted-foreground">{fmtDateTime(s.current_period_end)}</td>
       <td className="px-4 py-2 text-muted-foreground">{fmtDateTime(s.payment_failed_at)}</td>

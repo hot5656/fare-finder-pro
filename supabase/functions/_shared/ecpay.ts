@@ -159,7 +159,9 @@ export function sendStatusEmail(payload: {
   route: string;
   current_period_end?: string | null;
   // "expired" only: why the service ended.
-  reason?: "period_ended" | "payment_lapsed";
+  reason?: "period_ended" | "payment_lapsed" | "free_period_ended";
+  // "welcome" / "cancel": a free (payment_required off) subscription, no ECPay.
+  free?: boolean;
   // "renewed" only: what was charged, and which charge it was (1 = first).
   amount?: number;
   charge_no?: number;

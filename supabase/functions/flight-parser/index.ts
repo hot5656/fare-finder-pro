@@ -196,7 +196,7 @@ Deno.serve(async (req) => {
   const expiredRows: Array<{
     email: string;
     route: string;
-    reason: "period_ended" | "payment_lapsed";
+    reason: "period_ended" | "payment_lapsed" | "free_period_ended";
   }> = [];
 
   // 1) cancelled, and the period they paid for is over.
@@ -216,10 +216,23 @@ Deno.serve(async (req) => {
     .from("subscriptions")
     .update({ subscription_status: "expired", updated_at: nowIso })
     .eq("subscription_status", "active")
+    .eq("payment_method", "ecpay")
     .lt("current_period_end", lapsedBefore)
     .select("email, route");
   if (activeError) console.error("failed to expire lapsed active rows", activeError);
   for (const r of endedActive ?? []) expiredRows.push({ ...r, reason: "payment_lapsed" });
+
+  // 3) free (payment_required was off): one month, no renewal to wait for,
+  // so no grace period. Runs whatever the switch says now.
+  const { data: endedFree, error: freeError } = await admin
+    .from("subscriptions")
+    .update({ subscription_status: "expired", updated_at: nowIso })
+    .eq("subscription_status", "active")
+    .eq("payment_method", "free")
+    .lt("current_period_end", nowIso)
+    .select("email, route");
+  if (freeError) console.error("failed to expire ended free rows", freeError);
+  for (const r of endedFree ?? []) expiredRows.push({ ...r, reason: "free_period_ended" });
 
   for (const r of expiredRows) {
     // Fire-and-forget; waitUntil lets it finish after we return. A failure here

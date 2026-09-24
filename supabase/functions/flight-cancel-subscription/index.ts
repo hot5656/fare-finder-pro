@@ -5,6 +5,7 @@
 //   2. subscription_status -> 'cancelled' (a grace state, NOT 'expired'):
 //      current_period_end is kept so alerts continue until the paid month ends
 //   3. hand a "cancel" email to flight-status-notification
+// A free row (payment_method 'free') skips ECPay and goes straight to 'expired'.
 //
 // If ECPay refuses the cancel for a real reason we return an error and leave
 // the row untouched — otherwise the user could be charged with no service. But if
@@ -65,7 +66,7 @@ Deno.serve(async (req) => {
 
   const { data: row, error } = await admin
     .from("subscriptions")
-    .select("id, email, route, subscription_status, merchant_trade_no, current_period_end")
+    .select("id, email, route, subscription_status, payment_method, merchant_trade_no, current_period_end")
     .eq("user_id", user.id)
     .eq("plan_name", planName)
     .maybeSingle();
@@ -79,6 +80,23 @@ Deno.serve(async (req) => {
   }
   if (row.subscription_status !== "active" && row.subscription_status !== "pending_payment") {
     return json({ error: `nothing to cancel (status: ${row.subscription_status})` }, 409);
+  }
+
+  // Free rows (payment_required was off) have nothing at ECPay and no paid
+  // period to honour: cancelling ends them now.
+  if (row.payment_method === "free" && row.subscription_status === "active") {
+    const nowIso = new Date().toISOString();
+    const { error: freeError } = await admin
+      .from("subscriptions")
+      .update({ subscription_status: "expired", current_period_end: nowIso, updated_at: nowIso })
+      .eq("id", row.id)
+      .eq("subscription_status", "active");
+    if (freeError) {
+      console.error("free cancel update failed", freeError);
+      return json({ error: "cancel failed" }, 500);
+    }
+    sendStatusEmail({ event_type: "cancel", email: row.email, route: row.route, free: true });
+    return json({ status: "expired", current_period_end: nowIso });
   }
 
   if (row.merchant_trade_no) {

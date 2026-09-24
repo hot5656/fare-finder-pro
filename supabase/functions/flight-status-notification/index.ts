@@ -5,10 +5,13 @@
 // flight-ecpay-period (renewed, payment_failed, expired) and flight-parser
 // (expired); never scheduled itself.
 //
-// Body: { event_type, email, route, current_period_end?, reason?, amount?, charge_no? }
+// Body: { event_type, email, route, current_period_end?, reason?, free?, amount?, charge_no? }
 //   amount / charge_no ("renewed" only): what was charged and which charge it was.
-//   reason ("expired" only): "period_ended" (a cancelled subscription ran out)
-//   or "payment_lapsed" (renewals stopped succeeding).
+//   reason ("expired" only): "period_ended" (a cancelled subscription ran out),
+//   "payment_lapsed" (renewals stopped succeeding) or "free_period_ended" (a
+//   free one-month subscription ran out).
+//   free ("welcome" / "cancel"): a free subscription (admin switched payment
+//   off), so no charge wording.
 //
 // verify_jwt = true, and the exact service-role bearer check below is what
 // actually keeps random callers from sending email through us.
@@ -34,7 +37,8 @@ type Payload = {
   email: string;
   route: string;
   current_period_end?: string | null;
-  reason?: "period_ended" | "payment_lapsed";
+  reason?: "period_ended" | "payment_lapsed" | "free_period_ended";
+  free?: boolean;
   amount?: number;
   charge_no?: number;
 };
@@ -51,12 +55,26 @@ function render(p: Payload, label: string): { subject: string; html: string; tex
     text: `${title}\n${lines.join("\n")}`,
   });
 
+  if (p.event_type === "welcome" && p.free) {
+    return wrap(`✈️ 免費訂閱成功！${label} 降價通知已開始`, [
+      `當 ${label} 的機票降到你的目標價，我們會立刻寄信通知你。`,
+      until ? `這次免費訂閱的服務期間至 ${until}，不需付款，到期後可隨時再免費重新訂閱。` : "這次訂閱不需付款，到期後可隨時再重新訂閱。",
+    ]);
+  }
+
   if (p.event_type === "welcome") {
     return wrap(`✈️ 訂閱成功！${label} 降價通知已開始`, [
       `謝謝你的訂閱。當 ${label} 的機票降到你的目標價，我們會立刻寄信通知你。`,
       ECPAY_AMOUNT ? `每月扣款 NT$${Number(ECPAY_AMOUNT).toLocaleString()}（信用卡定期定額），你可以隨時取消。` : "",
       until ? `目前的服務期間至 ${until}。` : "",
     ].filter(Boolean));
+  }
+
+  if (p.event_type === "cancel" && p.free) {
+    return wrap(`已取消 ${label} 的降價通知訂閱`, [
+      "你的免費訂閱已取消，降價通知即刻停止。",
+      "想再回來，隨時可以重新訂閱。",
+    ]);
   }
 
   if (p.event_type === "cancel") {
@@ -91,7 +109,9 @@ function render(p: Payload, label: string): { subject: string; html: string; tex
   return wrap(`${label} 降價通知已結束`, [
     p.reason === "payment_lapsed"
       ? `因為多次扣款未成功，你的 ${label} 訂閱已結束，我們不會再寄降價通知。`
-      : `你的 ${label} 訂閱期間已結束，我們不會再寄降價通知，也不會再向你收費。`,
+      : p.reason === "free_period_ended"
+        ? `你的 ${label} 一個月免費訂閱期已結束，我們不會再寄降價通知。`
+        : `你的 ${label} 訂閱期間已結束，我們不會再寄降價通知，也不會再向你收費。`,
     resubscribe,
   ]);
 }

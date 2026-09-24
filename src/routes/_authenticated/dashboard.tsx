@@ -64,6 +64,22 @@ function DashboardPage() {
     },
   });
 
+  // Admin switch (flight.settings payment_required). Only an explicit false
+  // means free; missing or unreadable keeps the paid wording, like flight-subscribe.
+  const paymentRequiredQuery = useQuery({
+    queryKey: ["flight", "settings", "payment_required"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("settings")
+        .select("value")
+        .eq("key", "payment_required")
+        .maybeSingle();
+      if (error) return true;
+      return data?.value !== false;
+    },
+  });
+  const paymentRequired = paymentRequiredQuery.data ?? true;
+
   async function handleSignOut() {
     await supabase.auth.signOut();
     navigate({ to: "/", replace: true });
@@ -117,7 +133,8 @@ function DashboardPage() {
         )}
         {purchase === "failed" && (
           <p className="mt-6 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            付款未完成，你可以在下方點「完成付款」重試。 / Payment didn't go through — use “完成付款” to retry.
+            付款未完成，你可以在下方點「完成付款」重試。 / Payment didn't go through — use
+            “完成付款” to retry.
           </p>
         )}
 
@@ -127,6 +144,7 @@ function DashboardPage() {
               key={route.plan_name}
               route={route}
               subscription={subscriptionsQuery.data?.find((s) => s.plan_name === route.plan_name)}
+              paymentRequired={paymentRequired}
               onSubscribed={invalidateSubscriptions}
             />
           ))}
@@ -142,16 +160,17 @@ function DashboardPage() {
   );
 }
 
-const fmtDate = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString("zh-TW") : "";
+const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("zh-TW") : "");
 
 function PlanCard({
   route,
   subscription,
+  paymentRequired,
   onSubscribed,
 }: {
   route: Route_;
   subscription: Subscription | undefined;
+  paymentRequired: boolean;
   onSubscribed: () => void;
 }) {
   const [targetPrice, setTargetPrice] = useState(
@@ -167,6 +186,7 @@ function PlanCard({
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const status = subscription?.subscription_status;
+  const isFree = subscription?.payment_method === "free";
 
   async function handleSubscribe() {
     const parsed = Number(targetPrice);
@@ -208,7 +228,10 @@ function PlanCard({
       const res = await callFunction("flight-cancel-subscription", { plan_name: route.plan_name });
       const data = await res.json();
       // Show ECPay's own reason when the function gives one, not just a generic line.
-      if (!res.ok) throw new Error(data.detail ? `${data.error}（${data.detail}）` : (data.error ?? "cancel failed"));
+      if (!res.ok)
+        throw new Error(
+          data.detail ? `${data.error}（${data.detail}）` : (data.error ?? "cancel failed"),
+        );
       setConfirmingCancel(false);
       onSubscribed();
     } catch (e) {
@@ -220,17 +243,26 @@ function PlanCard({
   }
 
   const badge =
-    status === "active"
-      ? "已訂閱（有效）"
-      : status === "pending_payment"
-        ? "未完成付款"
-        : status === "cancelled"
-          ? `已取消 · 有效至 ${fmtDate(subscription!.current_period_end)}`
-          : status === "expired"
-            ? "已結束"
-            : null;
-  const actionLabel =
-    status === "pending_payment"
+    status === "active" && isFree
+      ? `免費 · 有效至 ${fmtDate(subscription!.current_period_end)}`
+      : status === "active"
+        ? "已訂閱（有效）"
+        : status === "pending_payment"
+          ? "未完成付款"
+          : status === "cancelled"
+            ? `已取消 · 有效至 ${fmtDate(subscription!.current_period_end)}`
+            : status === "expired"
+              ? "已結束"
+              : null;
+  // A new, expired or unpaid row goes through flight-subscribe's free path
+  // while payment is switched off.
+  const startsFree =
+    !paymentRequired && (!status || status === "expired" || status === "pending_payment");
+  const actionLabel = startsFree
+    ? status === "expired"
+      ? "免費重新訂閱"
+      : "開始免費追蹤（一個月）"
+    : status === "pending_payment"
       ? "完成付款"
       : status === "expired"
         ? "重新訂閱"
@@ -285,7 +317,11 @@ function PlanCard({
         <div className="mt-2">
           {confirmingCancel ? (
             <div className="text-xs text-muted-foreground">
-              <p>確定要取消訂閱？已付款的期間內仍會收到通知。</p>
+              <p>
+                {isFree
+                  ? "確定要取消訂閱？取消後立即停止通知。"
+                  : "確定要取消訂閱？已付款的期間內仍會收到通知。"}
+              </p>
               <div className="mt-2 flex gap-2">
                 <button
                   onClick={handleCancel}
@@ -316,7 +352,8 @@ function PlanCard({
       )}
       {route.last_price != null && (
         <p className="mt-2 text-xs text-muted-foreground">
-          最後查詢（來回）：{route.last_price_currency === "TWD" ? "NT$" : `${route.last_price_currency} `}
+          最後查詢（來回）：
+          {route.last_price_currency === "TWD" ? "NT$" : `${route.last_price_currency} `}
           {Number(route.last_price).toLocaleString()}
           {route.last_checked_at && (
             <> ‧ {new Date(route.last_checked_at).toLocaleString("zh-TW")}</>

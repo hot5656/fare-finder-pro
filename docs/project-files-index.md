@@ -18,6 +18,7 @@
 | --- | --- |
 | `docs/m1-session-handoff.md` | 專案的 living 狀態文件：目前部署了什麼、已驗證過什麼、留下的測試資料、經驗教訓、待辦（backlog，例如 B-1 admin 存取控制）。動 payment / cron / Edge Functions 前必讀。 |
 | `docs/shared-supabase-auth.md` | 共用 Supabase 專案下的 auth 隔離慣例說明：`apps` tag 只是 client 宣告、不能當作授權依據，真正的存取控制要用 `auth.uid()`。 |
+| `docs/change-site-url.md` | 更換網站網址（例如改用公司網域）時要改的地方：`SITE_URL` secret、Supabase Auth Redirect URLs、Vercel 網域、ECPay 導回 origin 允許清單，以及不用改的項目與驗證步驟。 |
 | `docs/test-plan.md` | 手動測試計畫：把 M1/M2 驗收清單、handoff 記錄整理成可重複執行的測試項目（無自動化測試框架）。 |
 | `docs/test-report.md` | 對應 `test-plan.md` 的測試報告，彙整已執行/未執行的用例結果。 |
 | `docs/ppt-outline.md` | 產品功能介紹簡報的投影片大綱（18 張、20–25 分鐘），含截圖存放路徑與遮蔽帳號的提醒。 |

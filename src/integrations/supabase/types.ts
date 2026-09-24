@@ -140,6 +140,7 @@ export type Database = {
           id: string
           merchant_trade_no: string | null
           payment_failed_at: string | null
+          payment_method: string
           plan_name: string
           route: string
           subscription_status: string
@@ -156,6 +157,7 @@ export type Database = {
           id?: string
           merchant_trade_no?: string | null
           payment_failed_at?: string | null
+          payment_method?: string
           plan_name: string
           route: string
           subscription_status?: string
@@ -172,6 +174,7 @@ export type Database = {
           id?: string
           merchant_trade_no?: string | null
           payment_failed_at?: string | null
+          payment_method?: string
           plan_name?: string
           route?: string
           subscription_status?: string

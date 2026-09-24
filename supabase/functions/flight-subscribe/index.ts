@@ -6,14 +6,25 @@
 //
 //   no row / expired / pending_payment -> row = pending_payment + fresh
 //       merchant_trade_no, respond text/html: an auto-submit form to ECPay.
+//       Unless an admin switched payment off (flight.settings
+//       payment_required = false): then row = active, payment_method 'free',
+//       one month long, respond application/json.
 //   active / cancelled (in grace), target_price change only -> plain update,
-//       respond application/json, no new payment.
+//       respond application/json, no new payment. This includes free rows
+//       after payment is switched back on: they keep running until they end.
 //
-// This function only ever writes pending_payment (or a target_price on an
-// already-paid row). Only the verified ECPay callbacks write `active`.
+// For paid rows this function only ever writes pending_payment (or a
+// target_price on an already-paid row); only the verified ECPay callbacks
+// write `active` on those. The free path is the one exception.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { allowedOrigin, buildCheckoutForm, ECPAY_AMOUNT, newTradeNo } from "../_shared/ecpay.ts";
+import {
+  allowedOrigin,
+  buildCheckoutForm,
+  ECPAY_AMOUNT,
+  newTradeNo,
+  sendStatusEmail,
+} from "../_shared/ecpay.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") as string;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") as string;
@@ -95,6 +106,50 @@ Deno.serve(async (req) => {
     return json({ status: existing.subscription_status, target_price: targetPrice });
   }
 
+  // Admin switch (/admin, flight.settings): only an explicit false turns
+  // payment off; a missing row or a failed read keeps the paywall on.
+  const { data: setting, error: settingError } = await admin
+    .from("settings")
+    .select("value")
+    .eq("key", "payment_required")
+    .maybeSingle();
+  if (settingError) console.error("failed to read payment_required", settingError);
+  if (setting?.value === false) {
+    const end = new Date();
+    end.setMonth(end.getMonth() + 1);
+    const periodEnd = end.toISOString();
+    const freeRow = {
+      user_id: user.id,
+      email: user.email,
+      plan_name: plan.plan_name,
+      route: plan.route,
+      target_price: targetPrice,
+      currency: "TWD",
+      subscription_status: "active",
+      payment_method: "free",
+      merchant_trade_no: null,
+      current_period_end: periodEnd,
+      payment_failed_at: null,
+      total_success_times: null,
+      updated_at: new Date().toISOString(),
+    };
+    const { error: freeError } = existing
+      ? await admin.from("subscriptions").update(freeRow).eq("id", existing.id)
+      : await admin.from("subscriptions").insert(freeRow);
+    if (freeError) {
+      console.error("free subscription write failed", freeError);
+      return json({ error: "could not subscribe" }, 500);
+    }
+    sendStatusEmail({
+      event_type: "welcome",
+      email: user.email,
+      route: plan.route,
+      current_period_end: periodEnd,
+      free: true,
+    });
+    return json({ status: "active", free: true, current_period_end: periodEnd, target_price: targetPrice });
+  }
+
   // New, expired, or still-unpaid: (re)start checkout with a fresh trade number.
   const tradeNo = newTradeNo();
   const row = {
@@ -105,6 +160,7 @@ Deno.serve(async (req) => {
     target_price: targetPrice,
     currency: "TWD",
     subscription_status: "pending_payment",
+    payment_method: "ecpay",
     merchant_trade_no: tradeNo,
     current_period_end: null,
     updated_at: new Date().toISOString(),

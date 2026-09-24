@@ -13,6 +13,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") as s
 // key -> typeof its value
 const SETTINGS: Record<string, "boolean"> = {
   v1_compare_enabled: "boolean",
+  payment_required: "boolean",
 };
 
 const CORS = {

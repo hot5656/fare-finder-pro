@@ -332,6 +332,39 @@ and the email shows 「對照：v1 資料來源目前無資料。」. `flight-ad
 switch itself instead of trusting `last_offer_v1`, which may predate a flip. Alerts
 always trigger on v3 regardless.
 
+### M2 follow-up 7: admin switch 使用綠界付款 / 不需付款 (2026-09-24 — deployed and verified)
+
+Migration `20260924100000_flight_payment_required.sql` adds `flight.settings`
+`payment_required` (default `true`; a missing row or a failed read keeps the paywall on),
+an RLS policy so every signed-in user can read that one key (the dashboard picks its
+wording from it), and `flight.subscriptions.payment_method` (`'ecpay'` default | `'free'`).
+`/admin` 設定 now has two switches (shared `BooleanSetting` component).
+
+Rules the user decided (2026-09-23/24):
+- Off: `flight-subscribe` writes new / expired / pending rows straight to `active`,
+  `payment_method = 'free'`, no trade number, `current_period_end` = now + 1 month,
+  answers JSON and sends a free `welcome` email.
+- Free rows get no grace: `flight-parser` expires them as soon as the period ends
+  (reason `free_period_ended`); the 7-day `RENEWAL_GRACE_DAYS` rule is now ecpay-only.
+- Cancelling a free row expires it immediately and never calls ECPay.
+- Re-subscribing from `expired` is unlimited, one month each time.
+- Switching payment back on leaves free rows running until they end, and they can still
+  change their target price; their next subscribe after expiry goes through ECPay.
+- `/admin` MRR counts only `active` rows with `payment_method = 'ecpay'`.
+
+Deploy: the migration (+ `migration repair`), then `flight-admin-settings`,
+`flight-subscribe`, `flight-cancel-subscription`, `flight-parser`,
+`flight-status-notification` (all `verify_jwt = true`). All deployed 2026-09-24 02:18–02:19Z.
+
+Verified 2026-09-24 on localhost:8080 as kyp001@gmail.com (admin), using the TPE-LON row
+temporarily set to `expired` and restored afterwards to its exact backed-up values:
+switch off saved → dashboard 「免費重新訂閱」 → row `active`/`free`, no trade no, +1 month,
+「免費 · 有效至」 → cancel → `expired` immediately → free re-subscribe → back-dated
+`current_period_end`, the 02:30Z cron run expired it (`free_period_ended`) → switch on while
+the free row was still active (MRR excluded it, Payment column 「免費 Free」) → 「重新訂閱」
+opened the ECPay stage cashier with a fresh `pending_payment` row. Welcome ×2, cancel and
+expired emails all logged as sent. `payment_required` is left `true`.
+
 ## Project / environment facts (don't re-derive these)
 
 - **Shared multi-app Supabase project.** Other apps' migrations live in the
