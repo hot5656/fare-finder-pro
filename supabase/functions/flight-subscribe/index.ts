@@ -12,6 +12,8 @@
 //   active / cancelled (in grace), target_price change only -> plain update,
 //       respond application/json, no new payment. This includes free rows
 //       after payment is switched back on: they keep running until they end.
+//   Route disabled by an admin (routes.is_active = false): only that
+//       target_price update is allowed; anything else is 409.
 //
 // For paid rows this function only ever writes pending_payment (or a
 // target_price on an already-paid row); only the verified ECPay callbacks
@@ -73,7 +75,7 @@ Deno.serve(async (req) => {
   // The route comes from our own table, not from the client.
   const { data: plan, error: planError } = await admin
     .from("routes")
-    .select("plan_name, display_name, route")
+    .select("plan_name, display_name, route, is_active")
     .eq("plan_name", body.plan_name)
     .maybeSingle();
   if (planError) {
@@ -105,6 +107,10 @@ Deno.serve(async (req) => {
     }
     return json({ status: existing.subscription_status, target_price: targetPrice });
   }
+
+  // An admin disabled this route (/admin/routes): no new or renewed sign-ups.
+  // Rows already paid for were handled above and keep running until they end.
+  if (plan.is_active === false) return json({ error: "此航線已停用 / This route is closed" }, 409);
 
   // Admin switch (/admin, flight.settings): only an explicit false turns
   // payment off; a missing row or a failed read keeps the paywall on.

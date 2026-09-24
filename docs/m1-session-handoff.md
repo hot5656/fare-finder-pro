@@ -423,6 +423,61 @@ TPE-SEL row (`6a7d8a6b…`) at 14:22:22Z, `expired email sent to kyp741@gmail.co
 logged; a second call on the same row → 409, no second email.
 **`force_expire_enabled` was left `true`** — turn it off in 總覽 → 設定 when testing is done.
 
+### M2 follow-up 9: admins add routes from `/admin/routes` (2026-09-24 — deployed and verified)
+
+Routes no longer need a migration. New tab 航線 Routes (`admin/routes.tsx`):
+
+- **Add.** The admin types Chinese city names (「台北」「大阪」) or a 3-letter code. 查詢價格
+  calls `flight-admin-routes` `preview`: `resolvePlace()` (`_shared/travelpayouts.ts`) turns
+  each name into an IATA code (a 3-letter input is taken as a code; else the `ALIASES` map,
+  since the autocomplete returns nothing for Traditional 「東京」; else Travelpayouts places
+  autocomplete `zh-TW`, then `zh-CN`, cities before airports), then runs the parser's own
+  v3 query (next month, round trip, TWD). No fare / unknown place / same place → 422
+  「條件不正確，請重新輸入」; route exists → 409. Several matches → a picker. 確認新增
+  (`create`) **re-runs the fare query server-side** and inserts only on a hit, with
+  `last_price*` / `last_offer_v3` filled so the price shows at once. `plan_name` =
+  `tpe-osa` style; `display_name` = `origin_name ✈ destination_name`.
+- **Edit / disable.** `update` changes the Chinese names (display_name rebuilt) and
+  `is_active`. Codes never change (subscriptions / history store the `TPE-XXX` string);
+  a wrong code = disable + add again. Nothing is ever deleted.
+- **Disabled route.** `flight-subscribe` refuses new / re-subscribe with 409 (target-price
+  updates on active / cancelled rows still work); the dashboard shows it only to users who
+  hold a subscription on it; `flight-parser` keeps checking it while it has paying
+  subscribers and skips it (no Travelpayouts calls) once it has none.
+- **Emails.** `flight-notification` reads route names from `flight.routes` (the hardcoded
+  `PLAN_LABELS` is gone). For a code missing from `TIME_ZONES`, times are shown at the UTC
+  offset on the fare's own `departure_at` / `return_at` instead of Taipei time.
+- **Schema** (`20260924120000_flight_routes_admin_managed.sql`): `origin_name`,
+  `destination_name` (backfilled 台北 / 東京 / 首爾 / 倫敦), `is_active` (default true),
+  `created_at` (backfilled so the dashboard keeps Tokyo, Seoul, London order), unique
+  `(origin, destination)`. Writes stay service-role only; `20260924130000_flight_routes_insert_grant.sql`
+  grants `service_role` INSERT (it only had SELECT + UPDATE, so the first create hit a 500). The three existing routes were
+  already rows in `flight.routes` (seeded by migrations); only the new columns were filled.
+- `fetchCheapestV3/V1`, `nextMonth`, `safe` and `Cheapest` moved from `flight-parser` into
+  `_shared/travelpayouts.ts` (no behavior change for the parser).
+
+Deploy: both migrations (+ `migration repair`, history rows confirmed), then
+`flight-admin-routes`, `flight-parser`, `flight-subscribe`, `flight-notification` (all
+`verify_jwt = true`). All done 2026-09-24 ~15:11–15:25Z.
+
+Verified 2026-09-24 on localhost:8080 as kyp001@gmail.com (admin):
+- 台北 → 大阪 preview: TPE / OSA, NT$6,992 (GK, 10/10–10/15), candidate pickers listed TSA and
+  KIX/ITM; 確認新增 wrote `tpe-osa` with both Chinese names, codes and last_price (US$220).
+- Rejections through the function: 東京 409 (exists), 京都 / xyz 422 `destination_not_found`,
+  abc 422 `no_fare`, TPE→TPE 422 `same_place`, create TPE→ABC 422, duplicate create 409,
+  `TP1` 400. The UI shows 「條件不正確，請重新輸入」 with no confirm button.
+- Free subscribe to 大阪 (target 8,000) → welcome email 「台北 → 大阪」. Route then disabled:
+  subscriber still sees it with 「此航線已停止開放訂閱，你的訂閱照常到期」, target update 200.
+- 15:30Z cron: disabled TPE-OSA still checked (paying subscriber), alert 「✈️ 台北 → 大阪
+  降價通知！NT$6,992 已達標」 sent; leg shown as 18:20 TPE → 22:00 KIX (offset fallback; the
+  old code would have said 21:00).
+- Cancelled (free → expired): card shows 已結束 + 「此航線已停止開放訂閱。」 with no input;
+  flight-subscribe → 409 「此航線已停用」.
+- Cleanup: the TPE-OSA subscription and history row deleted, dashboard then hid the disabled
+  route, and the `tpe-osa` route row was deleted. `flight.routes` is back to the 3 routes.
+- Not tested: a non-admin JWT calling `flight-admin-routes` (no second account signed in);
+  the check is the same `flight.admins` lookup as `flight-admin-settings`.
+
 ## Project / environment facts (don't re-derive these)
 
 - **Shared multi-app Supabase project.** Other apps' migrations live in the

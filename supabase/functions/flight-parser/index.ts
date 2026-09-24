@@ -18,40 +18,23 @@
 // random caller from triggering a scrape.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  type Cheapest,
+  fetchCheapestV1,
+  fetchCheapestV3,
+  nextMonth,
+  safe,
+} from "../_shared/travelpayouts.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") as string;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") as string;
-const TRAVELPAYOUTS_TOKEN = Deno.env.get("TRAVELPAYOUTS_TOKEN") as string;
 
-const UA = "Mozilla/5.0 (compatible; flight-notifier/1.0)"; // some hosts behind Cloudflare 403 the default UA
 const BATCH = 25;
 // An `active` row whose current_period_end is this many days past with no
 // renewal is treated as lapsed (ECPay retries failed charges over several days).
 const RENEWAL_GRACE_DAYS = 7;
 
-// One offer from either Travelpayouts endpoint, normalized. v3 fills every
-// field; v1 has no airports, transfers or link (those stay undefined).
-type Cheapest = {
-  source: "v3" | "v1";
-  price: number;
-  currency: string;
-  airline: string;
-  flight_number?: string;
-  depart_date: string; // departure_at, with the origin's UTC offset
-  return_date: string; // return_at, with the destination's UTC offset
-  origin_airport?: string;
-  destination_airport?: string;
-  transfers?: number | null;
-  return_transfers?: number | null;
-  duration?: number | null; // minutes, both legs
-  duration_to?: number | null; // minutes, outbound incl. layovers
-  duration_back?: number | null;
-  link?: string; // Aviasales path, e.g. "/search/TPE2910TYO02111?t=..."
-};
-
 type OfferPair = { twd: Cheapest | null; usd: Cheapest | null };
-
-const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
 
 type Route = {
   plan_name: string;
@@ -59,6 +42,7 @@ type Route = {
   origin: string;
   destination: string;
   route: string;
+  is_active: boolean;
 };
 
 type Subscription = {
@@ -68,109 +52,6 @@ type Subscription = {
   route: string;
   target_price: number;
 };
-
-// v3 prices_for_dates: the alert trigger. one_way=false so it prices a round
-// trip like v1 does (v3 defaults to one-way).
-async function fetchCheapestV3(
-  origin: string,
-  destination: string,
-  month: string,
-  currency: string,
-): Promise<Cheapest | null> {
-  const q = new URLSearchParams({
-    origin,
-    destination,
-    departure_at: month,
-    one_way: "false",
-    sorting: "price",
-    limit: "5",
-    currency,
-    token: TRAVELPAYOUTS_TOKEN,
-  });
-  const res = await fetch(`https://api.travelpayouts.com/aviasales/v3/prices_for_dates?${q}`, {
-    headers: { "User-Agent": UA, Accept: "application/json" },
-  });
-  if (!res.ok) {
-    console.error(`travelpayouts v3 ${currency} ${origin}-${destination}: HTTP ${res.status}`);
-    return null;
-  }
-  const body = await res.json();
-  if (!body.success || !Array.isArray(body.data) || !body.data.length) return null;
-  const best = (body.data as any[]).reduce((a, b) => (a.price < b.price ? a : b));
-  return {
-    source: "v3",
-    price: best.price,
-    currency: currency.toUpperCase(),
-    airline: best.airline ?? "",
-    flight_number: best.flight_number != null ? String(best.flight_number) : undefined,
-    depart_date: best.departure_at ?? "",
-    return_date: best.return_at ?? "",
-    origin_airport: best.origin_airport,
-    destination_airport: best.destination_airport,
-    transfers: num(best.transfers),
-    return_transfers: num(best.return_transfers),
-    duration: num(best.duration),
-    duration_to: num(best.duration_to),
-    duration_back: num(best.duration_back),
-    link: typeof best.link === "string" ? best.link : undefined,
-  };
-}
-
-// v1 prices/cheap: the previous trigger, now fetched only to show alongside v3.
-async function fetchCheapestV1(
-  origin: string,
-  destination: string,
-  month: string,
-  currency: string,
-): Promise<Cheapest | null> {
-  const q = new URLSearchParams({
-    origin,
-    destination,
-    depart_date: month,
-    currency,
-    token: TRAVELPAYOUTS_TOKEN,
-  });
-  const res = await fetch(`https://api.travelpayouts.com/v1/prices/cheap?${q}`, {
-    headers: { "User-Agent": UA, Accept: "application/json" },
-  });
-  if (!res.ok) {
-    console.error(`travelpayouts v1 ${currency} ${origin}-${destination}: HTTP ${res.status}`);
-    return null;
-  }
-  const body = await res.json();
-  if (!body.success || !body.data?.[destination]) return null;
-  const offers = Object.values(body.data[destination]) as any[];
-  if (!offers.length) return null;
-  const best = offers.reduce((a, b) => (a.price < b.price ? a : b));
-  // NOTE: the real keys are departure_at / return_at, not depart_date / return_date.
-  return {
-    source: "v1",
-    price: best.price,
-    currency: currency.toUpperCase(),
-    airline: best.airline ?? "",
-    flight_number: best.flight_number != null ? String(best.flight_number) : undefined,
-    depart_date: best.departure_at ?? "",
-    return_date: best.return_at ?? "",
-    duration: num(best.duration),
-    duration_to: num(best.duration_to),
-    duration_back: num(best.duration_back),
-  };
-}
-
-// A failed or thrown fetch is logged and treated as "no offer".
-function safe(label: string, p: Promise<Cheapest | null>): Promise<Cheapest | null> {
-  return p.catch((e) => {
-    console.error(`${label} fare fetch failed`, e);
-    return null;
-  });
-}
-
-function nextMonth(): string {
-  const now = new Date();
-  // Date.UTC rolls month 12 over into January of the next year for us.
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
 
 Deno.serve(async (req) => {
   const auth = req.headers.get("Authorization");
@@ -273,8 +154,28 @@ Deno.serve(async (req) => {
     checked_at: string;
   }> = [];
 
+  // Paying users: active, or cancelled but still inside the period they paid
+  // for. pending_payment / expired are never emailed.
+  const payingFilter = `subscription_status.eq.active,and(subscription_status.eq.cancelled,current_period_end.gte.${nowIso})`;
+
   for (const route of (routes ?? []) as Route[]) {
     const { origin, destination } = route;
+
+    // An admin disabled this route (/admin/routes): keep serving whoever still
+    // pays for it, and stop calling Travelpayouts once nobody does.
+    if (route.is_active === false) {
+      const { count, error: countError } = await admin
+        .from("subscriptions")
+        .select("id", { count: "exact", head: true })
+        .eq("route", route.route)
+        .or(payingFilter);
+      if (countError) console.error(`failed to count subscribers for ${route.route}`, countError);
+      else if (!count) {
+        console.log(`skip ${route.route}: disabled, no paying subscribers`);
+        continue;
+      }
+    }
+
     const [cheapest, cheapestUsd, v1Twd, v1Usd] = await Promise.all([
       safe(`v3 TWD ${route.route}`, fetchCheapestV3(origin, destination, month, "TWD")),
       safe(`v3 USD ${route.route}`, fetchCheapestV3(origin, destination, month, "USD")),
@@ -319,15 +220,12 @@ Deno.serve(async (req) => {
       console.error(`failed to record last_price for ${route.route}`, lastPriceError);
     }
 
-    // ...then only serve paying users: active, or cancelled but still inside
-    // the period they paid for. pending_payment / expired are never emailed.
+    // ...then only serve paying users.
     const { data: subs, error: subsError } = await admin
       .from("subscriptions")
       .select("*")
       .eq("route", route.route)
-      .or(
-        `subscription_status.eq.active,and(subscription_status.eq.cancelled,current_period_end.gte.${nowIso})`,
-      );
+      .or(payingFilter);
     if (subsError) {
       console.error(`failed to load subscriptions for ${route.route}`, subsError);
       continue;

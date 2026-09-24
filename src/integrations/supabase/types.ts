@@ -61,8 +61,11 @@ export type Database = {
       }
       routes: {
         Row: {
+          created_at: string
           destination: string
+          destination_name: string
           display_name: string
+          is_active: boolean
           last_checked_at: string | null
           last_offer_v1: Json | null
           last_offer_v3: Json | null
@@ -73,12 +76,16 @@ export type Database = {
           last_price_usd: number | null
           last_price_usd_currency: string | null
           origin: string
+          origin_name: string
           plan_name: string
           route: string | null
         }
         Insert: {
+          created_at?: string
           destination: string
+          destination_name: string
           display_name: string
+          is_active?: boolean
           last_checked_at?: string | null
           last_offer_v1?: Json | null
           last_offer_v3?: Json | null
@@ -89,12 +96,16 @@ export type Database = {
           last_price_usd?: number | null
           last_price_usd_currency?: string | null
           origin: string
+          origin_name: string
           plan_name: string
           route?: string | null
         }
         Update: {
+          created_at?: string
           destination?: string
+          destination_name?: string
           display_name?: string
+          is_active?: boolean
           last_checked_at?: string | null
           last_offer_v1?: Json | null
           last_offer_v3?: Json | null
@@ -105,6 +116,7 @@ export type Database = {
           last_price_usd?: number | null
           last_price_usd_currency?: string | null
           origin?: string
+          origin_name?: string
           plan_name?: string
           route?: string | null
         }

@@ -19,6 +19,7 @@ export const Route = createFileRoute("/_authenticated/admin")({
 
 const TABS = [
   { to: "/admin", label: "總覽 Overview", exact: true },
+  { to: "/admin/routes", label: "航線 Routes", exact: false },
   { to: "/admin/users", label: "註冊用戶 Users", exact: false },
   { to: "/admin/subscriptions", label: "所有訂閱 Subscriptions", exact: false },
   { to: "/admin/notifications", label: "通知紀錄 Notification history", exact: false },

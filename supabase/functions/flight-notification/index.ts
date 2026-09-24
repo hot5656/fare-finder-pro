@@ -72,12 +72,6 @@ type Match = {
 // sets this (one match at a time); flight-parser never does, so the automatic path
 // is unaffected. triggered_by records which admin forced the send, for audit.
 
-const PLAN_LABELS: Record<string, string> = {
-  tokyo: "台北 → 東京",
-  seoul: "台北 → 首爾",
-  london: "台北 → 倫敦",
-};
-
 // IATA carrier codes seen (or likely) on TPE-TYO/SEL/LON. Unknown codes are shown as-is.
 const AIRLINES: Record<string, string> = {
   CI: "中華航空",
@@ -130,6 +124,8 @@ const AIRLINES: Record<string, string> = {
 };
 
 // Local time zone per city/airport code, so each time is shown where it happens.
+// A code not listed here (a route an admin added later) falls back to the UTC
+// offset Travelpayouts puts on the fare's own timestamps.
 const TIME_ZONES: Record<string, string> = {
   TPE: "Asia/Taipei",
   TSA: "Asia/Taipei",
@@ -198,9 +194,24 @@ function fmtCheckedAt(iso: string | null | undefined): string {
   }
 }
 
-// "2026/10/29（四）17:15" in the given IANA zone.
-function fmtLocal(d: Date, code: string): string {
-  const timeZone = TIME_ZONES[code] ?? "Asia/Taipei";
+// Minutes east of UTC on an ISO timestamp ("…+09:00" -> 540, "…Z" -> 0), or
+// null when it carries none.
+function isoOffset(iso: string | undefined): number | null {
+  const m = /(?:([+-])(\d{2}):?(\d{2})|Z)$/.exec(iso ?? "");
+  if (!m) return null;
+  if (!m[1]) return 0;
+  return (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3]));
+}
+
+// "2026/10/29（四）17:15" in the code's IANA zone; for an unlisted code, at the
+// given UTC offset (shifting the instant and formatting it as UTC).
+function fmtLocal(d: Date, code: string, offsetMin: number | null = null): string {
+  let timeZone = TIME_ZONES[code];
+  if (!timeZone && offsetMin != null) {
+    d = new Date(d.getTime() + offsetMin * 60_000);
+    timeZone = "UTC";
+  }
+  timeZone ??= "Asia/Taipei";
   try {
     const date = d.toLocaleDateString("zh-TW", {
       timeZone,
@@ -225,7 +236,7 @@ function fmtLocal(d: Date, code: string): string {
 function fmtDay(iso: string, code: string): string {
   const d = iso ? new Date(iso) : null;
   if (!d || isNaN(d.getTime())) return "";
-  return fmtLocal(d, code)
+  return fmtLocal(d, code, isoOffset(iso))
     .replace(/\s*\d{2}:\d{2}$/, "")
     .replace(/）.*$/, "）");
 }
@@ -282,17 +293,22 @@ function legs(route: string, o: Cheapest): Leg[] {
     stops: number | null | undefined,
     a: string,
     b: string,
+    offA: number | null,
+    offB: number | null,
   ) => {
     const dep = iso ? new Date(iso) : null;
     if (!dep || isNaN(dep.getTime())) return;
     const arrive = dur
-      ? ` → ${fmtLocal(new Date(dep.getTime() + dur * 60_000), b)} ${b}`
+      ? ` → ${fmtLocal(new Date(dep.getTime() + dur * 60_000), b, offB)} ${b}`
       : ` → ${b}`;
-    const parts = [`${fmtLocal(dep, a)} ${a}${arrive}`, fmtDuration(dur), fmtStops(stops)];
+    const parts = [`${fmtLocal(dep, a, offA)} ${a}${arrive}`, fmtDuration(dur), fmtStops(stops)];
     out.push({ title, line: parts.filter(Boolean).join(" · ") });
   };
-  add("去程", o.depart_date, o.duration_to, o.transfers, from, to);
-  add("回程", o.return_date, o.duration_back, o.return_transfers, to, from);
+  // depart_date carries the origin's offset, return_date the destination's.
+  const offFrom = isoOffset(o.depart_date);
+  const offTo = isoOffset(o.return_date);
+  add("去程", o.depart_date, o.duration_to, o.transfers, from, to, offFrom, offTo);
+  add("回程", o.return_date, o.duration_back, o.return_transfers, to, from, offTo, offFrom);
   return out;
 }
 
@@ -337,8 +353,8 @@ function rowsText(rows: Array<[string, string]>): string {
 function renderEmail(
   match: Match,
   manual: boolean,
+  label: string,
 ): { subject: string; html: string; text: string } {
-  const label = PLAN_LABELS[match.plan_name] ?? match.route;
   const price = Math.round(match.cheapest.price).toLocaleString();
   const target = Math.round(match.target_price).toLocaleString();
   const usdLine = match.cheapest_usd
@@ -438,6 +454,16 @@ Deno.serve(async (req) => {
     db: { schema: "flight" },
   });
 
+  // Route names come from flight.routes (admins add routes from /admin), shown
+  // as "台北 → 大阪"; an unknown plan falls back to the route code.
+  const { data: routeRows, error: routesError } = await admin
+    .from("routes")
+    .select("plan_name, display_name");
+  if (routesError) console.error("failed to load route names", routesError);
+  const labels = new Map<string, string>(
+    (routeRows ?? []).map((r) => [r.plan_name as string, (r.display_name as string).replace("✈", "→")]),
+  );
+
   let sent = 0;
   let skipped = 0;
 
@@ -462,7 +488,11 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    const { subject, html, text } = renderEmail(match, !!force);
+    const { subject, html, text } = renderEmail(
+      match,
+      !!force,
+      labels.get(match.plan_name) ?? match.route,
+    );
 
     let sendError: unknown = null;
     let status = 0;

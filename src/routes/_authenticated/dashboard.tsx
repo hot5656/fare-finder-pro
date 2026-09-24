@@ -28,7 +28,11 @@ function DashboardPage() {
   const routesQuery = useQuery({
     queryKey: ["flight", "routes"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("routes").select("*");
+      const { data, error } = await supabase
+        .from("routes")
+        .select("*")
+        .order("created_at")
+        .order("plan_name");
       if (error) throw error;
       return data as Route_[];
     },
@@ -139,15 +143,23 @@ function DashboardPage() {
         )}
 
         <div className="mt-10 grid gap-6 sm:grid-cols-2">
-          {routesQuery.data?.map((route) => (
-            <PlanCard
-              key={route.plan_name}
-              route={route}
-              subscription={subscriptionsQuery.data?.find((s) => s.plan_name === route.plan_name)}
-              paymentRequired={paymentRequired}
-              onSubscribed={invalidateSubscriptions}
-            />
-          ))}
+          {routesQuery.data?.map((route) => {
+            const subscription = subscriptionsQuery.data?.find(
+              (s) => s.plan_name === route.plan_name,
+            );
+            // A route an admin disabled stays visible only to users who still
+            // hold a subscription on it, so they can see and cancel it.
+            if (!route.is_active && !subscription) return null;
+            return (
+              <PlanCard
+                key={route.plan_name}
+                route={route}
+                subscription={subscription}
+                paymentRequired={paymentRequired}
+                onSubscribed={invalidateSubscriptions}
+              />
+            );
+          })}
         </div>
 
         {routesQuery.isError && (
@@ -270,6 +282,9 @@ function PlanCard({
           ? "更新目標價"
           : "開始追蹤";
 
+  // Disabled by an admin: only an already-paid row may still change its target.
+  const closed = !route.is_active && status !== "active" && status !== "cancelled";
+
   return (
     <div className="rounded-2xl border border-border bg-card p-6">
       <div className="flex items-start justify-between">
@@ -281,32 +296,42 @@ function PlanCard({
         )}
       </div>
 
-      {/* The three cards share this label text, so the id carries the plan to stay unique. */}
-      <label
-        htmlFor={`target-price-${route.plan_name}`}
-        className="mt-4 block text-sm font-medium text-muted-foreground"
-      >
-        來回目標價 TWD / Round-trip target price
-      </label>
-      <div className="mt-2 flex gap-2">
-        <input
-          id={`target-price-${route.plan_name}`}
-          name="target_price"
-          type="number"
-          min={1}
-          value={targetPrice}
-          onChange={(e) => setTargetPrice(e.target.value)}
-          placeholder="10000"
-          className="flex h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        />
-        <button
-          onClick={handleSubscribe}
-          disabled={saving}
-          className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50"
-        >
-          {saving ? "..." : actionLabel}
-        </button>
-      </div>
+      {!route.is_active && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          此航線已停止開放訂閱{closed ? "。" : "，你的訂閱照常到期。"}
+        </p>
+      )}
+
+      {/* The cards share this label text, so the id carries the plan to stay unique. */}
+      {!closed && (
+        <>
+          <label
+            htmlFor={`target-price-${route.plan_name}`}
+            className="mt-4 block text-sm font-medium text-muted-foreground"
+          >
+            來回目標價 TWD / Round-trip target price
+          </label>
+          <div className="mt-2 flex gap-2">
+            <input
+              id={`target-price-${route.plan_name}`}
+              name="target_price"
+              type="number"
+              min={1}
+              value={targetPrice}
+              onChange={(e) => setTargetPrice(e.target.value)}
+              placeholder="10000"
+              className="flex h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+            <button
+              onClick={handleSubscribe}
+              disabled={saving}
+              className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? "..." : actionLabel}
+            </button>
+          </div>
+        </>
+      )}
 
       {subscription && (
         <p className="mt-2 text-xs text-muted-foreground">
