@@ -1,8 +1,9 @@
 # M1 Flight Price Checker — Session Handoff
 
-Updated 2026-09-24 (latest: M2 follow-up 8, the four-page `/admin` with paging,
-the registered-users list and the force-expire test switch; before that follow-up 7,
-the admin switch for free one-month subscriptions). The 2026-09-19 revision added the M2 ECPay paywall
+Updated 2026-09-25 (latest: M2 follow-up 10, the price-check run log
+`flight.parser_runs` shown on `/admin/runs`; before that the move to
+`flights.roberthut.com`, email-only sign-up, and follow-ups 8–9 for the multi-page
+`/admin` and admin-added routes). The 2026-09-19 revision added the M2 ECPay paywall
 (see "M2 status" and "Lessons learned" below) and superseded the 2026-09-17
 version, which described a half-built state that no longer applies.
 
@@ -520,6 +521,36 @@ throwaway alias (deleted after): new sign-up, forgot password, sign-up with an e
 email (password unchanged), and a password session blocked from `/auth/reset`. Not tested
 on the live domain, and not with an account that exists only in another app. Docs:
 README, `docs/shared-supabase-auth.md`, `docs/test-plan.md` (FE-07–09, FE-13).
+
+### M2 follow-up 10: price-check run log on `/admin` (2026-09-25 — deployed and verified)
+
+Why: Travelpayouts rate-limits per minute (429), and before this a 429 or HTTP error
+came back from the fetchers as `null`, indistinguishable from "no fare", visible only in
+the function logs. Limits, capacity estimates (roughly 120 RPM plateau with v1 off; the
+150 s Edge Function limit around 150 routes is the likelier ceiling) and how to read the
+page are in `docs/travelpayouts-limits-and-monitoring.md`.
+
+- Migration `20260925100000_flight_parser_runs.sql`: `flight.parser_runs`, one row per
+  run (`running` at start, then `ok | warning | error`, duration, routes, API calls,
+  matches, expired, `issues` jsonb). Admin read via `flight.is_admin()`, service role
+  writes, `anon` revoked. The parser prunes rows older than 90 days.
+- `_shared/travelpayouts.ts`: non-2xx now throws `FareHttpError(source, status)`;
+  `safe()` takes an optional `onError`. `flight-admin-routes` shares it and still treats
+  any failure as "no fare" (redeployed, behavior unchanged).
+- `flight-parser` records fetch failures (`rate_limited` for 429, `http`, `error`),
+  `no_fare` (v3 TWD empty, only when the fetch itself succeeded) and `db` errors.
+  Recording is best-effort and never stops the price check.
+- Front end: tab 查價紀錄 Price checks (`/admin/runs`, paged, 只看異常 filter) and a status
+  banner on `/admin` that also turns red when no run started in 65 min (cron or its Vault
+  key broken) or a run stayed `running` over 10 min (crashed or timed out).
+
+Verified: migration applied + repaired (row in `schema_migrations`), RLS on, grants
+as intended; `flight-parser` v18 deployed 08:02:47 UTC. Manual run at 08:05 UTC →
+`{"routes":4,"matches":4}` (all 4 deduped, no email) and row id 1: `warning`, 4060 ms,
+4/4 routes, 8 API calls, one `no_fare` issue for **TPE-LON** (no v3 TWD fare for
+2026-10, so London sends no alerts until data returns). The admin pages were not viewed
+in a browser in that session (the chrome-devtools profile was locked); build and
+`tsc` pass.
 
 ## Project / environment facts (don't re-derive these)
 

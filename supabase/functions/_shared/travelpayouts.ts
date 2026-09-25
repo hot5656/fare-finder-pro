@@ -52,10 +52,7 @@ export async function fetchCheapestV3(
   const res = await fetch(`https://api.travelpayouts.com/aviasales/v3/prices_for_dates?${q}`, {
     headers: { "User-Agent": UA, Accept: "application/json" },
   });
-  if (!res.ok) {
-    console.error(`travelpayouts v3 ${currency} ${origin}-${destination}: HTTP ${res.status}`);
-    return null;
-  }
+  if (!res.ok) throw new FareHttpError("v3", res.status);
   const body = await res.json();
   if (!body.success || !Array.isArray(body.data) || !body.data.length) return null;
   const best = (body.data as any[]).reduce((a, b) => (a.price < b.price ? a : b));
@@ -95,10 +92,7 @@ export async function fetchCheapestV1(
   const res = await fetch(`https://api.travelpayouts.com/v1/prices/cheap?${q}`, {
     headers: { "User-Agent": UA, Accept: "application/json" },
   });
-  if (!res.ok) {
-    console.error(`travelpayouts v1 ${currency} ${origin}-${destination}: HTTP ${res.status}`);
-    return null;
-  }
+  if (!res.ok) throw new FareHttpError("v1", res.status);
   const body = await res.json();
   if (!body.success || !body.data?.[destination]) return null;
   const offers = Object.values(body.data[destination]) as any[];
@@ -119,10 +113,27 @@ export async function fetchCheapestV1(
   };
 }
 
-// A failed or thrown fetch is logged and treated as "no offer".
-export function safe(label: string, p: Promise<Cheapest | null>): Promise<Cheapest | null> {
+// A non-2xx answer from a fare endpoint. Thrown (not returned as null) so the
+// caller can tell "Travelpayouts refused" (429 = rate limited) from "no fare".
+export class FareHttpError extends Error {
+  constructor(
+    readonly source: "v3" | "v1",
+    readonly status: number,
+  ) {
+    super(`travelpayouts ${source}: HTTP ${status}`);
+  }
+}
+
+// A failed or thrown fetch is logged and treated as "no offer". onError, when
+// given, also gets the error (flight-parser records it for /admin).
+export function safe(
+  label: string,
+  p: Promise<Cheapest | null>,
+  onError?: (e: unknown) => void,
+): Promise<Cheapest | null> {
   return p.catch((e) => {
     console.error(`${label} fare fetch failed`, e);
+    onError?.(e);
     return null;
   });
 }

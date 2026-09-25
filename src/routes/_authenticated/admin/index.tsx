@@ -12,7 +12,7 @@ import {
   useAdminRoutes,
   useBoolSetting,
 } from "@/components/admin/shared";
-import { StatCard } from "@/components/admin/AdminUI";
+import { ParserHealthBanner, StatCard } from "@/components/admin/AdminUI";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
   component: AdminOverviewPage,
@@ -68,6 +68,8 @@ function AdminOverviewPage() {
         <p className="mt-6 text-sm text-muted-foreground">Loading…</p>
       ) : (
         <>
+          <ParserHealthBanner linkToRuns />
+
           {/* Stat cards */}
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="有效訂閱 Active" value={activeCount} />

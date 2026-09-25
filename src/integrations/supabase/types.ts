@@ -59,6 +59,48 @@ export type Database = {
         }
         Relationships: []
       }
+      parser_runs: {
+        Row: {
+          api_calls: number | null
+          duration_ms: number | null
+          expired: number | null
+          finished_at: string | null
+          id: number
+          issues: Json
+          matches: number | null
+          routes_checked: number | null
+          routes_total: number | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          api_calls?: number | null
+          duration_ms?: number | null
+          expired?: number | null
+          finished_at?: string | null
+          id?: never
+          issues?: Json
+          matches?: number | null
+          routes_checked?: number | null
+          routes_total?: number | null
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          api_calls?: number | null
+          duration_ms?: number | null
+          expired?: number | null
+          finished_at?: string | null
+          id?: never
+          issues?: Json
+          matches?: number | null
+          routes_checked?: number | null
+          routes_total?: number | null
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       routes: {
         Row: {
           created_at: string

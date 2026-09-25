@@ -20,6 +20,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   type Cheapest,
+  FareHttpError,
   fetchCheapestV1,
   fetchCheapestV3,
   nextMonth,
@@ -33,6 +34,20 @@ const BATCH = 25;
 // An `active` row whose current_period_end is this many days past with no
 // renewal is treated as lapsed (ECPay retries failed charges over several days).
 const RENEWAL_GRACE_DAYS = 7;
+// flight.parser_runs: a run slower than this is flagged on /admin, well before
+// the Edge Function wall-clock limit (150 s Free / 400 s paid) cuts it off.
+const SLOW_RUN_MS = 90_000;
+const RUN_HISTORY_DAYS = 90;
+
+// One problem in a run, shown on /admin/runs (see the parser_runs migration).
+type Issue = {
+  route?: string;
+  source?: "v3" | "v1";
+  currency?: string;
+  kind: "rate_limited" | "http" | "error" | "no_fare" | "db";
+  status?: number;
+  message: string;
+};
 
 type OfferPair = { twd: Cheapest | null; usd: Cheapest | null };
 
@@ -63,9 +78,67 @@ Deno.serve(async (req) => {
     db: { schema: "flight" },
   });
 
+  // Run log for /admin. Recording is best-effort: a failed write is only logged
+  // and never stops the price check itself.
+  const startedMs = Date.now();
+  const issues: Issue[] = [];
+  let apiCalls = 0;
+  const { data: run, error: runError } = await admin
+    .from("parser_runs")
+    .insert({ status: "running" })
+    .select("id")
+    .single();
+  if (runError) console.error("failed to start parser_runs row", runError);
+
+  const dbIssue = (message: string, error: { message: string }, route?: string) =>
+    issues.push({ route, kind: "db", message: `${message}: ${error.message}` });
+
+  const finishRun = async (fields: {
+    routes_total?: number;
+    routes_checked?: number;
+    matches?: number;
+    expired?: number;
+    fatal?: boolean;
+  }) => {
+    const { fatal, ...counts } = fields;
+    const durationMs = Date.now() - startedMs;
+    // error = something stopped alerts (Travelpayouts refused us, a route's
+    // trigger fare failed to load, a database step failed); warning = degraded
+    // but alerts still ran (a supplementary fetch failed, no fare, slow run).
+    const isError =
+      fatal ||
+      issues.some(
+        (i) =>
+          i.kind === "rate_limited" ||
+          i.kind === "db" ||
+          ((i.kind === "http" || i.kind === "error") && i.source === "v3" && i.currency === "TWD"),
+      );
+    const status = isError ? "error" : issues.length || durationMs > SLOW_RUN_MS ? "warning" : "ok";
+    if (!run) return;
+    const { error } = await admin
+      .from("parser_runs")
+      .update({
+        ...counts,
+        finished_at: new Date().toISOString(),
+        duration_ms: durationMs,
+        status,
+        api_calls: apiCalls,
+        issues,
+      })
+      .eq("id", run.id);
+    if (error) console.error("failed to finish parser_runs row", error);
+    const { error: pruneError } = await admin
+      .from("parser_runs")
+      .delete()
+      .lt("started_at", new Date(Date.now() - RUN_HISTORY_DAYS * 86_400_000).toISOString());
+    if (pruneError) console.error("failed to prune parser_runs", pruneError);
+  };
+
   const { data: routes, error: routesError } = await admin.from("routes").select("*");
   if (routesError) {
     console.error("failed to load routes", routesError);
+    dbIssue("failed to load routes", routesError);
+    await finishRun({ fatal: true });
     return Response.json({ error: routesError.message }, { status: 500 });
   }
 
@@ -87,7 +160,10 @@ Deno.serve(async (req) => {
     .eq("subscription_status", "cancelled")
     .lt("current_period_end", nowIso)
     .select("email, route");
-  if (cancelledError) console.error("failed to expire lapsed cancelled rows", cancelledError);
+  if (cancelledError) {
+    console.error("failed to expire lapsed cancelled rows", cancelledError);
+    dbIssue("failed to expire lapsed cancelled rows", cancelledError);
+  }
   for (const r of endedCancelled ?? []) expiredRows.push({ ...r, reason: "period_ended" });
 
   // 2) still `active`, but renewals stopped arriving. ECPay gives up after 6
@@ -100,7 +176,10 @@ Deno.serve(async (req) => {
     .eq("payment_method", "ecpay")
     .lt("current_period_end", lapsedBefore)
     .select("email, route");
-  if (activeError) console.error("failed to expire lapsed active rows", activeError);
+  if (activeError) {
+    console.error("failed to expire lapsed active rows", activeError);
+    dbIssue("failed to expire lapsed active rows", activeError);
+  }
   for (const r of endedActive ?? []) expiredRows.push({ ...r, reason: "payment_lapsed" });
 
   // 3) free (payment_required was off): one month, no renewal to wait for,
@@ -112,7 +191,10 @@ Deno.serve(async (req) => {
     .eq("payment_method", "free")
     .lt("current_period_end", nowIso)
     .select("email, route");
-  if (freeError) console.error("failed to expire ended free rows", freeError);
+  if (freeError) {
+    console.error("failed to expire ended free rows", freeError);
+    dbIssue("failed to expire ended free rows", freeError);
+  }
   for (const r of endedFree ?? []) expiredRows.push({ ...r, reason: "free_period_ended" });
 
   for (const r of expiredRows) {
@@ -158,6 +240,28 @@ Deno.serve(async (req) => {
   // for. pending_payment / expired are never emailed.
   const payingFilter = `subscription_status.eq.active,and(subscription_status.eq.cancelled,current_period_end.gte.${nowIso})`;
 
+  // Wraps one fare fetch: counts the call and records a failure as an Issue.
+  const fetchFare = (
+    route: string,
+    source: "v3" | "v1",
+    currency: string,
+    p: () => Promise<Cheapest | null>,
+  ) => {
+    apiCalls++;
+    return safe(`${source} ${currency} ${route}`, p(), (e) => {
+      const status = e instanceof FareHttpError ? e.status : undefined;
+      issues.push({
+        route,
+        source,
+        currency,
+        kind: status === 429 ? "rate_limited" : status ? "http" : "error",
+        status,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    });
+  };
+
+  let routesChecked = 0;
   for (const route of (routes ?? []) as Route[]) {
     const { origin, destination } = route;
 
@@ -169,23 +273,31 @@ Deno.serve(async (req) => {
         .select("id", { count: "exact", head: true })
         .eq("route", route.route)
         .or(payingFilter);
-      if (countError) console.error(`failed to count subscribers for ${route.route}`, countError);
-      else if (!count) {
+      if (countError) {
+        console.error(`failed to count subscribers for ${route.route}`, countError);
+        dbIssue("failed to count subscribers", countError, route.route);
+      } else if (!count) {
         console.log(`skip ${route.route}: disabled, no paying subscribers`);
         continue;
       }
     }
 
+    const issuesBefore = issues.length;
     const [cheapest, cheapestUsd, v1Twd, v1Usd] = await Promise.all([
-      safe(`v3 TWD ${route.route}`, fetchCheapestV3(origin, destination, month, "TWD")),
-      safe(`v3 USD ${route.route}`, fetchCheapestV3(origin, destination, month, "USD")),
+      fetchFare(route.route, "v3", "TWD", () => fetchCheapestV3(origin, destination, month, "TWD")),
+      fetchFare(route.route, "v3", "USD", () => fetchCheapestV3(origin, destination, month, "USD")),
       v1Enabled
-        ? safe(`v1 TWD ${route.route}`, fetchCheapestV1(origin, destination, month, "TWD"))
+        ? fetchFare(route.route, "v1", "TWD", () =>
+            fetchCheapestV1(origin, destination, month, "TWD"),
+          )
         : null,
       v1Enabled
-        ? safe(`v1 USD ${route.route}`, fetchCheapestV1(origin, destination, month, "USD"))
+        ? fetchFare(route.route, "v1", "USD", () =>
+            fetchCheapestV1(origin, destination, month, "USD"),
+          )
         : null,
     ]);
+    routesChecked++;
     // null = comparison switched off (no v1 block in the email); a pair with
     // twd: null = switched on but v1 had nothing (email says so).
     const compareV1: OfferPair | null = v1Enabled ? { twd: v1Twd, usd: v1Usd } : null;
@@ -196,6 +308,19 @@ Deno.serve(async (req) => {
     // v3 is the trigger; without a v3 TWD fare there is nothing to alert on.
     if (!cheapest) {
       console.error(`skip ${route.route}: no v3 TWD fare available`);
+      // A failed fetch is already recorded; only log an empty answer as no_fare.
+      const fetchFailed = issues
+        .slice(issuesBefore)
+        .some((i) => i.source === "v3" && i.currency === "TWD");
+      if (!fetchFailed) {
+        issues.push({
+          route: route.route,
+          source: "v3",
+          currency: "TWD",
+          kind: "no_fare",
+          message: `no v3 TWD fare for ${month}; no alerts for this route this run`,
+        });
+      }
       continue;
     }
 
@@ -218,6 +343,7 @@ Deno.serve(async (req) => {
       .eq("plan_name", route.plan_name);
     if (lastPriceError) {
       console.error(`failed to record last_price for ${route.route}`, lastPriceError);
+      dbIssue("failed to record last_price", lastPriceError, route.route);
     }
 
     // ...then only serve paying users.
@@ -228,6 +354,7 @@ Deno.serve(async (req) => {
       .or(payingFilter);
     if (subsError) {
       console.error(`failed to load subscriptions for ${route.route}`, subsError);
+      dbIssue("failed to load subscriptions", subsError, route.route);
       continue;
     }
 
@@ -262,6 +389,13 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ matches: batch }),
     }).catch((e) => console.error("notify batch dispatch failed", e));
   }
+
+  await finishRun({
+    routes_total: routes?.length ?? 0,
+    routes_checked: routesChecked,
+    matches: matches.length,
+    expired: expiredRows.length,
+  });
 
   return Response.json({ routes: routes?.length ?? 0, matches: matches.length });
 });

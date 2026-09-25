@@ -1,4 +1,5 @@
-import { PAGE_SIZE } from "./shared";
+import { Link } from "@tanstack/react-router";
+import { PAGE_SIZE, fmtDateTime, parserHealth, useLatestParserRuns } from "./shared";
 
 export function StatCard({
   label,
@@ -95,6 +96,46 @@ export function Pager({
             下一頁
           </button>
         </nav>
+      )}
+    </div>
+  );
+}
+
+const HEALTH_STYLES = {
+  ok: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  warning: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  error: "border-destructive/30 bg-destructive/10 text-destructive",
+  unknown: "border-border bg-muted/40 text-muted-foreground",
+} as const;
+
+// State of the 30-min price check (flight.parser_runs), with a link to the
+// run log unless we're already on it.
+export function ParserHealthBanner({ linkToRuns = false }: { linkToRuns?: boolean }) {
+  const runsQuery = useLatestParserRuns();
+  if (runsQuery.isLoading) return null;
+  if (runsQuery.isError) {
+    return (
+      <p className={`mt-4 rounded-lg border px-4 py-3 text-sm ${HEALTH_STYLES.error}`}>
+        讀取查價紀錄失敗 Couldn't load price-check runs
+      </p>
+    );
+  }
+  const health = parserHealth(runsQuery.data ?? []);
+  return (
+    <div
+      className={`mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-4 py-3 text-sm ${HEALTH_STYLES[health.level]}`}
+    >
+      <span>
+        <span className="font-semibold">查價狀態：</span>
+        {health.message}
+        {health.run && (
+          <span className="ml-2 text-xs opacity-80">({fmtDateTime(health.run.started_at)})</span>
+        )}
+      </span>
+      {linkToRuns && (
+        <Link to="/admin/runs" className="text-xs font-medium underline underline-offset-2">
+          查看查價紀錄 →
+        </Link>
       )}
     </div>
   );

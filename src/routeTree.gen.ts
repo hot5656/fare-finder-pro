@@ -18,6 +18,7 @@ import { Route as AuthResetRouteImport } from './routes/auth/reset'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin/index'
 import { Route as AuthenticatedAdminNotificationsRouteImport } from './routes/_authenticated/admin/notifications'
 import { Route as AuthenticatedAdminRoutesRouteImport } from './routes/_authenticated/admin/routes'
+import { Route as AuthenticatedAdminRunsRouteImport } from './routes/_authenticated/admin/runs'
 import { Route as AuthenticatedAdminSubscriptionsRouteImport } from './routes/_authenticated/admin/subscriptions'
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin/users'
 
@@ -67,6 +68,11 @@ const AuthenticatedAdminRoutesRoute =
     path: '/routes',
     getParentRoute: () => AuthenticatedAdminRouteRoute,
   } as any)
+const AuthenticatedAdminRunsRoute = AuthenticatedAdminRunsRouteImport.update({
+  id: '/runs',
+  path: '/runs',
+  getParentRoute: () => AuthenticatedAdminRouteRoute,
+} as any)
 const AuthenticatedAdminSubscriptionsRoute =
   AuthenticatedAdminSubscriptionsRouteImport.update({
     id: '/subscriptions',
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/auth/': typeof AuthIndexRoute
   '/admin/notifications': typeof AuthenticatedAdminNotificationsRoute
   '/admin/routes': typeof AuthenticatedAdminRoutesRoute
+  '/admin/runs': typeof AuthenticatedAdminRunsRoute
   '/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
@@ -98,6 +105,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthIndexRoute
   '/admin/notifications': typeof AuthenticatedAdminNotificationsRoute
   '/admin/routes': typeof AuthenticatedAdminRoutesRoute
+  '/admin/runs': typeof AuthenticatedAdminRunsRoute
   '/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
@@ -112,6 +120,7 @@ export interface FileRoutesById {
   '/auth/': typeof AuthIndexRoute
   '/_authenticated/admin/notifications': typeof AuthenticatedAdminNotificationsRoute
   '/_authenticated/admin/routes': typeof AuthenticatedAdminRoutesRoute
+  '/_authenticated/admin/runs': typeof AuthenticatedAdminRunsRoute
   '/_authenticated/admin/subscriptions': typeof AuthenticatedAdminSubscriptionsRoute
   '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
@@ -126,6 +135,7 @@ export interface FileRouteTypes {
     | '/auth/'
     | '/admin/notifications'
     | '/admin/routes'
+    | '/admin/runs'
     | '/admin/subscriptions'
     | '/admin/users'
     | '/admin/'
@@ -137,6 +147,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/admin/notifications'
     | '/admin/routes'
+    | '/admin/runs'
     | '/admin/subscriptions'
     | '/admin/users'
     | '/admin'
@@ -150,6 +161,7 @@ export interface FileRouteTypes {
     | '/auth/'
     | '/_authenticated/admin/notifications'
     | '/_authenticated/admin/routes'
+    | '/_authenticated/admin/runs'
     | '/_authenticated/admin/subscriptions'
     | '/_authenticated/admin/users'
     | '/_authenticated/admin/'
@@ -227,6 +239,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRoutesRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
+    '/_authenticated/admin/runs': {
+      id: '/_authenticated/admin/runs'
+      path: '/runs'
+      fullPath: '/admin/runs'
+      preLoaderRoute: typeof AuthenticatedAdminRunsRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
     '/_authenticated/admin/subscriptions': {
       id: '/_authenticated/admin/subscriptions'
       path: '/subscriptions'
@@ -247,6 +266,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminNotificationsRoute: typeof AuthenticatedAdminNotificationsRoute
   AuthenticatedAdminRoutesRoute: typeof AuthenticatedAdminRoutesRoute
+  AuthenticatedAdminRunsRoute: typeof AuthenticatedAdminRunsRoute
   AuthenticatedAdminSubscriptionsRoute: typeof AuthenticatedAdminSubscriptionsRoute
   AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
@@ -256,6 +276,7 @@ const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren
   {
     AuthenticatedAdminNotificationsRoute: AuthenticatedAdminNotificationsRoute,
     AuthenticatedAdminRoutesRoute: AuthenticatedAdminRoutesRoute,
+    AuthenticatedAdminRunsRoute: AuthenticatedAdminRunsRoute,
     AuthenticatedAdminSubscriptionsRoute: AuthenticatedAdminSubscriptionsRoute,
     AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
     AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,

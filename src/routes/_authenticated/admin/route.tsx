@@ -23,6 +23,7 @@ const TABS = [
   { to: "/admin/users", label: "註冊用戶 Users", exact: false },
   { to: "/admin/subscriptions", label: "所有訂閱 Subscriptions", exact: false },
   { to: "/admin/notifications", label: "通知紀錄 Notification history", exact: false },
+  { to: "/admin/runs", label: "查價紀錄 Price checks", exact: false },
 ] as const;
 
 function AdminLayout() {
