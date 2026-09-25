@@ -1,0 +1,1531 @@
+ ▐▛███▛█   Claude Code v2.1.281
+▝▜██████▀  Opus 5.5 · Claude Pro
+  ▝▝ ▝▝    ~/work/claude/fare-finder-pro
+
+  Opus 5.5 is now your default model and it draws down usage faster than Sonnet 5. Switch anytime with /model.
+
+❯ 將 admin 資料分成 3 page, page 1: 除了 所有訂閱 Subscriptions 和 通知紀錄     
+  Notification history                                                          
+  page 2: 所有訂閱 Subscriptions                                                
+  page 3: 通知紀錄 Notification history                                         
+  page 2 and page 3 有單頁筆數限制(資料若多可跳頁)                              
+
+  Searched for 1 pattern, listed 2 directories, ran 1 shell command (ctrl+o to expand)
+
+⏺ Now write the shared module, layout and three pages.
+
+⏺ Write(src/components/admin/shared.tsx)
+  ⎿  Wrote 126 lines to src/components/admin/shared.tsx
+       1 import { useQuery } from "@tanstack/react-query";
+       2 import { supabase } from "@/integrations/supabase/client";
+       3 import type { Tables } from "@/integrations/supabase/types";
+       4 
+       5 export type Route_ = Tables<"routes">;
+       7 export type Notification = Tables<"notification_history">;
+       8 
+       9 export const STATUSES = ["pending_payment", "active", "cancelled
+         ", "expired"] as const;
+      10 export const PAGE_SIZE = 20;
+     … +131 lines (ctrl+o to expand)
+
+⏺ Write(src/routes/_authenticated/admin/route.tsx)
+  ⎿  Added 53 lines, removed 2 lines
+      1 -import { Outlet, createFileRoute, redirect } from "@tanstack/rea
+        -ct-router";                                                     
+      1 +import { Link, Outlet, createFileRoute, redirect } from "@tansta
+        +ck/react-router";                                               
+      2  import { supabase } from "@/integrations/supabase/client";
+      3  
+      4  // This check is a UX shortcut only (fast redirect for non-admin
+         s), same category
+     ...
+      12      const { data, error } = await supabase.rpc("is_admin");
+      13      if (error || !data) throw redirect({ to: "/dashboard" });
+      14    },
+      15 -  component: () => <Outlet />,                                 
+      15 +  component: AdminLayout,                                      
+      16  });
+      17 +                                                               
+      18 +const TABS = [                                                 
+      19 +  { to: "/admin", label: "總覽 Overview", exact: true },       
+      20 +  { to: "/admin/subscriptions", label: "所有訂閱 Subscriptions"
+         +, exact: false },                                              
+      21 +  { to: "/admin/notifications", label: "通知紀錄 Notification h
+         +istory", exact: false },                                       
+      22 +] as const;                                                    
+      23 +                                                               
+      24 +function AdminLayout() {                                       
+      25 +  return (                                                     
+      26 +    <div className="min-h-screen bg-background text-foreground"
+         +>                                                              
+      27 +      <header className="border-b border-border/60 bg-backgroun
+         +d/80 backdrop-blur">                                           
+      28 +        <div className="mx-auto flex h-16 max-w-6xl items-cente
+         +r justify-between px-4 sm:px-6">                               
+      29 +          <Link to="/" className="flex items-center gap-2">    
+      30 +            <span className="text-xl" aria-hidden>             
+      31 +              ✈️                                               
+      32 +            </span>                                            
+      33 +            <span className="text-sm font-bold tracking-tight s
+         +m:text-base">                                                  
+      34 +              Flight Price Notifier — Admin                    
+      35 +            </span>                                            
+      36 +          </Link>                                              
+      37 +          <Link                                                
+      38 +            to="/dashboard"                                    
+      39 +            className="rounded-lg border border-border px-4 py-
+         +2 text-sm font-medium text-foreground transition-colors hover:b
+         +g-accent"                                                      
+      40 +          >                                                    
+      41 +            回到 Dashboard                                     
+      42 +          </Link>                                              
+      43 +        </div>                                                 
+      44 +      </header>                                                
+      45 +                                                               
+      46 +      <main className="mx-auto max-w-6xl px-4 py-16 sm:px-6">  
+      47 +        <h1 className="text-3xl font-bold tracking-tight">Admin
+         +</h1>                                                          
+      48 +                                                               
+      49 +        <nav className="mt-6 flex flex-wrap gap-1 border-b bord
+         +er-border">                                                    
+      50 +          {TABS.map((tab) => (                                 
+      51 +            <Link                                              
+      52 +              key={tab.to}                                     
+      53 +              to={tab.to}                                      
+      54 +              activeOptions={{ exact: tab.exact }}             
+      55 +              className="-mb-px border-b-2 border-transparent p
+         +x-4 py-2 text-sm font-medium text-muted-foreground transition-c
+         +olors hover:text-foreground"                                   
+      56 +              activeProps={{ className: "border-primary! text-f
+         +oreground!" }}                                                 
+      57 +            >                                                  
+      58 +              {tab.label}                                      
+      59 +            </Link>                                            
+      60 +          ))}                                                  
+      61 +        </nav>                                                 
+      62 +                                                               
+      63 +        <Outlet />                                             
+      64 +      </main>                                                  
+      65 +    </div>                                                     
+      66 +  );                                                           
+      67 +}                                                              
+
+⏺ Now the overview page (index): stats, settings, routes.
+
+⏺ Bash(cd /Users/gaoyiping/work/claude/fare-finder-pro/src/routes/_authenticated
+      /admin && python3 - <<'EOF'
+      src = open("index.tsx").read()…)
+  ⎿          <p className="mt-6 text-sm text-muted-foreground">Loading…</p>
+           ) : (
+             <>
+     … +58 lines (ctrl+o to expand)
+  ⎿  1 file changed (binary, mode only or too large to show)
+
+⏺ Now the subscriptions page (server-side paging, search and filter), reusing
+  the original row component.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(S=/private/tmp/claude-501/-Users-gaoyiping-work-claude-fare-finder-pro/8a
+      7593ec-e067-48aa-a3e5-eba3b03fb058/scratchpad && cat > $S/head.tsx <<'EOF'
+      import { use…)
+  ⎿  188:          ? "已發送（標記為 admin 手動觸發，見「通知紀錄」頁）Sent
+      — marked as admin-triggered, see the Notification history page"
+  ⎿  Created src/routes/_authenticated/admin/subscriptions.tsx (+260 -0)
+        1 +import { useEffect, useMemo, useState } from "react";         
+        2 +import { createFileRoute } from "@tanstack/react-router";     
+        3 +import { keepPreviousData, useMutation, useQuery, useQueryClie
+          +nt } from "@tanstack/react-query";                            
+        4 +import { supabase } from "@/integrations/supabase/client";    
+        5 +import { callFunction } from "@/integrations/supabase/call-fun
+          +ction";                                                       
+        6 +import {                                                      
+        7 +  PAGE_SIZE,                                                  
+        8 +  Pager,                                                      
+        9 +  STATUSES,                                                   
+       10 +  type Route_,                                                
+       11 +  type Subscription,                                          
+       12 +  useAdminRoutes,                                             
+       13 +} from "@/components/admin/shared";                           
+       14 +                                                              
+       15 +export const Route = createFileRoute("/_authenticated/admin/su
+          +bscriptions")({                                               
+       16 +  component: AdminSubscriptionsPage,                          
+       17 +});                                                           
+       18 +                                                              
+       19 +// Characters that would break the PostgREST or() filter strin
+          +g; the search is a                                            
+       20 +// plain substring match, so dropping them loses nothing usefu
+          +l.                                                            
+       21 +const sanitizeTerm = (term: string) => term.replace(/[%*,()"\\
+          +]/g, "").trim();                                              
+       22 +                                                              
+       23 +function AdminSubscriptionsPage() {                           
+       24 +  const routesQuery = useAdminRoutes();                       
+       25 +                                                              
+       26 +  const [search, setSearch] = useState("");                   
+       27 +  const [term, setTerm] = useState("");                       
+       28 +  const [statusFilter, setStatusFilter] = useState<string>("al
+          +l");                                                          
+       29 +  const [page, setPage] = useState(1);                        
+       30 +                                                              
+       31 +  // Debounce the search box so each keystroke doesn't hit the
+          + database.                                                    
+       32 +  useEffect(() => {                                           
+       33 +    const t = setTimeout(() => setTerm(sanitizeTerm(search)), 
+          +300);                                                         
+       34 +    return () => clearTimeout(t);                             
+       35 +  }, [search]);                                               
+       36 +                                                              
+       37 +  useEffect(() => setPage(1), [term, statusFilter]);          
+       38 +                                                              
+       39 +  // Filtered and paged in the database so the page stays smal
+          +l however many rows                                           
+       40 +  // there are.                                               
+     … 220 more lines (ctrl+o to expand)
+
+⏺ Now the notification history page.
+
+⏺ Write(src/routes/_authenticated/admin/notifications.tsx)
+  ⎿  Wrote 122 lines to src/routes/_authenticated/admin/notifications.tsx
+      1 import { useEffect, useState } from "react";
+      2 import { createFileRoute } from "@tanstack/react-router";
+      3 import { keepPreviousData, useQuery } from "@tanstack/react-query
+      4 import { supabase } from "@/integrations/supabase/client";
+      5 import { PAGE_SIZE, Pager, fmtDateTime, type Notification } from 
+        "@/components/admin/shared";
+      6 
+        ications")({
+      8   component: AdminNotificationsPage,
+      9 });
+     … +134 lines (ctrl+o to expand)
+
+⏺ Regenerate the route tree, then format, lint and typecheck.
+
+⏺ Bash((lsof -i :8080 -sTCP:LISTEN | head -2); npm run build >/tmp/build.log
+      2>&1; echo build=$?; tail -5 /tmp/build.log; git status --short; npx
+      prettier --write src/…)
+  ⎿  COMMAND   PID      USER   FD   TYPE            DEVICE SIZE/OFF NODE NA
+     ME
+     node    11862 gaoyiping   15u  IPv6 0xf5921a778a44ce2      0t0  TCP *:
+     … +24 lines (ctrl+o to expand)
+  ⎿  Updated src/routes/_authenticated/admin/index.tsx (+52 -52)
+       60          <p className="mt-6 text-sm text-muted-foreground">Load
+           ing…</p>
+       61        ) : (
+       62          <>
+       63 -        {/* Stat cards */}                                    
+       64 -        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid
+          --cols-4">                                                     
+       65 -          <StatCard label="有效訂閱 Active" value={activeCount
+          -} />                                                          
+       66 -          <StatCard                                           
+       67 -            label="預估月營收 MRR"                            
+       68 -            value={`NT$${(paidActiveCount * MONTHLY_PRICE_TWD)
+          -.toLocaleString()}`}                                          
+       69 -          />                                                  
+       70 -          <StatCard label="總訂閱數 Total" value={subscription
+          -s.length} />                                                  
+       71 -          <StatCard                                           
+       72 -            label="付款失敗 Payment failed"                   
+       73 -            value={paymentFailedCount}                        
+       74 -            tone={paymentFailedCount > 0 ? "destructive" : und
+          -efined}                                                       
+       75 -          />                                                  
+       76 -        </div>                                                
+       77 -                                                              
+       78 -        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid
+          --cols-4">                                                     
+       79 -          {STATUSES.map((status) => (                         
+       80 -            <StatCard key={status} label={status} value={statu
+          -sCounts[status] ?? 0} />                                      
+       81 -          ))}                                                 
+       82 -        </div>                                                
+       83 -                                                              
+       84 -        <SettingsSection />                                   
+       85 -                                                              
+       86 -        {/* Routes / last price */}                           
+       87 -        <section className="mt-10">                           
+       88 -          <h2 className="text-lg font-bold">航線最新價格 Route
+          -s</h2>                                                        
+       89 -          <div className="mt-4 overflow-x-auto rounded-2xl bor
+          -der border-border">                                           
+       90 -            <table className="w-full text-left text-sm">      
+       91 -              <thead className="bg-muted/40 text-xs uppercase 
+          -text-muted-foreground">                                       
+       92 -                <tr>                                          
+       93 -                  <th className="px-4 py-2">Route</th>        
+       94 -                  <th className="px-4 py-2">Last price</th>   
+       95 -                  <th className="px-4 py-2">Last checked</th> 
+       96 -                </tr>                                         
+       97 -              </thead>                                        
+       98 -              <tbody>                                         
+       99 -                {(routesQuery.data ?? []).map((r) => (        
+     … 71 more lines (ctrl+o to expand)
+  ⎿  Updated src/routes/_authenticated/admin/subscriptions.tsx (+5 -1)
+      125                </thead>
+      126                <tbody>
+      127                  {rows.map((s) => (
+      128 -                  <SubscriptionRow key={s.id} subscription={s}
+          - route={routesByPlan.get(s.plan_name)} />                     
+      128 +                  <SubscriptionRow                            
+      129 +                    key={s.id}                                
+      130 +                    subscription={s}                          
+      131 +                    route={routesByPlan.get(s.plan_name)}     
+      132 +                  />                                          
+      133                  ))}
+      134                  {rows.length === 0 && (
+      135                    <tr>
+  ⎿  (timeout 5m)
+
+⏺ Fix the missing import, and split the shared module so the lint warning about
+  fast refresh goes away.
+
+⏺ Bash(cd /Users/gaoyiping/work/claude/fare-finder-pro/src/components/admin &&
+      python3 - <<'EOF'
+      src = open("shared.tsx").read()…)
+  ⎿  import { useEffect, useMemo, useState } from "react";
+     import { createFileRoute } from "@tanstack/react-router";
+     import { keepPreviousData, useMutation, useQuery, useQueryClient } fro
+     … +17 lines (ctrl+o to expand)
+  ⎿  Created src/components/admin/AdminUI.tsx (+101 -0)
+        1 +import { PAGE_SIZE } from "./shared";                         
+        2 +                                                              
+        3 +export function StatCard({                                    
+        4 +  label,                                                      
+        5 +  value,                                                      
+        6 +  tone,                                                       
+        7 +}: {                                                          
+        8 +  label: string;                                              
+        9 +  value: string | number;                                     
+       10 +  tone?: "destructive" | undefined;                           
+       11 +}) {                                                          
+       12 +  return (                                                    
+       13 +    <div className="rounded-2xl border border-border bg-card p
+          +-4">                                                          
+       14 +      <p className="text-xs font-medium uppercase tracking-wid
+          +e text-muted-foreground">{label}</p>                          
+       15 +      <p                                                      
+       16 +        className={`mt-1 text-2xl font-bold ${tone === "destru
+          +ctive" ? "text-destructive" : "text-card-foreground"}`}       
+       17 +      >                                                       
+       18 +        {value}                                               
+       19 +      </p>                                                    
+       20 +    </div>                                                    
+       21 +  );                                                          
+       22 +}                                                             
+       23 +                                                              
+       24 +// Page numbers to show around the current page, with null for
+          + a gap ("…").                                                 
+       25 +function pageWindow(page: number, pageCount: number): (number 
+          +| null)[] {                                                   
+       26 +  const pages = new Set([1, pageCount, page - 1, page, page + 
+          +1]);                                                          
+       27 +  const sorted = [...pages].filter((p) => p >= 1 && p <= pageC
+          +ount).sort((a, b) => a - b);                                  
+       28 +  const out: (number | null)[] = [];                          
+       29 +  for (const p of sorted) {                                   
+       30 +    const prev = out[out.length - 1];                         
+       31 +    if (typeof prev === "number" && p - prev > 1) out.push(nul
+          +l);                                                           
+       32 +    out.push(p);                                              
+       33 +  }                                                           
+       34 +  return out;                                                 
+       35 +}                                                             
+       36 +                                                              
+       37 +const pagerButton =                                           
+       38 +  "h-8 min-w-8 rounded-md border px-2 text-xs font-medium tran
+          +sition-colors disabled:opacity-40";                           
+       39 +                                                              
+       40 +export function Pager({                                       
+     … 61 more lines (ctrl+o to expand)
+  ⎿  Created src/components/admin/shared.ts (+26 -0)
+       1 +import { useQuery } from "@tanstack/react-query";              
+       2 +import { supabase } from "@/integrations/supabase/client";     
+       3 +import type { Tables } from "@/integrations/supabase/types";   
+       4 +                                                               
+       5 +export type Route_ = Tables<"routes">;                         
+       6 +export type Subscription = Tables<"subscriptions">;            
+       7 +export type Notification = Tables<"notification_history">;     
+       8 +                                                               
+       9 +export const STATUSES = ["pending_payment", "active", "cancelle
+         +d", "expired"] as const;                                       
+      10 +export const PAGE_SIZE = 20;                                   
+      11 +                                                               
+      12 +export const fmtDateTime = (iso: string | null) =>             
+      13 +  iso ? new Date(iso).toLocaleString("zh-TW") : "";            
+      14 +                                                               
+      15 +// Shared by the overview (routes table) and the subscriptions 
+         +page (manual-send                                              
+      16 +// check), so both hit the same cache entry.                   
+      17 +export function useAdminRoutes() {                             
+      18 +  return useQuery({                                            
+      19 +    queryKey: ["admin", "routes"],                             
+      20 +    queryFn: async () => {                                     
+      21 +      const { data, error } = await supabase.from("routes").sel
+         +ect("*");                                                      
+      22 +      if (error) throw error;                                  
+      23 +      return data as Route_[];                                 
+      24 +    },                                                         
+      25 +  });                                                          
+      26 +}                                                              
+  ⎿  Deleted src/components/admin/shared.tsx (+0 -126)
+        1 -import { useQuery } from "@tanstack/react-query";             
+        2 -import { supabase } from "@/integrations/supabase/client";    
+        3 -import type { Tables } from "@/integrations/supabase/types";  
+        4 -                                                              
+        5 -export type Route_ = Tables<"routes">;                        
+        6 -export type Subscription = Tables<"subscriptions">;           
+        7 -export type Notification = Tables<"notification_history">;    
+        8 -                                                              
+        9 -export const STATUSES = ["pending_payment", "active", "cancell
+          -ed", "expired"] as const;                                     
+       10 -export const PAGE_SIZE = 20;                                  
+       11 -                                                              
+       12 -export const fmtDateTime = (iso: string | null) =>            
+       13 -  iso ? new Date(iso).toLocaleString("zh-TW") : "";           
+       14 -                                                              
+       15 -// Shared by the overview (routes table) and the subscriptions
+          - page (manual-send                                            
+       16 -// check), so both hit the same cache entry.                  
+       17 -export function useAdminRoutes() {                            
+       18 -  return useQuery({                                           
+       19 -    queryKey: ["admin", "routes"],                            
+       20 -    queryFn: async () => {                                    
+       21 -      const { data, error } = await supabase.from("routes").se
+          -lect("*");                                                    
+       22 -      if (error) throw error;                                 
+       23 -      return data as Route_[];                                
+       24 -    },                                                        
+       25 -  });                                                         
+       26 -}                                                             
+       27 -                                                              
+       28 -export function StatCard({                                    
+       29 -  label,                                                      
+       30 -  value,                                                      
+       31 -  tone,                                                       
+       32 -}: {                                                          
+       33 -  label: string;                                              
+       34 -  value: string | number;                                     
+       35 -  tone?: "destructive" | undefined;                           
+       36 -}) {                                                          
+       37 -  return (                                                    
+       38 -    <div className="rounded-2xl border border-border bg-card p
+          --4">                                                          
+       39 -      <p className="text-xs font-medium uppercase tracking-wid
+          -e text-muted-foreground">{label}</p>                          
+       40 -      <p                                                      
+     … 86 more lines (ctrl+o to expand)
+  ⎿  Updated src/routes/_authenticated/admin/index.tsx (+2 -1)
+       4  import { supabase } from "@/integrations/supabase/client";
+       5  import { callFunction } from "@/integrations/supabase/call-func
+          tion";
+       6  import { Switch } from "@/components/ui/switch";
+       7 -import { STATUSES, StatCard, fmtDateTime, useAdminRoutes } from
+         - "@/components/admin/shared";                                  
+       7 +import { STATUSES, fmtDateTime, useAdminRoutes } from "@/compon
+         +ents/admin/shared";                                            
+       8 +import { StatCard } from "@/components/admin/AdminUI";         
+       9  
+      10  export const Route = createFileRoute("/_authenticated/admin/")(
+          {
+      11    component: AdminOverviewPage,
+  ⎿  Updated src/routes/_authenticated/admin/notifications.tsx (+2 -1)
+      2  import { createFileRoute } from "@tanstack/react-router";
+      3  import { keepPreviousData, useQuery } from "@tanstack/react-quer
+         y";
+      4  import { supabase } from "@/integrations/supabase/client";
+      5 -import { PAGE_SIZE, Pager, fmtDateTime, type Notification } from
+        - "@/components/admin/shared";                                   
+      5 +import { PAGE_SIZE, fmtDateTime, type Notification } from "@/com
+        +ponents/admin/shared";                                          
+      6 +import { Pager } from "@/components/admin/AdminUI";             
+      7  
+      8  export const Route = createFileRoute("/_authenticated/admin/noti
+         fications")({
+      9    component: AdminNotificationsPage,
+  ⎿  … 1 more file changed
+
+⏺ Typecheck and lint pass. Now checking it in the running dev server on
+  localhost:8080.
+
+  Called claude-in-chrome, chrome-devtools 3 times (ctrl+o to expand)
+
+⏺ I split the admin area into three pages. The build, typecheck (tsc) and lint
+  all pass, but I haven't seen the pages load yet: the test browser is on the
+  sign-in page, and I'm not allowed to type your password. If you sign in with
+  an admin account in that Chrome window (it's open at localhost:8080/auth) and
+  tell me, I'll go through all three pages and the page switching.
+
+  The three pages (the header now has tabs to switch between them):
+  - Page 1, /admin (總覽 Overview): the stat cards, the settings switches and
+    the latest price per route. The stat cards now load only the three columns
+    they count, not whole subscription rows.
+  - Page 2, /admin/subscriptions: all subscriptions, with the search box, status
+    filter and 手動發送 button working as before.
+  - Page 3, /admin/notifications: the notification history.
+
+  Paging on pages 2 and 3:
+  - 20 rows per page. Below each table it shows "第 x–y 筆，共 N 筆", plus
+    上一頁 / numbered pages / 下一頁. Long page lists collapse into "…" so you
+    can still jump straight to the first or last page.
+  - The database does the paging, search and filter, so each page only loads its
+    own 20 rows. The old page fetched every row at once, and Supabase stops at
+    1,000 rows without warning, so large tables would have been cut off.
+  - Typing in the search box waits 0.3 seconds before searching. Changing the
+    search or filter goes back to page 1.
+  - On page 3, the emails are looked up only for the users on the current page.
+
+  Files:
+  - New: admin/subscriptions.tsx and admin/notifications.tsx, plus
+    src/components/admin/ for shared helpers and the pager.
+  - Changed: admin/route.tsx now holds the shared header and tabs, and
+    admin/index.tsx is now the overview page only.
+  - routeTree.gen.ts was regenerated by the build.
+
+  One text change: after 手動發送, the confirmation used to say to look at the
+  notification history "below". It now points to the 通知紀錄 page instead.
+
+  I haven't committed anything.
+
+✻ Crunched for 2m 45s · done 8:48 PM
+
+❯ do you open at chrome-devtools ? I login it already                           
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ Page 1 is good. Now the subscriptions tab.
+
+  Called chrome-devtools 3 times (ctrl+o to expand)
+
+⏺ Subscriptions page loads (8 rows, one page). Now notifications:
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ The screenshot may have been taken mid-transition; checking again.
+
+  Called chrome-devtools (ctrl+o to expand)
+
+⏺ 44 rows across 3 pages. Jumping to page 3:
+
+  Called chrome-devtools 4 times (ctrl+o to expand)
+
+⏺ That's the loading state (old page dimmed while page 3 fetches). Once more:
+  Called chrome-devtools (ctrl+o to expand)
+
+⏺ Page jumping works. One last check: the server-side search on page 2.
+
+  Called chrome-devtools 6 times (ctrl+o to expand)
+
+⏺ Yes, I used the chrome-devtools browser where you're signed in, and all three
+  pages work on localhost:8080:
+
+  - Page 1, 總覽 Overview: the stat cards, settings and route prices show
+    correctly, and the subscriptions and notification history are no longer on
+    this page.
+  - Page 2, 所有訂閱 Subscriptions: all 8 subscriptions fit on one page, so the
+    page buttons don't appear. Searching yahoo with status active narrows it to
+    2 rows.
+  - Page 3, 通知紀錄 Notification history: 44 rows split into 3 pages of 20.
+    Jumping to page 3 shows rows 41–44, with 上一頁 enabled and 下一頁 greyed
+    out.
+
+  One small thing I noticed: when you click a tab, the new tab gets highlighted
+  but the previous page's table stays on screen for a moment. That's because
+  every tab switch re-runs the admin check in admin/route.tsx. If it bothers
+  you, I can make the check run once instead of on every switch.
+
+  Nothing is committed yet. Want me to commit on the multi-app branch?
+
+✻ Churned for 1m 38s · done 8:52 PM
+
+※ recap: You asked to split the admin area into Overview, Subscriptions and Notification history pages, with paging on the last two; all three work on localhost:8080. Next, tell me whether to commit it to the multi-app branch. (disable recaps in /config)
+
+❯ fix the tab lag                                                               
+
+  Searched for 2 patterns (ctrl+o to expand)
+
+⏺ The dashboard depends on user from route context, so the outer guard must keep
+  returning it—and since TanStack passes cause: "stay" on already-matched
+  routes, both guards can skip redundant network calls during tab navigation.
+
+⏺ Bash(python3 - <<'EOF'
+      f="src/routes/_authenticated/route.tsx"; s=open(f).read()…)
+  ⎿  TSC_OK
+
+     /Users/gaoyiping/work/claude/fare-finder-pro/src/routes/_authenticated
+     … +8 lines (ctrl+o to expand)
+  ⎿  Updated src/routes/_authenticated/admin/route.tsx (+3 -1)
+       8  // still return only what RLS allows for the signed-in user.
+       9  export const Route = createFileRoute("/_authenticated/admin")({
+      10    ssr: false,
+      11 -  beforeLoad: async () => {                                    
+      11 +  beforeLoad: async ({ cause }) => {                           
+      12 +    // Switching between admin tabs: the check already passed o
+         +n entry.                                                       
+      13 +    if (cause === "stay") return;                              
+      14      const { data, error } = await supabase.rpc("is_admin");
+      15      if (error || !data) throw redirect({ to: "/dashboard" });
+      16    },
+  ⎿  Updated src/routes/_authenticated/route.tsx (+8 -1)
+       4  
+       5  export const Route = createFileRoute("/_authenticated")({
+       6    ssr: false,
+       7 -  beforeLoad: async () => {                                    
+       7 +  beforeLoad: async ({ cause }) => {                           
+       8 +    // Already inside the guard (e.g. dashboard -> admin, or be
+         +tween admin tabs):                                             
+       9 +    // the server check ran on entry, so reuse the local sessio
+         +n instead of                                                   
+      10 +    // another round trip to the auth server on every navigatio
+         +n.                                                             
+      11 +    if (cause === "stay") {                                    
+      12 +      const { data } = await supabase.auth.getSession();       
+      13 +      if (data.session) return { user: data.session.user };    
+      14 +    }                                                          
+      15      const { data, error } = await supabase.auth.getUser();
+      16      if (error || !data.user) throw redirect({ to: "/auth" });
+      17      if (!hasAppAccess(data.user.app_metadata)) {
+
+⏺ Typecheck passes; the lint warning is an old one in dashboard.tsx. Testing in
+  the browser:
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ Tab switches now take 23–33 ms. One more check: going from the dashboard to
+  admin should still run the admin check.
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ The dashboard hadn't finished rendering yet. Retrying:
+
+  Called chrome-devtools (ctrl+o to expand)
+
+⏺ I fixed the tab lag. Switching between the three admin tabs now takes about
+  25–35 ms in the browser, so the old page no longer sits on screen.
+
+  What caused it: every tab click made two network calls before the new page
+  could show. One checked your sign-in with the auth server, the other checked
+  that you're an admin.
+
+  What I changed: both route guards now skip their checks if you're already
+  inside the page they protect (TanStack tells the guard this with cause: 
+  "stay").
+  - admin/route.tsx: the admin check runs once when you enter admin. It is
+    skipped when you switch tabs.
+  - _authenticated/route.tsx: when you move between signed-in pages (dashboard ↔
+    admin, or between tabs), it uses the session already stored in the browser.
+    The full check with the auth server still runs when you first open a
+    signed-in page. The dashboard reads user from this guard, so it still gets
+    it either way.
+
+  Security: this doesn't weaken anything. Both checks only decide which pages to
+  show. Who can read which data is enforced by RLS in the database.
+
+  Checked: typecheck passes. In the browser I timed four tab switches, and also
+  dashboard → Admin. That one takes about 0.5 s because it still runs the admin
+  check. Search, status filter and page jumping still work, as tested before.
+
+  Nothing is committed yet. Want me to commit it on multi-app?
+
+✻ Worked for 1m 47s · done 9:48 PM
+
+❯ 請在page 1 後 插入一個 page 顯示註冊本app 之 user                             
+
+  Searched for 1 pattern, listed 1 directory (ctrl+o to expand)
+
+⏺ I'll need a database function for this: the browser can't read auth.users, and
+  the tag lives in raw_app_meta_data.apps. Let me check the existing grants on
+  the flight schema.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Writing the migration: an admin-only function that returns this app's users
+  one page at a time.
+
+⏺ Write(supabase/migrations/20260924110000_flight_admin_app_users.sql)
+  ⎿  Wrote 71 lines to
+     supabase/migrations/20260924110000_flight_admin_app_users.sql
+       1 -- /admin/users: list the accounts registered for this app, page
+       2 --
+         e-auth.md), so the
+         p's tag
+         -scope.ts). That tag
+       6 -- is client-declared, which is fine here: it only decides which
+       7 -- not who may see them. Who may call is decided by flight.is_ad
+       8 -- choke point as the other admin reads; a non-admin gets an exc
+       9 --
+         ER and returns only
+     … +81 lines (ctrl+o to expand)
+
+⏺ Now the types entry (matching what supabase gen types would produce) and the
+  page itself.
+
+⏺ Bash(python3 - <<'EOF'
+      f="src/integrations/supabase/types.ts"; s=open(f).read()…)
+  ⎿  Updated src/integrations/supabase/types.ts (+14 -0)
+      198        [_ in never]: never
+      199      }
+      200      Functions: {
+      201 +      admin_list_app_users: {                                 
+      202 +        Args: { p_limit?: number; p_offset?: number; p_search?
+          +: string }                                                    
+      203 +        Returns: {                                            
+      204 +          created_at: string                                  
+      205 +          email: string                                       
+      206 +          email_confirmed_at: string                          
+      207 +          id: string                                          
+      208 +          is_admin: boolean                                   
+      209 +          last_sign_in_at: string                             
+      210 +          paying_count: number                                
+      211 +          subscription_count: number                          
+      212 +          total_count: number                                 
+      213 +        }[]                                                   
+      214 +      }                                                       
+      215        is_admin: { Args: never; Returns: boolean }
+      216      }
+      217      Enums: {
+
+⏺ Write(src/routes/_authenticated/admin/users.tsx)
+  ⎿  Wrote 121 lines to src/routes/_authenticated/admin/users.tsx
+       1 import { useEffect, useState } from "react";
+       2 import { createFileRoute } from "@tanstack/react-router";
+         y";
+       4 import { supabase } from "@/integrations/supabase/client";
+       5 import { PAGE_SIZE, fmtDateTime } from "@/components/admin/share
+       6 import { Pager } from "@/components/admin/AdminUI";
+       7 
+       8 export const Route = createFileRoute("/_authenticated/admin/user
+       9   component: AdminUsersPage,
+      10 });
+     … +133 lines (ctrl+o to expand)
+
+⏺ Update(src/routes/_authenticated/admin/route.tsx)
+  ⎿  Added 1 line
+      19  
+      20  const TABS = [
+      21    { to: "/admin", label: "總覽 Overview", exact: true },
+      22 +  { to: "/admin/users", label: "註冊用戶 Users", exact: false }
+         +,                                                              
+      23    { to: "/admin/subscriptions", label: "所有訂閱 Subscriptions"
+          , exact: false },
+      24    { to: "/admin/notifications", label: "通知紀錄 Notification h
+          istory", exact: false },
+      25  ] as const;
+
+⏺ Bash(sleep 3; grep -c "admin/users" src/routeTree.gen.ts; npx prettier --write
+      src/routes/_authenticated/admin src/integrations/supabase/types.ts
+      >/dev/null; git dif…)
+  ⎿  10
+      src/integrations/supabase/types.ts | 426 +++++++++++++++++++---------
+     ---------
+     … +3 lines (ctrl+o to expand)
+  ⎿  1 file changed (binary, mode only or too large to show)
+
+⏺ Prettier reformatted the whole generated types.ts. I'll restore it and apply
+  only my addition:
+
+⏺ Bash(git checkout src/integrations/supabase/types.ts && python3 - <<'EOF'
+      f="src/integrations/supabase/types.ts"; s=open(f).read()…)
+  ⎿  Updated 1 path from the index
+      src/integrations/supabase/types.ts | 14 ++++++++++++++
+      1 file changed, 14 insertions(+)
+     TSC_OK
+  ⎿  1 file changed (binary, mode only or too large to show)
+
+⏺ I've added the new page, 註冊用戶 Users (/admin/users), as the second tab
+  right after 總覽. It won't load data until you create one database function in
+  production, which I can't run myself. I haven't opened it in the browser yet.
+
+  Why it needs the database: accounts live in the shared auth.users, and the
+  browser can't read that table. So I wrote an admin-only function,
+  flight.admin_list_app_users, in
+  supabase/migrations/20260924110000_flight_admin_app_users.sql:
+  - It lists only accounts tagged fare-finder-pro, not users of the other apps
+    on the project.
+  - Anyone who isn't an admin gets an admin only error, using the same
+    flight.is_admin() check as the rest of the admin area.
+  - It returns only the columns the page shows, 20 rows per page, newest
+    registrations first. The email search runs in the database.
+
+  Columns on the page: Email (admins get an Admin badge), registered at, email
+  confirmed (or 未驗證 No), last sign-in, number of subscriptions, and number
+  currently paying. "Paying" uses the same rule as the price checker: active, or
+  cancelled but still inside the paid period. There's an email search box and
+  the same pager as the other tabs.
+
+  I added the new function's type to src/integrations/supabase/types.ts by hand
+  (14 lines) so the page typechecks. Typecheck and lint pass.
+
+  Please run these to create the function:
+
+  ! supabase db query --linked --file
+  supabase/migrations/20260924110000_flight_admin_app_users.sql
+  ! supabase migration repair --status applied 20260924110000
+  ! supabase db query --linked "select version from 
+  supabase_migrations.schema_migrations where version = '20260924110000'; select
+  proacl from pg_proc where oid = 'flight.admin_list_app_users'::regproc;"
+
+  The last line should show the version row, and permissions with no public or
+  anon entry.
+
+  Once you've run them, tell me and I'll check the page in the browser. Nothing
+  is committed yet.
+
+✻ Crunched for 1m 46s · done 9:52 PM
+!  supabase db query --linked --file                                            
+  supabase/migrations/20260924110000_flight_admin_app_users.sql                 
+  ⎿  Initialising login role...
+     {
+       "boundary": "1f24e487c5dcc7c6d41bcf069835b6b4",
+     … +5 lines (ctrl+o to expand)
+
+⏺ The function is created. I'll check its permissions myself, since that's a
+  read-only query:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Permissions are correct: only postgres and authenticated can call it, with no
+  public or anon access. Now the page:
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ Still rendering (the first load runs the sign-in and admin checks). Taking it
+  again:
+
+  Called chrome-devtools (ctrl+o to expand)
+
+⏺ The page works. I'll cross-check the count against the database directly:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The 註冊用戶 Users page works. It's the second tab, after 總覽 Overview.
+
+  What it shows: 7 users on one page, newest first. kyp001@gmail.com has the
+  Admin badge. The subscription counts match the subscriptions page:
+  kyp741@gmail.com 3, kyp001@yahoo.com.tw 2, kyp001@gmail.com 3. For
+  kyp741@gmail.com all 3 count as paying: the free active row and two cancelled
+  rows still inside their paid period.
+
+  Database function: permissions are correct. It runs with admin rights and only
+  postgres and authenticated can call it, with no public or anon access.
+  Non-admins get an admin only error.
+
+  Not confirmed yet:
+  - I started a query to compare these 7 users against all accounts in the
+    shared project, to confirm other apps' users are left out. It hasn't
+    finished, and I'll pass on the result when it does. The list does look
+    right: every email shown belongs to this app.
+  - The migration history isn't updated yet. You only ran the first command, so
+    the repair step is still needed:
+
+  ! supabase migration repair --status applied 20260924110000
+
+  Nothing is committed yet. The changes so far are the 3 or 4 admin pages with
+  paging, the tab-lag fix, this migration and the types.ts entry. Shall I commit
+  them on multi-app, and add this to the admin section of
+  docs/m1-session-handoff.md?
+
+✻ Worked for 3m 6s · done 9:56 PM
+
+⏺ Background command "Count tagged vs all auth users" completed (exit code 0)
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ The comparison query finished. The shared project has 27 accounts, and 7 of
+  them are tagged fare-finder-pro. That matches the 7 on the Users page, so
+  users of the other apps are correctly left out.
+
+  The migration history still needs the repair step:
+
+  ! supabase migration repair --status applied 20260924110000
+
+  Nothing is committed yet. Should I commit everything on multi-app and add this
+  to the admin section of docs/m1-session-handoff.md?
+
+✻ Cogitated for 9s · done 9:57 PM
+
+!  supabase migration repair --status applied 20260924110000                    
+  ⎿  Initialising login role...
+     Connecting to remote database...
+     Repaired migration history: [20260924110000] => applied
+     … +8 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The migration history is updated: supabase_migrations.schema_migrations now
+  has 20260924110000 / flight_admin_app_users. The database is finished for this
+  change: the function is created, its permissions are correct, and the history
+  is recorded.
+
+  Nothing is committed yet. It's ready whenever you want it on multi-app: the
+  four admin pages with paging, the tab-lag fix, the migration and the types.ts
+  entry. I can also add a short entry for it to the admin notes in
+  docs/m1-session-handoff.md in the same commit.
+
+✻ Cooked for 37s · done 9:59 PM
+
+❯ so I need do command 3?                                                       
+
+⏺ No, you don't need to run it. Command 3 was only a check, and I already ran
+  the same checks:
+
+  - Permissions: only postgres and authenticated can call the function, with no
+    public or anon access.
+  - Migration history: 20260924110000 / flight_admin_app_users is recorded in
+    schema_migrations.
+
+  Nothing is left to run in the database.
+
+✻ Cogitated for 5s · done 10:01 PM
+
+❯ 將 admin 看到的 route 顯示內容 改為中文                                       
+
+  Searched for 1 pattern, ran 2 shell commands (ctrl+o to expand)
+
+⏺ I'll pull the Chinese route names from flight.routes using the matching route
+  codes, falling back to the code itself if a name isn't available.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      p="src/routes/_authenticated/admin/"…)
+  ⎿  TSC_OK
+     LINT_OK
+  ⎿  Updated src/routes/_authenticated/admin/notifications.tsx (+16 -3)
+       1 -import { useEffect, useState } from "react";                   
+       1 +import { useEffect, useMemo, useState } from "react";          
+       2  import { createFileRoute } from "@tanstack/react-router";
+       3  import { keepPreviousData, useQuery } from "@tanstack/react-que
+          ry";
+       4  import { supabase } from "@/integrations/supabase/client";
+       5 -import { PAGE_SIZE, fmtDateTime, type Notification } from "@/co
+         -mponents/admin/shared";                                        
+       5 +import {                                                       
+       6 +  PAGE_SIZE,                                                   
+       7 +  fmtDateTime,                                                 
+       8 +  type Notification,                                           
+       9 +  useAdminRoutes,                                              
+      10 +} from "@/components/admin/shared";                            
+      11  import { Pager } from "@/components/admin/AdminUI";
+      12  
+      13  export const Route = createFileRoute("/_authenticated/admin/not
+          ifications")({
+     ...
+      16  
+      17  function AdminNotificationsPage() {
+      18    const [page, setPage] = useState(1);
+      19 +  const routesQuery = useAdminRoutes();                        
+      20 +                                                               
+      21 +  // notification_history stores the route code (TPE-TYO); show
+         + the Chinese name.                                             
+      22 +  const routeNames = useMemo(() => {                           
+      23 +    const map = new Map<string, string>();                     
+      24 +    for (const r of routesQuery.data ?? []) if (r.route) map.se
+         +t(r.route, r.display_name);                                    
+      25 +    return map;                                                
+      26 +  }, [routesQuery.data]);                                      
+      27  
+      28    // Paged in the database: this table grows with every alert s
+          ent.
+      29    const notificationsQuery = useQuery({
+     ...
+       97                  {rows.map((n) => (
+       98                    <tr key={n.id} className="border-t border-bo
+           rder/60">
+       99                      <td className="px-4 py-2">{emailByUserId?.
+           get(n.user_id) ?? n.user_id}</td>
+       87 -                    <td className="px-4 py-2">{n.route}</td>  
+      100 +                    <td className="px-4 py-2">{routeNames.get(
+          +n.route) ?? n.route}</td>                                     
+      101                      <td className="px-4 py-2">
+      102                        {n.currency} {Number(n.price).toLocaleSt
+           ring()}
+      103                      </td>
+  ⎿  Updated src/routes/_authenticated/admin/subscriptions.tsx (+20 -4)
+      39  
+      40    // Filtered and paged in the database so the page stays small
+           however many rows
+      41    // there are.
+      42 +  const routeCodes = useMemo(                                  
+      43 +    () =>                                                      
+      44 +      term                                                     
+      45 +        ? (routesQuery.data ?? [])                             
+      46 +            .filter((r) => r.route && r.display_name.includes(t
+         +erm))                                                          
+      47 +            .map((r) => r.route as string)                     
+      48 +        : [],                                                  
+      49 +    [routesQuery.data, term],                                  
+      50 +  );                                                           
+      51 +                                                               
+      52    const subscriptionsQuery = useQuery({
+      43 -    queryKey: ["admin", "subscriptions", { term, statusFilter, 
+         -page }],                                                       
+      53 +    // The search also matches the Chinese route name (e.g. 東 
+         +京), which lives only                                          
+      54 +    // in flight.routes, so translate it to route codes first. 
+      55 +    queryKey: ["admin", "subscriptions", { term, statusFilter, 
+         +page, routeCodes }],                                           
+      56      queryFn: async () => {
+      57        let query = supabase
+      58          .from("subscriptions")
+     ...
+      61          .order("id", { ascending: false })
+      62          .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+      63        if (statusFilter !== "all") query = query.eq("subscriptio
+          n_status", statusFilter);
+      52 -      if (term) query = query.or(`email.ilike.%${term}%,route.i
+         -like.%${term}%`);                                              
+      64 +      if (term) {                                              
+      65 +        const byName = routeCodes.length > 0 ? `,route.in.(${ro
+         +uteCodes.join(",")})` : "";                                    
+      66 +        query = query.or(`email.ilike.%${term}%,route.ilike.%${
+         +term}%${byName}`);                                             
+      67 +      }                                                        
+      68        const { data, error, count } = await query;
+      69        if (error) throw error;
+      70        return { rows: data as Subscription[], total: count ?? 0 
+          };
+      71      },
+      72      placeholderData: keepPreviousData,
+      73 +    enabled: routesQuery.isSuccess,                            
+      74    });
+      75  
+      76    const routesByPlan = useMemo(() => {
+     ...
+       96            <input
+       97              value={search}
+     … 14 more lines (ctrl+o to expand)
+
+⏺ The Chinese route names are in, and typecheck and lint pass. Now checking the
+  subscriptions and notifications pages in the browser.
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ Both tables now show the Chinese names. The search check didn't work (my test
+  script ended up reading the overview's routes table), so I'll re-test the
+  search with the real input:
+
+  Called chrome-devtools 5 times (ctrl+o to expand)
+
+⏺ The admin pages now show route names in Chinese (台北 ✈ 東京, 台北 ✈ 首爾,
+  台北 ✈ 倫敦) instead of TPE-TYO etc. Checked in the browser on localhost:8080.
+
+  - 所有訂閱 Subscriptions: the route column shows the Chinese name for all 8
+    rows. The search box now says 搜尋 email 或航線, and searching 東京 returns
+    exactly the 3 Tokyo subscriptions. Searching by email or by the old code
+    (TPE-TYO) still works.
+  - 通知紀錄 Notification history: the route column shows the Chinese name.
+  - 總覽 Overview: unchanged, since its routes table already showed the Chinese
+    names.
+
+  The names come from display_name in flight.routes, which the admin pages
+  already load, so no database change was needed. If a route ever has no name,
+  the page shows its code instead.
+
+  The column headers (ROUTE, EMAIL, etc.) are still in English; say if you want
+  those in Chinese too. Typecheck and lint pass. Nothing is committed yet.
+
+✻ Baked for 2m 24s · done 10:05 PM
+
+※ recap: You asked to split the admin area into paged tabs (Overview, Users, Subscriptions, Notification history) with Chinese route names; that's done and checked on localhost. Next step: commit it on `multi-app` once you say go. (disable recaps in /config)
+
+❯ 為了方便測試 admin 幫我加一個 setting , 若 enable 可以強制 cancelled          
+  訂閱即刻到期                                                                  
+
+⏺ Before designing this, I'll read how cancel and expiry work now.
+
+  Searched for 1 pattern (ctrl+o to expand)
+⏺ User declined to answer questions
+  ⎿  · 開啟這個設定後，「cancelled 即刻到期」要怎麼運作？ (Admin 手動按鈕 
+     (Recommended) / 取消即到期（全域）)
+
+✻ Churned for 18s · done 10:14 PM
+
+❯ 若設為 enable , status 在 cancelled 的訂閱 , admin 可一個一個 item force to   
+  expired                                                                       
+
+⏺ I'll build it that way: a new setting (off by default), and when it's on, a
+  強制到期 button on each cancelled row. First, how the parser expires rows and
+  sends the email:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ I'll add a server-side check using a new force_expire_enabled setting (off by
+  default, no migration needed) and now I'm writing the flight-admin-expire Edge
+  Function.
+
+⏺ Write(supabase/functions/flight-admin-expire/index.ts)
+  ⎿  Wrote 90 lines to supabase/functions/flight-admin-expire/index.ts
+       1 // flight-admin-expire: an admin forces one cancelled subscripti
+       2 // instead of waiting for flight-parser to expire it after curre
+       3 // A testing aid: it only works while the admin setting force_ex
+         pire_enabled is
+       5 //
+         subscription_id }.
+         ns (server-side --
+       8 //      never trust app_metadata.apps, see src/integrations/supa
+       9 //   2. check flight.settings.force_expire_enabled === true -- n
+      10 //      front-end only showed the button while the switch was on
+     … +107 lines (ctrl+o to expand)
+
+⏺ Bash(echo '{}' > supabase/functions/flight-admin-expire/deno.json && python3 -
+      <<'EOF'
+      f="supabase/config.toml"; s=open(f).read()…)
+  ⎿  # Admin: called by an admin user with their own JWT; checked against f
+     light.admins inside.
+     [functions.flight-admin-notify]
+     … +22 lines (ctrl+o to expand)
+  ⎿  Updated supabase/config.toml (+7 -0)
+      45  import_map = "./functions/flight-admin-notify/deno.json"
+      46  entrypoint = "./functions/flight-admin-notify/index.ts"
+      47  
+      48 +# Admin: called by an admin user with their own JWT; checked ag
+         +ainst flight.admins inside.                                    
+      49 +[functions.flight-admin-expire]                                
+      50 +enabled = true                                                 
+      51 +verify_jwt = true                                              
+      52 +import_map = "./functions/flight-admin-expire/deno.json"       
+      53 +entrypoint = "./functions/flight-admin-expire/index.ts"        
+      54 +                                                               
+      55  # Admin: called by an admin user with their own JWT; checked ag
+          ainst flight.admins inside.
+      56  [functions.flight-admin-settings]
+      57  enabled = true
+  ⎿  Created supabase/functions/flight-admin-expire/deno.json (+1 -0)
+      1 +{}                                                              
+  ⎿  Updated supabase/functions/flight-admin-settings/index.ts (+1 -0)
+      14  const SETTINGS: Record<string, "boolean"> = {
+      15    v1_compare_enabled: "boolean",
+      16    payment_required: "boolean",
+      17 +  force_expire_enabled: "boolean",                             
+      18  };
+      19  
+      20  const CORS = {
+
+⏺ Now the front end. I'll move the setting read into a shared hook so the
+  overview switch and the subscriptions page share one cache entry:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      f="src/components/admin/shared.ts"; s=open(f).read()…)
+  ⎿  Updated src/components/admin/shared.ts (+25 -0)
+      24      },
+      25    });
+      26  }
+      27 +                                                               
+      28 +export type BoolSetting = { enabled: boolean; updatedAt: string
+         + | null };                                                     
+      29 +                                                               
+      30 +export const settingQueryKey = (key: string) => ["admin", "sett
+         +ings", key];                                                   
+      31 +                                                               
+      32 +// An admin switch in flight.settings, read through RLS (admins
+         + read every key).                                              
+      33 +// A missing row reads as defaultEnabled, matching the Edge Fun
+         +ctions that read it:                                           
+      34 +// most switches default on, testing aids such as force_expire_
+         +enabled default off.                                           
+      35 +export function useBoolSetting(key: string, defaultEnabled = tr
+         +ue) {                                                          
+      36 +  return useQuery({                                            
+      37 +    queryKey: settingQueryKey(key),                            
+      38 +    queryFn: async (): Promise<BoolSetting> => {               
+      39 +      const { data, error } = await supabase                   
+      40 +        .from("settings")                                      
+      41 +        .select("value, updated_at")                           
+      42 +        .eq("key", key)                                        
+      43 +        .maybeSingle();                                        
+      44 +      if (error) throw error;                                  
+      45 +      return {                                                 
+      46 +        enabled: data ? data.value !== false : defaultEnabled, 
+      47 +        updatedAt: data?.updated_at ?? null,                   
+      48 +      };                                                       
+      49 +    },                                                         
+      50 +  });                                                          
+      51 +}                                                              
+  ⎿  Updated src/routes/_authenticated/admin/index.tsx (+27 -20)
+       4  import { supabase } from "@/integrations/supabase/client";
+       5  import { callFunction } from "@/integrations/supabase/call-func
+          tion";
+       6  import { Switch } from "@/components/ui/switch";
+       7 -import { STATUSES, fmtDateTime, useAdminRoutes } from "@/compon
+         -ents/admin/shared";                                            
+       7 +import {                                                       
+       8 +  STATUSES,                                                    
+       9 +  type BoolSetting,                                            
+      10 +  fmtDateTime,                                                 
+      11 +  settingQueryKey,                                             
+      12 +  useAdminRoutes,                                              
+      13 +  useBoolSetting,                                              
+      14 +} from "@/components/admin/shared";                            
+      15  import { StatCard } from "@/components/admin/AdminUI";
+      16  
+      17  export const Route = createFileRoute("/_authenticated/admin/")(
+          {
+     ...
+      127    );
+      128  }
+      129  
+      123 -type BoolSetting = { enabled: boolean; updatedAt: string | nul
+          -l };                                                          
+      124 -                                                              
+      130  // Admin switches (flight.settings). Read through RLS (admins 
+           read every key);
+      126 -// written through flight-admin-settings. A missing row means 
+          -on, matching the                                              
+      127 -// Edge Functions that read them.                             
+      131 +// written through flight-admin-settings. A missing row means 
+          +on unless the                                                 
+      132 +// switch passes defaultEnabled={false}, matching the Edge Fun
+          +ctions that read it.                                          
+      133  function SettingsSection() {
+      134    return (
+      135      <section className="mt-10">
+     ...
+      156            </>
+      157          }
+      158        />
+      159 +      <BooleanSetting                                         
+      160 +        settingKey="force_expire_enabled"                     
+      161 +        defaultEnabled={false}                                
+      162 +        label="測試：強制到期 / Testing: force expire"        
+      163 +        description={                                         
+      164 +          <>                                                  
+      165 +            開啟：「所有訂閱」頁中狀態為 cancelled 的訂閱會出 
+          +現「強制到期」按鈕，admin                                     
+      166 +            可逐筆立即改為 expired（寄出到期通知信），不必等到
+          + period end。                                                 
+      167 +            關閉（預設）：不顯示按鈕，cancelled 照常保留到 per
+          +iod end 才由排程到期。僅供測試。                              
+     … 45 more lines (ctrl+o to expand)
+
+⏺ Now the button on the subscriptions page:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      f="src/routes/_authenticated/admin/subscriptions.tsx"; s=open(f).read()…)
+  ⎿  TSC_OK
+     LINT_OK
+     4:import { supabase } from "@/integrations/supabase/client";
+     … +3 lines (ctrl+o to expand)
+  ⎿  Updated src/routes/_authenticated/admin/subscriptions.tsx (+70 -0)
+      10    type Route_,
+      11    type Subscription,
+      12    useAdminRoutes,
+      13 +  useBoolSetting,                                              
+      14  } from "@/components/admin/shared";
+      15  import { Pager } from "@/components/admin/AdminUI";
+      16  
+     ...
+      40  
+      41    // Filtered and paged in the database so the page stays small
+           however many rows
+      42    // there are.
+      43 +  const forceExpireQuery = useBoolSetting("force_expire_enabled
+         +", false);                                                     
+      44 +  const canForceExpire = forceExpireQuery.data?.enabled === tru
+         +e;                                                             
+      45 +                                                               
+      46    const routeCodes = useMemo(
+      47      () =>
+      48        term
+     ...
+      150                      key={s.id}
+      151                      subscription={s}
+      152                      route={routesByPlan.get(s.plan_name)}
+      153 +                    canForceExpire={canForceExpire}           
+      154                    />
+      155                  ))}
+      156                  {rows.length === 0 && (
+     ...
+      187  function SubscriptionRow({
+      188    subscription: s,
+      189    route,
+      190 +  canForceExpire,                                             
+      191  }: {
+      192    subscription: Subscription;
+      193    route: Route_ | undefined;
+      194 +  canForceExpire: boolean;                                    
+      195  }) {
+      196    const queryClient = useQueryClient();
+      197    const [confirming, setConfirming] = useState(false);
+     ...
+      282              </button>
+      283            ))}
+      284          {result && <p className="mt-1 text-xs text-muted-foreg
+           round">{result}</p>}
+      285 +        {canForceExpire && s.subscription_status === "cancelle
+          +d" && (                                                       
+      286 +          <ForceExpireButton subscriptionId={s.id} />         
+      287 +        )}                                                    
+     … 64 more lines (ctrl+o to expand)
+
+⏺ Typecheck and lint pass. The two Edge Functions have to be deployed before the
+  switch can be saved. Checking the switch and the hidden button in the browser
+  meanwhile:
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ The admin area now has a 測試：強制到期 / Testing: force expire setting. It
+  isn't usable until two Edge Functions are deployed, which I can't do myself.
+
+  How it works:
+  - The switch: it's in 總覽 → 設定, and it's off by default. On localhost it
+    shows up and is currently off.
+  - The button: while the switch is on, every cancelled row on the 所有訂閱 page
+    gets a red 強制到期 button. It asks 確定立即到期？ first. Confirming sets
+    that one subscription to expired, sets its period end to now, and sends the
+    normal expired email to the user. Other cancelled subscriptions keep running
+    until their period end.
+  - Server check: the new function flight-admin-expire checks that the caller is
+    an admin, that the switch is explicitly on, and that the row is still
+    cancelled. So a subscription can't be expired or emailed twice, even if
+    someone calls the function directly.
+  - ECPay: nothing is sent. A cancelled subscription was already stopped at
+    ECPay when the user cancelled it.
+
+  Files:
+  - New: supabase/functions/flight-admin-expire/, plus its entry in
+    supabase/config.toml.
+  - flight-admin-settings now accepts the key force_expire_enabled.
+  - The front end: the overview (new switch) and subscriptions page (new
+    button). The code that reads a setting is now shared between them.
+  - No database migration: until you first turn the switch on, there's no row in
+    flight.settings, and that counts as off.
+
+  Please deploy:
+
+  ! supabase functions deploy flight-admin-settings --use-api
+  ! supabase functions deploy flight-admin-expire --use-api
+
+  Once they're deployed, tell me and I'll test it. Turning the switch on only
+  takes one click. I'll ask you before I actually expire a subscription, because
+  the user gets a real email. kyp741@gmail.com's 台北 ✈ 首爾 is a good test
+  row.
+
+  Nothing is committed yet.
+
+✻ Cooked for 1m 59s · done 10:19 PM
+
+!  supabase functions deploy flight-admin-settings --use-api                    
+  ⎿  Uploading asset (flight-admin-settings): supabase/functions/flight-adm
+     in-settings/deno.json
+     Uploading asset (flight-admin-settings): supabase/functions/flight-adm
+     … +10 lines (ctrl+o to expand)
+
+⏺ flight-admin-settings is deployed. flight-admin-expire still needs deploying:
+
+  ! supabase functions deploy flight-admin-expire --use-api
+
+  Tell me once it's deployed and I'll start testing.
+
+✻ Baked for 10s · done 10:20 PM
+
+!  supabase functions deploy flight-admin-expire --use-api                      
+  ⎿  Uploading asset (flight-admin-expire):
+     supabase/functions/flight-admin-expire/deno.json
+     Uploading asset (flight-admin-expire):
+     supabase/functions/flight-admin-expire/index.ts
+     Uploading asset (flight-admin-expire): supabase/functions/_shared/ecpay.ts
+     {
+       "project_ref": "luugfvsrawnuzwpjvddt",
+       "functions": [
+         "flight-admin-expire"
+       ],
+       "dashboard_url":
+     "https://supabase.com/dashboard/project/luugfvsrawnuzwpjvddt/functions",
+       "message": "Deployed Functions."
+     }
+
+⏺ Both functions are deployed. First test: with the switch off, calling the
+  function directly should be refused (I'm using a fake subscription ID, so
+  nothing can change):
+
+  Called chrome-devtools (ctrl+o to expand)
+
+⏺ With the switch off, the call is refused with 403. Now turning the switch on:
+
+  Called chrome-devtools (ctrl+o to expand)
+
+⏺ The switch saved correctly. Now the subscriptions page:
+
+  Called chrome-devtools 3 times (ctrl+o to expand)
+
+⏺ Both functions are deployed, the switch is on, and the 強制到期 button shows
+  up on exactly the 5 cancelled rows. The active rows and the one expired row
+  don't get it.
+
+  Checked so far:
+  - With the switch off, calling flight-admin-expire directly returned 403
+    強制到期未開啟 force expire is off. I used a fake subscription ID, so
+    nothing changed.
+  - Turning the switch on saved correctly (最後更新 2026/9/24 下午10:20:47).
+  - The button shows only while the switch is on and only on cancelled rows.
+
+  Not tested yet: actually expiring a subscription. That changes a real row for
+  good and sends a real expired email, so I'll wait for your go-ahead.
+
+  Shall I test it on kyp741@gmail.com's 台北 ✈ 首爾? After clicking 強制到期 →
+  確定, I'd check that:
+  - the row turns expired with period end = now
+  - the expired email reaches kyp741@gmail.com
+  - a second call on the same row returns 409 and sends no second email
+
+  Note that the switch stays on until you turn it off. Nothing is committed yet.
+
+✻ Sautéed for 44s · done 10:21 PM
+
+❯ i test one item already                                                       
+
+⏺ I'll look up the row you expired:
+
+  Ran 1 shell command (ctrl+o to expand)
+⏺ Your test worked: kyp741@gmail.com's 台北 ✈ 首爾 became expired at 22:22:22,
+  with period end set to that same time. Now checking that a second call on the
+  same row is refused:
+
+  Called chrome-devtools (ctrl+o to expand)
+
+⏺ The second call was refused with 409, so the same row can't be expired or
+  emailed twice. Now checking the logs to confirm the expired email was sent:
+
+  Called Supabase (ctrl+o to expand)
+
+⏺ Your test worked, and the database and logs match:
+
+  - Row: kyp741@gmail.com's 台北 ✈ 首爾 changed from cancelled to expired at
+    22:22:22, with period end set to that same time.
+  - Log: 22:22:23 force-expired subscription 6a7d8a6b… (TPE-SEL) by admin …, and
+    the call returned 200.
+  - Email: flight-status-notification logged expired email sent to 
+    kyp741@gmail.com (TPE-SEL) right after (200). Check that inbox if you want
+    to see the email itself.
+  - Twice on one row: I called the function again on the same row and it
+    returned 409 with no second email. Only the 22:22 email appears in the log.
+  - Switch off: calling the function with the switch off had already
+    returned 403.
+
+  The 強制到期 switch is still on. Turn it off in 總覽 → 設定 once you're done
+  testing.
+
+  Nothing is committed yet. Committed together, it would be the admin pages
+  (Overview, Users, Subscriptions, Notifications, with paging), the tab-lag fix,
+  the users migration, the Chinese route names, and force-expire. Shall I
+  commit it all on multi-app and add these to docs/m1-session-handoff.md?
+
+✻ Baked for 59s · done 10:25 PM
+
+❯ commit it and update the handoff doc                                          
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      f="docs/m1-session-handoff.md"; s=open(f).read()…)
+  ⎿  M  docs/m1-session-handoff.md
+     A  src/components/admin/AdminUI.tsx
+     A  src/components/admin/shared.ts
+     … +15 lines (ctrl+o to expand)
+  ⎿  Updated docs/m1-session-handoff.md (+57 -2)
+      1  # M1 Flight Price Checker — Session Handoff
+      2  
+      3 -Updated 2026-09-24 (latest: M2 follow-up 7, the admin switch for
+        - free                                                           
+      4 -one-month subscriptions). The 2026-09-19 revision added the M2 E
+        -CPay paywall                                                    
+      3 +Updated 2026-09-24 (latest: M2 follow-up 8, the four-page `/admi
+        +n` with paging,                                                 
+      4 +the registered-users list and the force-expire test switch; befo
+        +re that follow-up 7,                                            
+      5 +the admin switch for free one-month subscriptions). The 2026-09-
+        +19 revision added the M2 ECPay paywall                          
+      6  (see "M2 status" and "Lessons learned" below) and superseded the
+          2026-09-17
+      7  version, which described a half-built state that no longer appli
+         es.
+      8  
+     ...
+      369  opened the ECPay stage cashier with a fresh `pending_payment` 
+           row. Welcome ×2, cancel and
+      370  expired emails all logged as sent. `payment_required` is left 
+           `true`.
+      371  
+      372 +### M2 follow-up 8: `/admin` split into pages, users list, for
+          +ce-expire switch (2026-09-24 — deployed and verified)         
+      373 +                                                              
+      374 +`/admin` is now four pages under one layout (`admin/route.tsx`
+          +: header + tabs + `<Outlet />`):                              
+      375 +                                                              
+      376 +| Tab | Route | Content |                                     
+      377 +|---|---|---|                                                 
+      378 +| 總覽 Overview | `/admin` | stat cards, 設定 switches, routes
+          +' latest price |                                              
+      379 +| 註冊用戶 Users | `/admin/users` | accounts tagged `fare-find
+          +er-pro` |                                                     
+      380 +| 所有訂閱 Subscriptions | `/admin/subscriptions` | search (em
+          +ail / route code / Chinese route name) + status filter |      
+      381 +| 通知紀錄 Notification history | `/admin/notifications` | ale
+          +rt history |                                                  
+      382 +                                                              
+      383 +- Users, Subscriptions and Notifications page **in the databas
+          +e**, 20 rows per page                                         
+      384 +  (`PAGE_SIZE` in `src/components/admin/shared.ts`), with a sh
+          +ared `Pager`                                                  
+      385 +  (`src/components/admin/AdminUI.tsx`). The old single page lo
+          +aded whole tables and                                         
+      386 +  would have been cut off silently at PostgREST's 1,000-row ca
+          +p. Notification emails are                                    
+      387 +  resolved per page from `subscriptions` (`user_id in (...)`);
+          + a user with history but no                                   
+      388 +  subscription row still falls back to the UUID.              
+      389 +- Route columns show `flight.routes.display_name` (台北 ✈ 東京
+          +) instead of the code; the                                    
+      390 +  code stays the fallback.                                    
+      391 +- **Tab lag fix.** Both guards now return early when TanStack 
+          +passes `cause: "stay"`                                        
+      392 +  (the route was already matched): `_authenticated` reuses the
+          + local session instead of                                     
+      393 +  `getUser()`, and `admin/route.tsx` skips the `is_admin` RPC.
+          + Tab switches went from a                                     
+      394 +  visible pause to ~25 ms. The full checks still run on entry 
+          +(dashboard → Admin ~0.5 s).                                   
+      395 +  Both are UI guards only; RLS / `flight.is_admin()` stay the 
+          +real boundary.                                                
+      396 +- **Users list.** Migration `20260924110000_flight_admin_app_u
+          +sers.sql` adds                                                
+      397 +  `flight.admin_list_app_users(p_search, p_limit, p_offset)`, 
+          +SECURITY DEFINER: raises                                      
+      398 +  `admin only` (42501) unless `flight.is_admin()`, returns onl
+          +y                                                             
+     … 30 more lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Everything is committed on multi-app as edf5c7e, and the production build
+  passes. I haven't pushed; tell me if you want it pushed.
+
+  The commit includes:
+  - The four admin tabs with paging: 總覽, 註冊用戶, 所有訂閱, 通知紀錄
+  - The Chinese route names
+  - The tab-lag fix
+  - The users migration and its types.ts entry
+  - The force-expire switch and the flight-admin-expire function
+
+  Handoff doc: docs/m1-session-handoff.md has a new section, "M2 follow-up 8",
+  and the header now points to it. It covers:
+  - a table of the four tabs
+  - the database paging and the Chinese route names
+  - the tab-lag fix
+  - the users function
+  - how force-expire works, and that it's off by default
+  - what was deployed, and the test results with timestamps
+
+  It also notes that force_expire_enabled is still on. Remember to switch it off
+  in 總覽 → 設定 when you're done testing.
+
+  I left docs/flight-price-notifier_v1.0_2026_0921.pptx and
+  docs/ppt-screenshots/ uncommitted, because they aren't part of this work.
+
+✻ Brewed for 45s · done 10:26 PM

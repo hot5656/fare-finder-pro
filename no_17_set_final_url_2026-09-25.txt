@@ -1,0 +1,1820 @@
+ ▐▛███▛█   Claude Code v2.1.282
+▝▜██████▀  Opus 5.5 · Claude Pro
+ ▝▝   ▝▝   ~/work/claude/fare-finder-pro
+
+  Get to finished work sooner with Opus 5.5. Switch anytime with /model.
+
+❯ 移除顯示有關 api v3 相關內容 如 "v3 最低價，觸發本通知" (文件及註解部分保留)  
+  ⎿  ⧉ Selected 1 lines from supabase/functions/_shared/ecpay.ts in Visual 
+     Studio Code
+
+  Searched for 2 patterns, read 2 files, ran 1 shell command (ctrl+o to expand)
+
+⏺ Update(src/routes/_authenticated/admin/index.tsx)
+  ⎿  Added 1 line, removed 2 lines
+      151          description={
+      152            <>
+      153              開啟：每次查價同時查 Travelpayouts v1，通知信列出 
+           v1
+      154 -            對照（無資料時顯示「目前無資料」）。 關閉：不查 v1
+          -，通知信不顯示 v1 區塊。通知一律以 v3                         
+      155 -            價格觸發；自動查價於下次排程（最多 30 分鐘）套用，
+          -手動發送立即套用。                                            
+      154 +            對照（無資料時顯示「目前無資料」）。 關閉：不查 v1
+          +，通知信不顯示 v1 區塊。此設定不影響通知的觸發；自動查價於下次
+          +排程（最多 30 分鐘）套用，手動發送立即套用。                  
+      155            </>
+      156          }
+      157        />
+
+⏺ Both edits are in. Now I'm checking for any other on-screen v3 text and
+  running the lint and typecheck.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I removed the two places where users could see "v3". Docs, code comments and
+  logs still mention v3, as you asked. The typecheck and lint pass. Nothing is
+  deployed yet, so the email won't change until you redeploy
+  flight-notification.
+
+  - Alert email (supabase/functions/flight-notification/index.ts:412 and :432):
+    the heading "航班詳情（v3 最低價，觸發本通知）" is now just "航班詳情", in
+    both the HTML and plain-text versions.
+  - Admin settings page (src/routes/_authenticated/admin/index.tsx): in the v1
+    price comparison description, "通知一律以 v3 價格觸發" is now
+    "此設定不影響通知的觸發".
+
+  The other "v3" matches are only in logs, the API URL and internal fields,
+  which no one sees on a page or in an email.
+
+  The email still shows the v1 comparison block, titled "對照：Aviasales
+  另一資料來源（v1）的最低價", when that setting is on. If you want the "v1"
+  wording gone from the email too, tell me.
+
+  To deploy:
+
+  ! supabase functions deploy flight-notification --use-api
+
+✻ Sautéed for 26s · done 11:00 AM
+
+!  supabase functions deploy flight-notification --use-api                      
+  ⎿  Uploading asset (flight-notification): supabase/functions/flight-notif
+     ication/deno.json
+     Uploading asset (flight-notification): supabase/functions/flight-notif
+     … +10 lines (ctrl+o to expand)
+
+⏺ flight-notification deployed without errors, so every alert email from now on
+  shows just "航班詳情" as the heading.
+
+  The admin page change is only local for now. It goes live the next time the
+  site is deployed, or once Lovable syncs the branch.
+
+✻ Sautéed for 10s · done 11:02 AM
+
+❯ app url change to https://flights.roberthut.com/ , please check               
+  應配合修改地方                                                                
+
+  Searched for 2 patterns, ran 1 shell command (ctrl+o to expand)
+
+⏺ The domain already resolves to Vercel and returns 200. Next I'm checking
+  whether other apps' Edge Functions read the shared SITE_URL secret.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Every function in the project is this app's, and send-email doesn't read
+  SITE_URL, so changing the secret is safe. Now the code and docs.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(supabase/functions/_shared/ecpay.ts)
+  ⎿  Added 1 line
+      29  const ALLOWED_ORIGINS = new Set([
+      30    SITE_URL,
+      31    "http://localhost:8080",
+      32 +  "https://flights.roberthut.com",                             
+      33    "https://fare-finder-pro.vercel.app",
+      34  ]);
+      35  
+
+  Ran 2 shell commands (ctrl+o to expand)
+  ⎿  Found 2 new diagnostic issues in 1 file (ctrl+o to expand)
+
+⏺ README's diff is 738 lines, which means my script converted its CRLF line
+  endings. Fixing that now.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I've made the code and doc changes for the switch to
+  https://flights.roberthut.com, but the switch is only complete after you run
+  the steps below. Deploys and secret changes are blocked for me here.
+  flights.roberthut.com already points to Vercel and returns 200.
+
+  What I changed:
+  - supabase/functions/_shared/ecpay.ts: added https://flights.roberthut.com to
+    the list of sites users can be sent back to after paying. The old Vercel URL
+    stays on the list so both work during the move.
+  - Docs: added the new domain to the Redirect URLs list in README.md. I also
+    updated CLAUDE.md, docs/m1-session-handoff.md, docs/test-plan.md and
+    docs/change-site-url.md, which now notes the switch date and which steps are
+    done.
+
+  I checked whether changing the SITE_URL secret could affect other apps. Every
+  Edge Function in this Supabase project belongs to this app, and the shared
+  send-email doesn't read SITE_URL, so it's safe.
+
+  Steps for you:
+
+  1. Set SITE_URL and redeploy the two functions that use the redirect list:
+  ! supabase secrets set SITE_URL=https://flights.roberthut.com
+  ! supabase functions deploy flight-subscribe --use-api
+  ! supabase functions deploy flight-ecpay-result --use-api --no-verify-jwt
+     SITE_URL is where users land after paying if their own site can't be used,
+     and the base of the "重新訂閱" link in status emails.
+  2. In the Supabase Dashboard, go to Authentication → URL Configuration →
+     Redirect URLs and add https://flights.roberthut.com/**. Without it, sign-up
+     and password-reset links from the new domain get sent back to the old
+     Vercel URL instead. Leave the Site URL setting as it is, because other apps
+     share it.
+  3. The admin-page text change from before goes live on the next Vercel deploy.
+
+  Nothing to change for:
+  - the ECPay callback URLs, which point at Supabase rather than the website;
+  - the front-end code, which reads the current URL at runtime;
+  - the fare-alert emails, which don't link back to the site;
+  - the noreply@roberthut.com sender, which is already on this domain.
+
+  To check it afterwards: on the new domain, sign up once, do one ECPay stage
+  payment (it should land on /dashboard?purchase=success), and trigger one
+  status email to confirm its link uses the new domain.
+
+✻ Cooked for 55s · done 11:06 AM
+
+※ recap: You're moving the app to https://flights.roberthut.com, and the code and doc changes are done but not deployed. Next, run the `SITE_URL` secret command and redeploy `flight-subscribe` and `flight-ecpay-result`, then add the new domain to Supabase Auth Redirect URLs. (disable recaps in /config)
+
+!  supabase secrets set SITE_URL=https://flights.roberthut.com                  
+  ⎿  {
+       "project_ref": "luugfvsrawnuzwpjvddt",
+       "count": 1,
+     … +2 lines (ctrl+o to expand)
+
+⏺ SITE_URL is now set, and it takes effect right away with no redeploy. From now
+  on, status-email links point to https://flights.roberthut.com, and so do
+  post-payment redirects that can't return to the user's own site.
+
+  Two function deploys are still left. Until then, the deployed functions don't
+  have the new domain on their redirect list:
+
+  ! supabase functions deploy flight-subscribe --use-api
+  ! supabase functions deploy flight-ecpay-result --use-api --no-verify-jwt
+
+  The Supabase Auth Redirect URL entry (https://flights.roberthut.com/**) is
+  also still to do, in the Dashboard.
+
+✻ Worked for 9s · done 11:12 AM
+
+!  supabase functions deploy flight-subscribe --use-api                         
+  ⎿  Uploading asset (flight-subscribe): supabase/functions/flight-subscrib
+     e/deno.json
+     Uploading asset (flight-subscribe): supabase/functions/flight-subscrib
+     … +12 lines (ctrl+o to expand)
+
+⏺ flight-subscribe deployed, with the updated redirect list included. Checkouts
+  started from flights.roberthut.com now record that site as where to send the
+  user back.
+
+  One deploy is left, the function that does the actual redirect after payment:
+
+  ! supabase functions deploy flight-ecpay-result --use-api --no-verify-jwt
+
+  After that, only the Supabase Auth Redirect URL entry
+  (https://flights.roberthut.com/**) remains.
+
+✻ Sautéed for 10s · done 11:12 AM
+
+!  supabase functions deploy flight-ecpay-result --use-api --no-verify-jwt      
+  ⎿  Uploading asset (flight-ecpay-result): supabase/functions/flight-ecpay
+     -result/deno.json
+     Uploading asset (flight-ecpay-result): supabase/functions/flight-ecpay
+     … +12 lines (ctrl+o to expand)
+⏺ Both deploys are done. Next I'll test the redirect with a request that has no
+  site of its own, which should send the user to the new SITE_URL.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Both functions are deployed, and the post-payment redirect works as intended.
+  I sent it four test requests (they change no data):
+
+  ┌──────────────────────────────────┬──────────────────────────────────────┐
+  │    Site sent with the request    │       Where the user was sent        │
+  ├──────────────────────────────────┼──────────────────────────────────────┤
+  │ none                             │ https://flights.roberthut.com/dashbo │
+  │                                  │ ard (the new SITE_URL)               │
+  ├──────────────────────────────────┼──────────────────────────────────────┤
+  │ https://flights.roberthut.com    │ https://flights.roberthut.com/dashbo │
+  │                                  │ ard                                  │
+  ├──────────────────────────────────┼──────────────────────────────────────┤
+  │ https://fare-finder-pro.vercel.a │ the Vercel site's /dashboard (old    │
+  │ pp                               │ URL still works)                     │
+  ├──────────────────────────────────┼──────────────────────────────────────┤
+  │ https://evil.example.com         │ https://flights.roberthut.com/dashbo │
+  │                                  │ ard (unlisted site refused)          │
+  └──────────────────────────────────┴──────────────────────────────────────┘
+
+  Still to do:
+  1. Supabase Auth Redirect URLs: add https://flights.roberthut.com/** in the
+     Dashboard. Until then, sign-up and password-reset links sent from the new
+     domain lead back to the old Vercel URL.
+  2. Real-use checks after step 1: sign up once on the new domain and do one
+     ECPay stage payment. I haven't tested these.
+  3. Commit: the code and doc changes are uncommitted, and the admin-page text
+     change reaches the live site only after the next Vercel deploy. Want me to
+     commit?
+
+✻ Cogitated for 19s · done 11:13 AM
+
+❯ I set Redirect URLs: add https://flights.roberthut.com/**  already            
+
+⏺ Bash(python3 - <<'EOF'
+      p='docs/change-site-url.md'; s=open(p,newline='').read()…)
+  ⎿   CLAUDE.md                                       | 6 +++---
+      README.md                                       | 4 +++-
+      docs/change-site-url.md                         | 4 +++-
+     … +6 lines (ctrl+o to expand)
+  ⎿  Updated docs/change-site-url.md (+1 -1)
+       4  
+       5  最後整理：2026-09-25。
+       6  
+       7 -> **2026-09-25 實際換成 `https://flights.roberthut.com`**：Verc
+         -el 網域與 DNS 已生效（CNAME 到 Vercel）；第 4 項已把新網域加進 
+         -`ALLOWED_ORIGINS`（舊的 Vercel 網址保留並存）；本專案所有 Edge 
+         -Function 都是 flight 的，`send-email` 也不讀 `SITE_URL`，改 sec
+         -ret 不影響其他 app。第 1、2 項與驗證需在 Supabase 上手動完成。 
+       7 +> **2026-09-25 實際換成 `https://flights.roberthut.com`**：Verc
+         +el 網域與 DNS 已生效（CNAME 到 Vercel）；第 4 項已把新網域加進 
+         +`ALLOWED_ORIGINS`（舊的 Vercel 網址保留並存）；本專案所有 Edge 
+         +Function 都是 flight 的，`send-email` 也不讀 `SITE_URL`，改 sec
+         +ret 不影響其他 app。同日已完成：`SITE_URL` 改為新網域、重新部署
+         + `flight-subscribe` 與 `flight-ecpay-result`、Supabase Auth Red
+         +irect URLs 加上 `https://flights.roberthut.com/**`（Site URL 未
+         +動）。curl 檢查 `flight-ecpay-result`：沒帶 origin 或帶不在清單
+         +上的 origin 都導向 `https://flights.roberthut.com/dashboard`， 
+         +帶 Vercel 網址則導回 Vercel。實際在新網域註冊與付款的驗證尚未做
+         +。                                                             
+       8  
+       9  ## 必改
+      10  
+
+⏺ With the Redirect URL added, all the setup for https://flights.roberthut.com
+  is done. I recorded what was done on 2026-09-25 in docs/change-site-url.md.
+
+  I haven't tested sign-up or payment on the new domain yet, because both need a
+  real account and a real flow. You can check them on
+  https://flights.roberthut.com:
+
+  1. Sign up: register with a new email. The link in the confirmation email
+     should open https://flights.roberthut.com/.
+  2. Pay: do one ECPay stage payment. It should land on
+     https://flights.roberthut.com/dashboard?purchase=success.
+  3. Status email (optional): trigger one, for example by cancelling a free-mode
+     subscription. Its "重新訂閱" link should use the new domain.
+
+  If you'd rather I drive these in the browser, say so. You'd need to sign in
+  when it asks.
+
+  The changes are still uncommitted: 8 files, including the email-text change
+  from earlier and the admin-page text. Should I commit them to multi-app?
+
+✻ Brewed for 12s · done 11:14 AM
+
+❯ commit it                                                                     
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I committed the 8 changed files to multi-app as 2af5656. It's not pushed yet.
+
+  The three untracked items (the .pptx, docs/ppt-screenshots/ and the no_16_…
+  session transcript) weren't part of this work, so I left them out.
+
+  Should I push? After a push, Lovable syncs the branch and the admin-page text
+  reaches the live site with the next Vercel deploy.
+
+✻ Churned for 8s · done 11:15 AM
+
+❯ merge to main then push it                                                    
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ main has no commits of its own, so this merges as a fast-forward: 7 commits,
+  no merge commit.
+
+  Pushed to main (ctrl+o to expand)
+
+⏺ I merged multi-app into main as a fast-forward and pushed both branches to
+  GitHub. Both now point to 2af5656, and you're back on multi-app with nothing
+  waiting to push.
+
+  The merge brought 7 commits onto main, not just today's. It also includes free
+  mode, the split admin pages with the force-expire switch, admin route adding,
+  and the ?app= auth-mail change. If Vercel deploys main to production
+  automatically, flights.roberthut.com will now run all of that, including the
+  admin-page text change. Those features' Edge Functions and database migrations
+  are already live on Supabase, so the front-end should match what the backend
+  expects.
+
+✻ Sautéed for 25s · done 11:16 AM
+
+❯ vercel also run newest code so do test at https://flights.roberthut.com/, If  
+  need I will login the account                                                 
+
+  Read 1 file, called chrome-devtools, ran 1 shell command (ctrl+o to expand)
+
+⏺ The browser tool won't start because an automation Chrome from an earlier
+  session is still running (pid 86340, open for about 12 hours) and holds the
+  tool's profile.
+
+  To continue, either:
+  - close that Chrome window yourself, or
+  - tell me it's OK to run kill 86340.
+
+  A fresh browser may land signed out; if so, I'll ask you to sign in. Once it's
+  running I'll test on https://flights.roberthut.com:
+
+  1. Deployed code: the admin setting no longer mentions v3, and the new admin
+     pages appear.
+  2. Payment redirect: start one ECPay stage subscription, which is a real
+     payment on the test merchant. You type the card number and OTP, and I check
+     that it lands on https://flights.roberthut.com/dashboard?purchase=success.
+  3. Sign-up link: I register a throwaway + alias of your Gmail, and you click
+     the confirmation link, which should open flights.roberthut.com. I can
+     delete that test account afterwards.
+
+  Tell me if you want to skip any of these.
+
+✻ Brewed for 16s · done 11:19 AM
+
+❯ ok kill it                                                                    
+
+  Called chrome-devtools, ran 1 shell command (ctrl+o to expand)
+
+⏺ The browser redirected to /auth since there's no saved session for this site.
+  Please sign in as admin in that Chrome window while I run the sign-up test in
+  a separate isolated window to avoid disturbing your session.
+
+  Called chrome-devtools 3 times (ctrl+o to expand)
+
+⏺ Filling in the sign-up form with a throwaway alias of your Gmail, in the
+  isolated window.
+
+  Called chrome-devtools 4 times, ran 1 shell command (ctrl+o to expand)
+
+⏺ Sign-up went through: POST 
+  /auth/v1/signup?redirect_to=https://flights.roberthut.com/?app=fare-finder-pro
+  returned 200. Next I'll check the confirmation email in Gmail.
+
+  Called Gmail 2 times (ctrl+o to expand)
+
+⏺ The confirmation email arrived with the redirect link, so I'll open it in the
+  isolated window using the throwaway account I created.
+
+  Called chrome-devtools (ctrl+o to expand)
+
+⏺ Confirmation link and account tagging confirm the sign-up test passes. Next
+  I'll check the dashboard as this test account.
+
+  Called chrome-devtools 3 times (ctrl+o to expand)
+
+⏺ The dashboard works on the new domain, but payment is currently switched off:
+  every route shows "開始免費追蹤（一個月）". Free mode doesn't go through
+  ECPay, so the post-payment redirect can't be tested as things stand.
+
+  To test payment, I'd need to turn "使用綠界付款" back on in the admin
+  settings. That setting applies to the whole production site, so anyone
+  subscribing during the test would be sent to ECPay's stage checkout instead of
+  getting a free month. The steps would be:
+
+  1. Turn payment on in the admin settings.
+  2. Subscribe to one route as the test account kyp001+flights0925@gmail.com.
+     You type the card number and OTP on ECPay's page.
+  3. I check that it lands on
+     https://flights.roberthut.com/dashboard?purchase=success and that the
+     subscription becomes active.
+  4. Turn payment back off.
+
+  The curl tests earlier already showed the redirect goes to the new domain, so
+  this real payment is a final confirmation and not strictly needed.
+
+  Two things from you:
+  - Payment test or not? If yes, sign in as admin in the
+    flights.roberthut.com/auth tab and I'll start.
+  - The test account: it has no subscriptions yet. Should I delete it at the
+    end?
+
+✻ Crunched for 1m 8s · done 11:21 AM
+
+❯ I login go admin already and delete the test account when test complete       
+
+  Called chrome-devtools 3 times (ctrl+o to expand)
+
+⏺ You're not signed in in the browser I control. Tab 2 just redirected from
+  /admin back to the sign-in page. You probably signed in in your own Chrome,
+  which is a separate profile.
+
+  Please sign in as admin in the automation Chrome window. It's the window the
+  tool opened; the tab showing https://flights.roberthut.com/auth is already on
+  the sign-in form. Tell me when you're done and I'll turn payment on and start
+  the test.
+✻ Sautéed for 11s · done 11:25 AM
+
+❯ login done                                                                    
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ The admin page shows the new text without the v3 wording, so Vercel has the
+  latest code. The switches are still loading; I'll wait for their real state.
+
+  Called chrome-devtools (ctrl+o to expand)
+
+⏺ Current settings, which I'll restore at the end: payment off, v1 comparison
+  off, force expire on. Turning payment on now.
+
+  Called chrome-devtools 3 times (ctrl+o to expand)
+
+⏺ The switch click went through, but my next step was blocked for modifying a
+  shared production setting. I'll take a read-only snapshot so I can tell you
+  the switch's current state.
+
+  Called chrome-devtools (ctrl+o to expand)
+
+⏺ I've paused the test: ECPay payment is now switched on for the whole 
+  production site, and I can't go further without your permission.
+
+  What happened: my click on "使用綠界付款" saved (最後更新 2026/9/25
+  上午11:27:09), so every new subscription on flights.roberthut.com now goes to
+  ECPay's stage checkout. My next step was blocked by the auto-mode safety check
+  as a change to a shared production setting. Continuing the payment test or
+  switching payment back off would be the same kind of change, so I've stopped
+  until you decide.
+
+  Already verified on https://flights.roberthut.com:
+  - Latest code: the admin page shows the new text without v3, and the new admin
+    tabs (航線、註冊用戶…) are there.
+  - Sign-up: the sign-up request carried
+    redirect_to=https://flights.roberthut.com/?app=fare-finder-pro. The
+    confirmation email reached the inbox, and its link landed on the new domain
+    signed in, with the account tagged fare-finder-pro.
+  - Dashboard: works for the test account, listing all 4 routes with prices.
+  - Payment redirect: the curl tests earlier showed it goes to the new domain.
+    The real payment has not been done.
+
+  Choose one:
+  1. Continue the payment test: you allow it, either by saying so here or by
+     adding a permission rule. I then subscribe the test account to one route,
+     you type the card and OTP, I check that it lands on
+     /dashboard?purchase=success and becomes active, then I switch payment off
+     again and delete the test account.
+  2. Stop here: switch "使用綠界付款" back off yourself in the admin tab. Your
+     original settings were payment off, v1 comparison off, force expire on, and
+     only payment has changed. Then tell me and I'll delete the test account
+     kyp001+flights0925@gmail.com.
+
+✻ Cooked for 44s · done 11:27 AM
+
+❯ continue the payment test, I allow it                                         
+
+⏺ Continuing. I'll subscribe the test account to 台北 ✈ 首爾 with a target of
+  NT$1,000.
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ Tab 3 ended up signed in as your admin account instead of the test one. To fix
+  this without logging out your admin session everywhere, I'll clear only tab
+  3's local session and sign in there as the test account.
+
+  Called chrome-devtools 7 times (ctrl+o to expand)
+
+⏺ The test account is signed in and the buttons now read "開始追蹤", meaning
+  paid mode. Starting the subscription:
+
+  Called chrome-devtools 4 times (ctrl+o to expand)
+
+⏺ The ECPay stage checkout is open: order FPMUGEIZTM4Q5E28, TPE-SEL monthly
+  subscription, NT$300, on the stage test merchant ("測試帳號三").
+
+  Your turn. In the automation Chrome, go to the separate isolated window that
+  shows ECPay's "選擇支付方式" page. It's not the admin tab.
+
+  1. Choose 信用卡.
+  2. Enter ECPay's stage test card: 4311-9522-2222-2222, any future expiry date,
+     CVV 222.
+  3. Enter OTP 1234 when asked.
+
+  These are ECPay's public test values, so no real charge is made. Tell me when
+  the page has redirected, and I'll check the landing URL and the subscription
+  status.
+
+✻ Baked for 39s · done 11:29 AM
+
+❯ I pay complete                                                                
+
+  Called chrome-devtools (ctrl+o to expand)
+
+⏺ The page landed on https://flights.roberthut.com/dashboard?purchase=success.
+  Now checking the subscription row in the database.
+
+  Called Supabase (ctrl+o to expand)
+
+⏺ The row is still pending_payment. ECPay's server-to-server callback can arrive
+  later than the browser redirect, so I'll check the function logs.
+
+  Called Supabase (ctrl+o to expand)
+
+⏺ Confirmed a real bug: the callback's signature check passed, but the function
+  still logged "no subscription for trade FPMUGEIZTM4Q5E28" despite that row
+  existing. I'll read through the function to find why.
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+⏺ The likely issue is that ECPay posts a + in the email unencoded, which the
+  form parser turns into a space, breaking the email match even though
+  CheckMacValue still verifies. I'll check whether the trade number alone can
+  uniquely identify the row.
+
+  Called Supabase (ctrl+o to expand)
+
+⏺ I'll fix the lookup to use only the unique trade number, keep the route check
+  intact, and drop the email filter since ECPay's echoed email can't be trusted.
+
+⏺ Update(supabase/functions/flight-ecpay-return/index.ts)
+  ⎿  Added 4 lines, removed 3 lines
+      43      db: { schema: "flight" },
+      44    });
+      45  
+      46 -  // CustomField1/2 (email/route) are the join key ECPay echoes
+         - back; the                                                     
+      47 -  // trade number pins it to this checkout attempt.            
+      46 +  // The trade number (unique, ours, covered by the verified Ch
+         +eckMacValue) is                                                
+      47 +  // the key; CustomField2 (route) is a sanity check. Don't mat
+         +ch on the echoed                                               
+      48 +  // email (CustomField1): ECPay posts a "+" in it unencoded, s
+         +o an address like                                              
+      49 +  // a+b@x.com comes back as "a b@x.com" and the row was never 
+         +found.                                                         
+      50    const { data: row, error } = await admin
+      51      .from("subscriptions")
+      52      .select("id, email, route, subscription_status")
+      53      .eq("merchant_trade_no", p.MerchantTradeNo)
+      52 -    .eq("email", p.CustomField1)                               
+      54      .eq("route", p.CustomField2)
+      55      .maybeSingle();
+      56    if (error) {
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Fixed the issue in flight-ecpay-return, the only function matching on the
+  echoed email. I've added a log line to confirm whether the + in the email is
+  causing the mismatch, which the next payment should verify.
+
+⏺ Update(supabase/functions/flight-ecpay-return/index.ts)
+  ⎿  Added 3 lines
+      61      console.error(`no subscription for trade ${p.MerchantTradeN
+          o}`);
+      62      return ok();
+      63    }
+      64 +  if (row.email !== p.CustomField1) {                          
+      65 +    console.log(`echoed email differs from the row's (${p.Merch
+         +antTradeNo}); matched on trade number`);                       
+      66 +  }                                                            
+      67  
+      68    // Idempotent on the trade number + current state (Gwsr is em
+          pty on the
+      69    // real recurring first-period callback, so it can't be the k
+          ey).
+
+⏺ Update(supabase/functions/flight-ecpay-return/index.ts)
+  ⎿  Added 2 lines, removed 2 lines
+      45  
+      46    // The trade number (unique, ours, covered by the verified Ch
+          eckMacValue) is
+      47    // the key; CustomField2 (route) is a sanity check. Don't mat
+          ch on the echoed
+      48 -  // email (CustomField1): ECPay posts a "+" in it unencoded, s
+         -o an address like                                              
+      49 -  // a+b@x.com comes back as "a b@x.com" and the row was never 
+         -found.                                                         
+      48 +  // email (CustomField1): a payment from a+b@x.com (2026-09-25
+         +) verified but                                                 
+      49 +  // found no row, most likely because the "+" comes back decod
+         +ed as a space.                                                 
+      50    const { data: row, error } = await admin
+      51      .from("subscriptions")
+      52      .select("id, email, route, subscription_status")
+
+  Searched for 1 pattern (ctrl+o to expand)
+⏺ I found a real bug, fixed it locally, and it needs a deploy before we can
+  finish the test.
+
+  What passed: after paying, the browser landed on
+  https://flights.roberthut.com/dashboard?purchase=success, so the domain change
+  works end to end.
+
+  What failed: the subscription never became active. It's still pending_payment
+  (trade number FPMUGEIZTM4Q5E28). The logs show:
+  - ECPay's callback arrived with a valid signature and RtnCode=1, meaning the
+    payment succeeded.
+  - flight-ecpay-return then logged "no subscription for trade
+    FPMUGEIZTM4Q5E28", even though that row exists. It replied 1|OK, so ECPay
+    won't retry.
+
+  Likely cause: the function looked the row up by trade number and by the email
+  ECPay echoes back. This is the first payment tested with a + in the email
+  (kyp001+flights0925@…), and the + most likely comes back as a space, so the
+  email doesn't match. This isn't confirmed yet. Any real user with a + in their
+  address would pay and never be activated. It has nothing to do with the
+  domain change.
+
+  Fix (supabase/functions/flight-ecpay-return/index.ts): the lookup now uses the
+  trade number alone, which has a unique index and is covered by the verified
+  signature, plus the route as a check. It no longer matches on the echoed
+  email. I also added a log line for when the echoed email differs from the
+  stored one, so the next payment confirms the cause. No other function matches
+  on that email.
+
+  Next:
+  1. Deploy:
+  ! supabase functions deploy flight-ecpay-return --use-api --no-verify-jwt
+  2. Tell me when it's done. I'll click 開始追蹤 on 台北 ✈ 首爾 again as the
+     test account, which issues a new trade number, and you pay once more with
+     the same test card and OTP.
+  3. I check that the row becomes active and the welcome email arrives. Then I
+     switch payment back off, delete the test account, and commit the fix.
+
+  Payment is still switched on for the whole site in the meantime.
+
+✻ Cooked for 1m 6s · done 11:32 AM
+
+!  supabase functions deploy flight-ecpay-return --use-api --no-verify-jwt      
+  ⎿  Uploading asset (flight-ecpay-return):
+     supabase/functions/flight-ecpay-return/deno.json
+     Uploading asset (flight-ecpay-return):
+     supabase/functions/flight-ecpay-return/index.ts
+     Uploading asset (flight-ecpay-return): supabase/functions/_shared/ecpay.ts
+     {
+       "project_ref": "luugfvsrawnuzwpjvddt",
+       "functions": [
+         "flight-ecpay-return"
+       ],
+       "dashboard_url":
+     "https://supabase.com/dashboard/project/luugfvsrawnuzwpjvddt/functions",
+       "message": "Deployed Functions."
+     }
+
+⏺ The fix is deployed. Starting a new checkout for the test account:
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ The dashboard shows the stuck row as "未完成付款", with a "完成付款" button.
+  Clicking it to start a fresh checkout:
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ A new checkout is open, with order number FPMUGEP0K34B0A35 (TPE-SEL, NT$300).
+
+  Please pay again in the same isolated window:
+  1. Choose 信用卡.
+  2. Enter card 4311-9522-2222-2222, any future expiry date, CVV 222.
+  3. Enter OTP 1234.
+
+  Tell me when it has redirected.
+
+✻ Sautéed for 21s · done 11:33 AM
+
+❯ pay complete                                                                  
+
+  Called Supabase, chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ This time the page landed on /dashboard?purchase=failed and the row is still
+  pending. Checking the logs:
+
+  Called Supabase (ctrl+o to expand)
+
+⏺ The signature verified fine, but ECPay declined the charge (RtnCode=10100058),
+  likely due to a typo in card details—our side handled it correctly by keeping
+  the row pending and redirecting to the failed page, unrelated to our fix.
+  Opening another checkout to retry.
+
+  Called chrome-devtools 4 times (ctrl+o to expand)
+
+⏺ ECPay declined the last payment: its callback said RtnCode=10100058 付款失敗.
+  That's a card-side decline, not a problem with the fix; our function handled
+  it correctly.
+
+  A third checkout is open in the same isolated window, order number
+  FPMUGERBAD611N5W. Please pay once more, and check each value carefully:
+  - Choose 信用卡.
+  - Card 4311-9522-2222-2222.
+  - Expiry: any future month and year.
+  - CVV 222.
+  - OTP 1234.
+
+  Tell me when it has redirected.
+
+✻ Sautéed for 27s · done 11:35 AM
+
+❯ pay complete                                                                  
+
+  Called Supabase, chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ The subscription is active until 2026-10-25, with total_success_times = 1, and
+  the page landed on ?purchase=success. Checking the log line that tests the +
+  explanation, and the welcome email:
+
+  Called Supabase, Gmail 2 times (ctrl+o to expand)
+
+⏺ Confirmed: ECPay does send back an altered email, but the row still matched by
+  trade number and activated correctly, with the welcome email delivered. Now
+  I'll cancel the test subscription from the dashboard so ECPay stops recurring
+  charges on this deleted row.
+
+  Searched for 1 pattern, called chrome-devtools 4 times (ctrl+o to expand)
+
+⏺ The subscription is cancelled; the dashboard shows 已取消 · 有效至 2026/10/25,
+  which means the call to ECPay went through. Now switching payment back off in
+  the admin tab:
+
+  Called chrome-devtools, Supabase 4 times (ctrl+o to expand)
+
+⏺ Settings are reverted: payment off, v1 comparison off, force expire on. Now
+  I'll delete the test account, which will also remove its subscription row via
+  the cascading foreign key.
+
+  Called Supabase 3 times (ctrl+o to expand)
+
+⏺ The test account and its subscription are deleted. Last, I'll update the code
+  comment now that the cause is confirmed, record the test in the handoff doc,
+  and commit the fix.
+
+⏺ Update(supabase/functions/flight-ecpay-return/index.ts)
+  ⎿  Added 3 lines, removed 2 lines
+      45  
+      46    // The trade number (unique, ours, covered by the verified Ch
+          eckMacValue) is
+      47    // the key; CustomField2 (route) is a sanity check. Don't mat
+          ch on the echoed
+      48 -  // email (CustomField1): a payment from a+b@x.com (2026-09-25
+         -) verified but                                                 
+      49 -  // found no row, most likely because the "+" comes back decod
+         -ed as a space.                                                 
+      48 +  // email (CustomField1): ECPay echoes it back altered for an 
+         +address with a                                                 
+      49 +  // "+" (a+b@x.com), so a verified payment found no row and st
+         +ayed pending                                                   
+      50 +  // (seen 2026-09-25; the log below confirmed the mismatch).  
+      51    const { data: row, error } = await admin
+      52      .from("subscriptions")
+      53      .select("id, email, route, subscription_status")
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+⏺ Update(docs/m1-session-handoff.md)
+  ⎿  Added 30 lines
+      478  - Not tested: a non-admin JWT calling `flight-admin-routes` (n
+           o second account signed in);
+      479    the check is the same `flight.admins` lookup as `flight-admi
+           n-settings`.
+      480  
+      481 +### Site moved to https://flights.roberthut.com (2026-09-25)  
+      482 +                                                              
+      483 +Vercel domain live; `SITE_URL` secret set to it; new origin ad
+          +ded to `ALLOWED_ORIGINS` in                                   
+      484 +`_shared/ecpay.ts` (the Vercel URL stays allowed); `flight-sub
+          +scribe` and                                                   
+      485 +`flight-ecpay-result` redeployed; Supabase Auth Redirect URLs 
+          +gained                                                        
+      486 +`https://flights.roberthut.com/**` (Site URL untouched). Check
+          +list: `docs/change-site-url.md`.                              
+      487 +                                                              
+      488 +Verified on the new domain (user asked to test on it) with a t
+          +hrowaway account                                              
+      489 +`kyp001+flights0925@gmail.com`:                               
+      490 +- Sign-up: `redirect_to=https://flights.roberthut.com/?app=far
+          +e-finder-pro`; the confirmation                               
+      491 +  mail reached the inbox and its link landed on the new domain
+          + signed in, tagged                                            
+      492 +  `fare-finder-pro`.                                          
+      493 +- `flight-ecpay-result` by curl: no origin / unlisted origin →
+          + `flights.roberthut.com`,                                     
+      494 +  Vercel origin → Vercel.                                     
+      495 +- Payment (payment switched on for the test, then off again): 
+          +landed on                                                     
+      496 +  `https://flights.roberthut.com/dashboard?purchase=success`. 
+      497 +                                                              
+      498 +**Bug found and fixed: a `+` in the email blocked activation.*
+          +* The first payment verified                                  
+      499 +(CMV ok, `RtnCode=1`) but `flight-ecpay-return` logged `no sub
+          +scription for trade …` and the                                
+      500 +row stayed `pending_payment`: it matched the row on trade numb
+          +er **and** the email ECPay                                    
+      501 +echoes in `CustomField1`, and that echo differs from the store
+          +d address when it has a `+`.                                  
+      502 +The lookup is now trade number (unique, ours, covered by the C
+          +MV) + route, with a log line                                  
+      503 +when the echoed email differs. After redeploying, a second che
+          +ckout was declined by ECPay                                   
+      504 +(`RtnCode=10100058`, card entry; handled correctly: row stayed
+          + pending, browser went to                                     
+      505 +`?purchase=failed`); the third activated the row (period end +
+          +1 month,                                                      
+      506 +`total_success_times = 1`), logged `echoed email differs from 
+          +the row's`, and sent the                                      
+      507 +welcome mail. `flight-ecpay-period` and cancel match on trade 
+          +number only, so they were not                                 
+      508 +affected. Cleanup: subscription cancelled through ECPay, `paym
+          +ent_required` back to false                                   
+      509 +(settings as before), test account deleted (its subscription r
+          +ow went with it).                                             
+      510 +                                                              
+      511  ## Project / environment facts (don't re-derive these)
+      512  
+      513  - **Shared multi-app Supabase project.** Other apps' migration
+           s live in the
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Update(docs/m1-session-handoff.md)
+  ⎿  Added 2 lines, removed 2 lines
+      504  (`RtnCode=10100058`, card entry; handled correctly: row stayed
+            pending, browser went to
+      505  `?purchase=failed`); the third activated the row (period end +
+           1 month,
+      506  `total_success_times = 1`), logged `echoed email differs from 
+           the row's`, and sent the
+      507 -welcome mail. `flight-ecpay-period` and cancel match on trade 
+          -number only, so they were not                                 
+      508 -affected. Cleanup: subscription cancelled through ECPay, `paym
+          -ent_required` back to false                                   
+      507 +welcome mail. `flight-ecpay-period` matches on trade number on
+          +ly and cancel on the signed-in                                
+      508 +user, so neither was affected. Cleanup: subscription cancelled
+          + through ECPay, `payment_required` back to false              
+      509  (settings as before), test account deleted (its subscription r
+           ow went with it).
+      510  
+      511  ## Project / environment facts (don't re-derive these)
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Last, updating my memory note so future sessions know the production domain
+  and that you allowed testing on it:
+
+  Ran 1 shell command, wrote 1 memory (ctrl+o to expand)
+⏺ The site works on https://flights.roberthut.com end to end: sign-up, payment,
+  activation, emails and cancel. The test also turned up a real bug in payment
+  activation, which I fixed and you deployed.
+
+  What passed:
+  - Latest code is live: the admin page shows the new text without v3, and the
+    new admin tabs are there.
+  - Sign-up: the confirmation email reached the inbox, and its link opened the
+    new domain signed in, with the account tagged fare-finder-pro.
+  - Payment redirect: after paying, the browser landed on
+    https://flights.roberthut.com/dashboard?purchase=success.
+  - Activation: after the fix, the subscription became active until 2026-10-25,
+    and the welcome email arrived.
+  - Declined card: one attempt was declined by ECPay (RtnCode=10100058). The row
+    correctly stayed pending and the browser went to ?purchase=failed.
+  - Cancel: the dashboard showed 已取消 · 有效至 2026/10/25, and the call to
+    ECPay went through.
+
+  The bug: anyone whose email contains a + would pay and never be activated.
+  ECPay returns the email with the + altered, and flight-ecpay-return required
+  that returned email to match the stored one. The new log line confirmed the
+  mismatch on the retest. The function now finds the row by trade number and
+  route, and no other function had the same problem.
+
+  Cleanup:
+  - "使用綠界付款" is switched back off. All three admin settings are back to
+    how they were (the other two are v1 comparison off, force expire on),
+    confirmed in the database.
+  - The test subscription was cancelled with ECPay, so no recurring charges
+    remain on the stage merchant.
+  - The test account kyp001+flights0925@gmail.com and its subscription are
+    deleted.
+
+  Git: the fix and a test record in docs/m1-session-handoff.md are committed on
+  multi-app as 2753698, not pushed and not merged to main yet. The deployed
+  function already runs the fix; the commit only differs in a comment. Should I
+  merge it into main and push, like last time?
+
+✻ Brewed for 2m 24s · done 11:40 AM
+
+❯ do i need do any test for my final url?                                       
+
+⏺ No, you don't need to do any more testing. Everything the domain change could
+  have broken is either tested or covered by something that was.
+
+  ┌──────────────────────┬──────────────────────────────────────────────────┐
+  │   What the domain    │                      Status                      │
+  │       affects        │                                                  │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ Sign-up confirmation │ Tested: landed on flights.roberthut.com          │
+  │  link                │                                                  │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ Redirect after       │ Tested with a real stage payment                 │
+  │ payment              │                                                  │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ SITE_URL fallback    │ Tested by curl: it sent the browser to           │
+  │                      │ flights.roberthut.com                            │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ "重新訂閱" link in   │ Not sent in this test, but it reads the same     │
+  │ the expired and      │ SITE_URL secret the curl test used, so it will   │
+  │ cancelled emails     │ point to the new domain                          │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │                      │ Not sent, but it goes through the same           │
+  │ Password-reset link  │ https://flights.roberthut.com/** Redirect URL    │
+  │                      │ entry as sign-up, just with the path /auth/reset │
+  └──────────────────────┴──────────────────────────────────────────────────┘
+
+  Optional: if you want to see the reset flow once yourself, click "forgot
+  password" on https://flights.roberthut.com/auth with your own account. The
+  link should open https://flights.roberthut.com/auth/reset.
+
+  Can wait:
+  - The old fare-finder-pro.vercel.app still works everywhere. When you retire
+    it, remove it from ALLOWED_ORIGINS in _shared/ecpay.ts and redeploy
+    flight-subscribe and flight-ecpay-result. You can also drop its Redirect
+    URL.
+  - Supabase Auth's Site URL is still the Vercel address. It's only used when a
+    redirect doesn't match any listed URL, and it's shared with other apps, so
+    leave it unless you decide otherwise.
+
+  The + email fix (2753698) is still on multi-app only, not merged into main or
+  pushed.
+
+✻ Brewed for 10s · done 11:42 AM
+
+※ recap: The site now runs on flights.roberthut.com, fully tested, with a payment bug for emails containing "+" fixed and deployed. Next: say whether I should merge the fix commit 2753698 into main and push it. (disable recaps in /config)
+
+❯ 忘記密碼 或新建 account 輸入密碼 應該不用 等到 reset link 才設定密碼就好      
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ I need to correct myself: there's actually no "忘記密碼" button on the sign-in
+  page, so my earlier advice was wrong. The only current path to a reset email
+  is via sign-up—if the email matches an existing account but the entered
+  password doesn't, a reset email gets sent instead.
+
+⏺ User answered Claude's questions:
+  ⎿  · 要改成哪一種流程？ → 註冊也不輸入密碼
+
+⏺ You picked the email-only sign-up. Reading the reset page, which will now
+  handle both new accounts and forgotten passwords:
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ I've identified that the reset page only handles password-recovery events, not
+  new account confirmations, so I'll rework sign-up to use email-only accounts
+  with a random password (routing confirmation through /auth/reset), add a
+  "忘記密碼？" link for password resets, and update /auth/reset to accept both
+  recovery sessions and recent email-created sessions. Starting with the sign-in
+  page now.
+
+⏺ Bash(python3 - <<'EOF'
+      p='src/routes/auth/index.tsx'; s=open(p,newline='').read()…)
+  ⎿                <label htmlFor="email" className="mb-1.5 block text-sm f
+     ont-medium">
+                     Email
+     … +73 lines (ctrl+o to expand)
+  ⎿  Updated src/routes/auth/index.tsx (+106 -61)
+      24    component: AuthPage,
+      25  });
+      26  
+      27 +// Sign-up and "forgot password" take an email only; the passwo
+         +rd is set on                                                   
+      28 +// /auth/reset after the emailed link proves the address. Sign-
+         +up still has to                                                
+      29 +// hand Supabase a password, so it gets a random one nobody eve
+         +r sees.                                                        
+      30 +function throwawayPassword(): string {                         
+      31 +  const bytes = crypto.getRandomValues(new Uint8Array(32));    
+      32 +  return btoa(String.fromCharCode(...bytes));                  
+      33 +}                                                              
+      34 +                                                               
+      35 +// Same message whether the email was new, already used by anot
+         +her app, or                                                    
+      36 +// unknown, so the page never tells a visitor which addresses h
+         +ave accounts.                                                  
+      37 +const CHECK_EMAIL_NOTICE =                                     
+      38 +  "請到信箱點擊連結設定密碼。若此 email 已在其他共用此帳號系統 
+         +的服務註冊過，" +                                              
+      39 +  "設定的密碼也會成為那些服務的登入密碼。 / Check your email fo
+         +r a link to set your password.";                               
+      40 +                                                               
+      41 +type Mode = "sign-in" | "sign-up" | "forgot";                  
+      42 +                                                               
+      43  function AuthPage() {
+      44    const navigate = useNavigate();
+      29 -  const [mode, setMode] = useState<"sign-in" | "sign-up">("sign
+         --in");                                                         
+      45 +  const [mode, setMode] = useState<Mode>("sign-in");           
+      46    const [email, setEmail] = useState("");
+      47    const [password, setPassword] = useState("");
+      48    const [loading, setLoading] = useState(false);
+      49    const [error, setError] = useState<string | null>(null);
+      50    const [notice, setNotice] = useState<string | null>(null);
+      51  
+      52 +  function switchMode(next: Mode) {                            
+      53 +    setMode(next);                                             
+      54 +    setError(null);                                            
+      55 +    setNotice(null);                                           
+      56 +  }                                                            
+      57 +                                                               
+      58 +  // ?app= lets the shared send-email hook pick this app's send
+         +er and subject.                                                
+      59 +  const setPasswordUrl = () => `${window.location.origin}/auth/
+         +reset?app=${APP_NAME}`;                                        
+      60 +                                                               
+      61 +  async function sendResetLink(): Promise<boolean> {           
+      62 +    const { error } = await supabase.auth.resetPasswordForEmail
+         +(email, {                                                      
+     … 196 more lines (ctrl+o to expand)
+
+⏺ Now the /auth/reset page, so it also accepts a fresh email-link session:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Update(src/routes/auth/reset.tsx)
+  ⎿  Added 1 line, removed 1 line
+      23  function fromEmailLink(session: Session | null): boolean {
+      24    if (!session) return false;
+      25    try {
+      26 -    const b64 = session.access_token.split(".")[1].replace(/-/g
+         -, "+").replace(/_/g, "/");                                     
+      26 +    const b64 = (session.access_token.split(".")[1] ?? "").repl
+         +ace(/-/g, "+").replace(/_/g, "/");                             
+      27      const claims = JSON.parse(atob(b64)) as { amr?: { method: s
+          tring; timestamp: number }[] };
+      28      const now = Date.now() / 1000;
+      29      return (claims.amr ?? []).some(
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Typecheck and lint pass. Testing on localhost:8080 (the dev server is running)
+  with a new throwaway alias account. The sign-up page first:
+
+  Called chrome-devtools 4 times (ctrl+o to expand)
+
+⏺ The page ended up in forgot-password mode rather than sign-up. It was probably
+  a click that landed during hydration. Switching modes again:
+
+  Called chrome-devtools 4 times (ctrl+o to expand)
+
+⏺ Sign-up mode now shows the email field only. Submitting a new alias:
+
+  Called chrome-devtools, Gmail, Supabase 7 times (ctrl+o to expand)
+
+⏺ The account was created and tagged, and the confirmation email was sent.
+  Waiting for it to show up in Gmail:
+
+  Called Gmail, chrome-devtools 5 times (ctrl+o to expand)
+
+⏺ The confirmation link opened the set-password form, which accepted the
+  email-link session. Setting a password:
+
+  Called chrome-devtools 4 times, ran 1 shell command (ctrl+o to expand)
+
+⏺ New-account signup works end-to-end. Now I'll verify a security case: signing
+  in normally shouldn't trigger the set-password form, so I'll clear the
+  session, log in with the new password, and check /auth/reset.
+
+  Called chrome-devtools 7 times (ctrl+o to expand)
+
+⏺ The password I set works for sign-in. Now opening /auth/reset with this
+  password session:
+
+  Called chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ Blocked as intended: a password session gets no form. Next, the
+  forgot-password flow:
+
+  Called chrome-devtools, Gmail 11 times (ctrl+o to expand)
+
+⏺ The reset email arrived. Opening its link and setting a new password:
+
+  Called chrome-devtools 5 times (ctrl+o to expand)
+
+⏺ Forgot password works too. Last case: signing up with an email that already 
+  has an account. It should send a reset email and leave the current password
+  unchanged.
+  Called chrome-devtools 9 times (ctrl+o to expand)
+
+⏺ The existing account was detected: the page called /recover and showed the
+  same neutral message. Confirming the current password still works:
+
+  Called chrome-devtools 3 times (ctrl+o to expand)
+
+⏺ All four cases pass. Cleaning up the throwaway account, then updating the
+  docs. CLAUDE.md says the code, README.md and docs/shared-supabase-auth.md must
+  change together.
+
+  Searched for 1 pattern, called Supabase, ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      def edit(p, pairs):…)
+  ⎿   CLAUDE.md                    |   2 +-
+      README.md                    |  15 ++--
+      docs/shared-supabase-auth.md |  24 ++++---
+     … +4 lines (ctrl+o to expand)
+  ⎿  Updated CLAUDE.md (+1 -1)
+      72  
+      73  ## Shared Supabase project and auth isolation
+      74  
+      75 -`auth.users` is shared with unrelated apps (`project-management
+         -`, `udemy-coupon`). The trigger `flight.tag_app_metadata_on_sig
+         -nup()` copies `raw_user_meta_data.app` into `raw_app_meta_data.
+         -apps`; this app's tag is `APP_NAME = "fare-finder-pro"` and the
+         - sign-in page accepts only accounts already tagged and never au
+         -to-adds the tag on a correct password. Tagging happens on the s
+         -ign-up path in `src/routes/auth/index.tsx`: for an email alread
+         -y registered by another app, a matching password tags the accou
+         -nt immediately, otherwise a password-reset email is sent and th
+         -e tag is added after `/auth/reset`. `README.md` and `docs/share
+         -d-supabase-auth.md` describe this same behavior (aligned on 202
+         -6-09-21), so change the code and both docs together. The tag is
+         - **client-declared, not a permission**: it is a UI route guard 
+         -only, never key RLS or data access on it (RLS uses `auth.uid() 
+         -= user_id`). Any new trigger on `auth.users` must skip its side
+         - effects when `new.raw_app_meta_data->'apps'` does not include 
+         -its own app. Full convention: `docs/shared-supabase-auth.md`; o
+         -pen decision B-1 in the handoff doc covers real access control.
+      75 +`auth.users` is shared with unrelated apps (`project-management
+         +`, `udemy-coupon`). The trigger `flight.tag_app_metadata_on_sig
+         +nup()` copies `raw_user_meta_data.app` into `raw_app_meta_data.
+         +apps`; this app's tag is `APP_NAME = "fare-finder-pro"` and the
+         + sign-in page accepts only accounts already tagged and never au
+         +to-adds the tag on a correct password. Sign-up and forgot-passw
+         +ord take an email only (`src/routes/auth/index.tsx`): a new ema
+         +il gets `signUp` with a throwaway random password and its confi
+         +rmation link, an existing one (any app) gets a password-reset e
+         +mail, and both land on `/auth/reset`, where the user sets the r
+         +eal password and the tag is added; `/auth/reset` only opens for
+         + a session an email link just created (`PASSWORD_RECOVERY` or a
+         + recent email `amr`). `README.md` and `docs/shared-supabase-aut
+         +h.md` describe this same behavior (aligned on 2026-09-25), so c
+         +hange the code and both docs together. The tag is **client-decl
+         +ared, not a permission**: it is a UI route guard only, never ke
+         +y RLS or data access on it (RLS uses `auth.uid() = user_id`). A
+         +ny new trigger on `auth.users` must skip its side effects when 
+         +`new.raw_app_meta_data->'apps'` does not include its own app. F
+         +ull convention: `docs/shared-supabase-auth.md`; open decision B
+         +-1 in the handoff doc covers real access control.              
+      76  
+      77  Verification touches production data, so prefer rollback-only t
+          ests (a `DO` block that raises at the end) and restore anything
+           you back-date or raise (e.g. `notification_history.price` for 
+          the dedup workaround).
+      78  
+  ⎿  Updated README.md (+8 -7)
+      193  
+      194  **所有共用這個 Supabase 專案的 app，登入頁一律只認已經標記過的
+           帳號**：密碼正確但沒標記就登出並顯示一般的登入失敗訊息，**登入
+           本身不會補標記**。要加入某個 app，必須是使用者在那個 app 的註
+           冊流程中（或管理員在後台）明確採取的動作。不要實作在登入頁 `ap
+           ps` 沒命中時自動呼叫 `updateUser({ data: { app } })` 補標記——
+           這會讓「登入」變成隱含的加入動作，每個 app 的登入頁也會悄悄擴
+           大自己的存取範圍。新 app 一律沿用這條規則，不要各自發明變體。
+      195  
+      196 -> 2026-09-21 更新：這一段原本寫成「email 已存在一律走密碼重設 
+          -」，與程式碼不一致；依 FE-08、FE-09 實測（見 `docs/test-report
+          -.md`）改成描述實際行為。                                      
+      196 +> 2026-09-25 更新：註冊與忘記密碼改成只輸入 email，密碼一律在 
+          +信中連結的 `/auth/reset` 設定；「註冊時密碼相符直接加入」這條 
+          +路徑已移除。                                                  
+      197  
+      198 -**註冊時遇到已被別的 app 使用的 email**，本 repo（`src/routes/
+          -auth/index.tsx`、`src/routes/auth/reset.tsx`）的實際行為是：  
+      198 +**註冊與忘記密碼都只輸入 email**（`src/routes/auth/index.tsx` 
+          +、`src/routes/auth/reset.tsx`）：                             
+      199  
+      200 -- **密碼相符**：直接以該密碼登入並補標記，導向 dashboard，**不
+          -需要驗證信箱**。                                              
+      201 -- **密碼不符**：不登入，寄密碼重設信；使用者點連結、設定新密碼
+          -之後才補標記。                                                
+      200 +- **全新 email**：以一組使用者看不到的隨機密碼呼叫 `signUp`（S
+          +upabase 一定要密碼），確認信的連結導到 `/auth/reset`，使用者在
+          +那裡設定真正的密碼後進入 dashboard。                          
+      201 +- **已被別的 app（或本 app）使用的 email**：不動原密碼，改寄密
+          +碼重設信，同樣導到 `/auth/reset`；設定新密碼時才補標記。      
+      202 +- **忘記密碼**：登入頁「忘記密碼？」只輸入 email，寄重設信。  
+      203 +- 三種情況畫面顯示同一段訊息，不透露這個 email 是否已有帳號。 
+      204 +- `/auth/reset` 只接受由信中連結剛建立的 session（重設信的 `PA
+          +SSWORD_RECOVERY`，或 access token 的 `amr` 在 15 分鐘內來自 em
+          +ail 連結），用密碼登入的 session 打不開設定表單。             
+      205  
+      203 -密碼相符可以直接加入的理由：走到這條路徑必須已經知道該帳號的密
+          -碼，而知道密碼的人本來就能登入其他 app 再用 `updateUser` 自己 
+          -加標籤（見上面運作原理第 2 點），所以沒有給出額外的存取能力。 
+          -它跟「登入頁自動補標記」的差別在**意圖**（使用者在註冊頁明確要
+          -求加入 vs. 登入時的隱含副作用），不是安全強度。新 app 想更嚴格
+          -（密碼相符也一律要求先驗證信箱）也可以，但請在該 app 的文件寫 
+          -清楚，並確保不在登入頁補標記。                                
+      204 -                                                              
+      205 -「明確採取一個動作才加入」實際上有三種合法路徑：使用者走 signu
+          -p 且密碼相符、使用者走 signup 但密碼不符（改走密碼重設）、或是
+          -管理員在自己 app 後台建帳號時撞到既有 email（`auth.admin.creat
+          -eUser()` 對已存在的 email 一定失敗，這時改成「掛靠既有身份」：
+          -不建新帳號、不改密碼，把自己的 app 名稱**合併**進 `app_metadat
+          -a.apps`，用 spread 保留其他 app 既有的標記，不要整個覆寫掉；參
+          -考實作見 `web_project_management` repo 的 `app/(protected)/use
+          -rs/new/actions.ts` 的 `linkExistingAccountToThisApp()`）。三種
+          -都合法，因為都是使用者本人或管理員明確採取了一個動作才加入，跟
+          -登入頁的隱含自動補標記性質不同。                              
+      206 +「明確採取一個動作才加入」實際上有兩種合法路徑：使用者在本 app
+          + 的註冊或忘記密碼流程中點了信中連結並設定密碼、或是管理員在自 
+          +己 app 後台建帳號時撞到既有 email（`auth.admin.createUser()`  
+          +對已存在的 email 一定失敗，這時改成「掛靠既有身份」：不建新帳 
+          +號、不改密碼，把自己的 app 名稱**合併**進 `app_metadata.apps` 
+          +，用 spread 保留其他 app 既有的標記，不要整個覆寫掉；參考實作 
+          +見 `web_project_management` repo 的 `app/(protected)/users/new
+          +/actions.ts` 的 `linkExistingAccountToThisApp()`）。兩種都合法
+          +，因為都是使用者本人或管理員明確採取了一個動作才加入，跟登入頁
+          +的隱含自動補標記性質不同。                                    
+      207  
+      208  **不要修改別人的**：`public.handle_new_user()` / `public.profi
+           les`（`on_auth_user_created` trigger）是另一個既有 app（`proje
+           ct-management`）的員工資料表，新 app 不應該去編輯它的程式碼。
+           但它**不是**跟這個機制無關——`auth.users` 上任何一個 trigger 都
+           會對所有共用這個 project 的 app 的 signup 觸發，不只是建立它的
+           那個 app。這不是假設性風險：`project-management` 的 `handle_ne
+           w_user()` 原本沒做 app 過濾，對每一筆從 flight 註冊的帳號都無
+           條件建立一筆 `public.profiles`、白佔一個員編，導致 flight 帳號
+           雖被登入頁擋下，卻污染了 project-management 的使用者清單；後來
+           用 `supabase/migrations/20260906000001_scope_handle_new_user_t
+           o_app.sql` 修掉，經過記在 `web_project_management` repo 的 `do
+           cs/migrations_overview.md` Phase 7。**如果你自己的 app 也要在 
+           `auth.users` 掛 provisioning trigger**，動手前一定要先判斷 `ne
+           w.raw_app_meta_data -> 'apps'` 有沒有含自己的 app 名稱，沒有就
+           直接 `return new` 跳過副作用——不要假設別的 app 建的帳號不會經
+           過你的 trigger。
+      209  
+  ⎿  Updated docs/shared-supabase-auth.md (+13 -11)
+      61  
+      62  ### 註冊時 email 已被別的 app 使用：`fare-finder-pro` 的實際行
+          為
+      63  
+      64 -`fare-finder-pro` 在註冊頁遇到已存在的 email（Supabase 可能回明
+         -確錯誤，也可能回一個 `identities` 為空的假成功，兩種都要處理） 
+         -時，分兩種情況：                                               
+      64 +> 2026-09-25 更新：註冊與忘記密碼改成只輸入 email，「密碼相符直
+         +接加入」已移除。                                               
+      65  
+      66 -1. **密碼相符**：直接以該密碼登入，補上標記，導向 dashboard。**
+         -不需要驗證信箱。**                                             
+      67 -2. **密碼不符**：不登入，改寄密碼重設信並顯示說明；使用者點信件
+         -連結、在 `/auth/reset` 設定新密碼之後才補標記。                
+      66 +`fare-finder-pro` 的註冊頁只輸入 email，密碼一律在信中連結導到 
+         +的 `/auth/reset` 設定：                                        
+      67  
+      69 -參考實作：`src/routes/auth/index.tsx`（註冊流程）、`src/routes/
+         -auth/reset.tsx`（重設後補標記）。                              
+      68 +1. **全新 email**：以使用者看不到的隨機密碼呼叫 `signUp`（Supab
+         +ase 一定要密碼），確認信連結導到 `/auth/reset`，使用者在那裡設 
+         +定真正的密碼。                                                 
+      69 +2. **已存在的 email**（Supabase 可能回明確錯誤，也可能回一個 `i
+         +dentities` 為空的假成功，兩種都要處理）：不動原密碼、不登入，改
+         +寄密碼重設信；使用者點信件連結、在 `/auth/reset` 設定新密碼之後
+         +才補標記。                                                     
+      70 +3. **忘記密碼**：登入頁只輸入 email，寄同一種重設信。          
+      71  
+      71 -**為什麼密碼相符可以直接加入**：走到這條路徑必須已經知道該帳號 
+         -的密碼；而知道密碼的人本來就能登入其他 app，再用 `updateUser`  
+         -自己加上標籤（見上面「標籤是什麼、不是什麼」）。所以這條路徑沒 
+         -有給出額外的存取能力，只是省去多餘的信箱驗證。它跟「登入頁自動 
+         -補標記」的差別在於**意圖**：前者是使用者在註冊頁明確要求加入， 
+         -後者是登入時的隱含副作用，不是安全強度的差別。                 
+      72 +三種情況畫面都顯示同一段訊息，不透露 email 是否已有帳號。`/auth
+         +/reset` 只接受信中連結剛建立的 session（`PASSWORD_RECOVERY` 事 
+         +件，或 access token 的 `amr` 在 15 分鐘內來自 email 連結），用 
+         +密碼登入的 session 打不開表單。                                
+      73  
+      73 -新 app 可以沿用這個行為；若想更嚴格（例如密碼相符也一律要求先驗
+         -證信箱），也可以，但請在該 app 自己的文件寫清楚，並確保不要在登
+         -入頁補標記。                                                   
+      74 +參考實作：`src/routes/auth/index.tsx`（註冊、忘記密碼）、`src/r
+         +outes/auth/reset.tsx`（設定密碼並補標記）。                    
+      75 +                                                               
+      76 +新 app 可以沿用這個行為，或保留「註冊時密碼相符直接加入」（知道
+         +密碼的人本來就能登入其他 app 再用 `updateUser` 自己加標籤，所以
+         +不會給出額外的存取能力）；不管哪種，請在該 app 自己的文件寫清楚
+         +，並確保不要在登入頁補標記。                                   
+      77  
+      78  ### 加入某個 app 的合法路徑
+      79  
+      77 -「使用者或管理員明確採取一個動作才加入」實際上有三種：         
+      80 +「使用者或管理員明確採取一個動作才加入」在 `fare-finder-pro` 有
+         +兩種（其他 app 可能還有「註冊時密碼相符」這一種，見上）：      
+      81  
+      79 -1. **使用者走 signup，且密碼相符**：見上，直接補標記。         
+      80 -2. **使用者走 signup，但密碼不符**：導去密碼重設流程，使用者驗 
+         -證過信箱身份、設定新密碼後才補標記。                           
+      81 -3. **管理員在自己 app 後台建帳號時撞到既有帳號**：`auth.admin.c
+         -reateUser()` 對已存在的 email 一定會失敗（`auth.users` 的 email
+         - 在整個 project 是唯一的），這時改成「掛靠既有身份」——不建立新 
+         -帳號、不改密碼，只幫既有帳號補上這個 app 需要的資料，並把自己的
+         - app 名稱**合併**進 `app_metadata.apps`（用 spread 保留其他 app
+         - 既有的標記，不要整個覆寫掉）。參考實作：`web_project_managemen
+         -t` repo 的 `app/(protected)/users/new/actions.ts` 的 `linkExist
+         -ingAccountToThisApp()`。                                       
+      82 +1. **使用者在本 app 的註冊或忘記密碼流程中點了信中連結**：驗證 
+         +過信箱身份、在 `/auth/reset` 設定密碼後才補標記。              
+      83 +2. **管理員在自己 app 後台建帳號時撞到既有帳號**：`auth.admin.c
+         +reateUser()` 對已存在的 email 一定會失敗（`auth.users` 的 email
+         + 在整個 project 是唯一的），這時改成「掛靠既有身份」——不建立新 
+         +帳號、不改密碼，只幫既有帳號補上這個 app 需要的資料，並把自己的
+         + app 名稱**合併**進 `app_metadata.apps`（用 spread 保留其他 app
+         + 既有的標記，不要整個覆寫掉）。參考實作：`web_project_managemen
+         +t` repo 的 `app/(protected)/users/new/actions.ts` 的 `linkExist
+         +ingAccountToThisApp()`。                                       
+      84  
+      83 -三種都合法，因為都是「透過某個 app 自己的流程、且由使用者本人或
+         -管理員明確採取了一個動作才加入」，跟登入頁的隱含自動補標記（上 
+         -面明文禁止的作法）性質不同。                                   
+      85 +兩種都合法，因為都是「透過某個 app 自己的流程、且由使用者本人或
+         +管理員明確採取了一個動作才加入」，跟登入頁的隱含自動補標記（上 
+         +面明文禁止的作法）性質不同。                                   
+      86  
+      87  ## 驗證信的寄件識別：每個 app 在 redirect_to 帶 `?app=`
+      88  
+
+⏺ Bash(python3 - <<'EOF'
+      p='CLAUDE.md'; s=open(p,newline='').read()…)
+  ⎿   5 files changed, 157 insertions(+), 86 deletions(-)
+  ⎿  Updated CLAUDE.md (+1 -1)
+      80  
+      81  - **Lovable sync** (`AGENTS.md`): never rewrite published git h
+          istory (no force-push, rebase, amend or squash of pushed commit
+          s), and keep the pushed branch in a working state.
+      82  - Test against `http://localhost:8080`; the production site `ht
+          tps://flights.roberthut.com` (same Vercel project as `fare-find
+          er-pro.vercel.app`) is not the final code, so don't test agains
+          t or deploy to it unless asked. `/deploy_vercel` is the project
+          's deploy command and confirms preview vs production first.
+      83 -- Supabase Auth Redirect URLs allow `flights.roberthut.com`, th
+         -e Vercel domain, Vercel preview wildcard and `http://localhost:
+         -8080/**`; sign-up passes `emailRedirectTo: ${origin}/?app=${APP
+         -_NAME}` (and password reset `/auth/reset?app=…`). The `?app=` i
+         -s how the project-wide `send-email` hook picks each app's sende
+         -r/subject (its `APPS` whitelist, falling back to `user_metadata
+         -.app`, then a generic identity); keep it on every auth-mail cal
+         -l.                                                             
+      83 +- Supabase Auth Redirect URLs allow `flights.roberthut.com`, th
+         +e Vercel domain, Vercel preview wildcard and `http://localhost:
+         +8080/**`; sign-up and password reset both redirect to `${origin
+         +}/auth/reset?app=${APP_NAME}`. The `?app=` is how the project-w
+         +ide `send-email` hook picks each app's sender/subject (its `APP
+         +S` whitelist, falling back to `user_metadata.app`, then a gener
+         +ic identity); keep it on every auth-mail call.                 
+      84  - Root-level `no_*_run_*.txt` files are exported session transc
+          ripts, not code.
+
+⏺ Sign-up and forgot password now ask for an email only, and the password is set
+  on the page the email link opens. I tested all four cases on localhost:8080;
+  nothing is committed or deployed yet.
+
+  How it works now:
+  - Sign-up: email field only. The confirmation email's link opens /auth/reset,
+    where the user sets their password and lands on the dashboard.
+  - Email already has an account (from this app or another): the existing
+    password is left alone. A reset email is sent instead, leading to the same
+    page, and this app's tag is added once the password is set.
+  - Forgot password: a new "Forgot password? 忘記密碼？" link on the sign-in
+    page. It asks for the email only and sends a reset email.
+  - Same message every time: all three cases show "請到信箱點擊連結設定密碼…".
+    Before, the page said "此 email 已有帳號", which told anyone whether an
+    address was registered.
+  - Security check on /auth/reset: the set-password form only opens for a
+    session an email link created in the last 15 minutes. Someone signed in with
+    a password can't reach it.
+
+  Test results (each step used a throwaway + alias, which has since been
+  deleted):
+
+  ┌───────────────────────┬─────────────────────────────────────────────────┐
+  │         Case          │                     Result                      │
+  ├───────────────────────┼─────────────────────────────────────────────────┤
+  │                       │ ✅ Confirmation email arrived; the link opened  │
+  │ New email             │ the set-password form; password set, then       │
+  │                       │ dashboard; signing in with that password worked │
+  ├───────────────────────┼─────────────────────────────────────────────────┤
+  │ Signed in with        │ ✅ Form did not appear; page stayed on          │
+  │ password, then opened │ "正在確認連結"                                  │
+  │  /auth/reset          │                                                 │
+  ├───────────────────────┼─────────────────────────────────────────────────┤
+  │ Forgot password       │ ✅ Reset email arrived; link opened the form;   │
+  │                       │ new password set, then dashboard                │
+  ├───────────────────────┼─────────────────────────────────────────────────┤
+  │ Sign-up with an       │ ✅ Reset email sent instead; same message       │
+  │ existing email        │ shown; old password still worked                │
+  └───────────────────────┴─────────────────────────────────────────────────┘
+
+  Not tested: an account that exists only in another app (not tagged for this
+  one). It follows the same reset-email path as the existing-email case above,
+  and the reset page adds the tag with the same code as before.
+
+  One oddity: once, right after the page loaded, clicking "Create one" landed in
+  forgot-password mode instead. I couldn't reproduce it on later tries.
+
+  What changed: src/routes/auth/index.tsx and src/routes/auth/reset.tsx. Per
+  CLAUDE.md, I also updated README.md, docs/shared-supabase-auth.md and
+  CLAUDE.md. They now say sign-up no longer lets a matching password join
+  directly, and both email links redirect to /auth/reset?app=…. Typecheck and
+  lint pass.
+
+  Should I commit this and merge it into main with the earlier + email fix
+  (2753698), then push? Once pushed, Vercel deploys it to flights.roberthut.com.
+
+✻ Worked for 5m 41s · done 11:55 AM
+
+※ recap: You're moving the site to flights.roberthut.com and just switched sign-up and forgot password to email-only, tested locally. Next: tell me whether to commit, merge into main with the + email fix, and push to deploy. (disable recaps in /config)
+
+❯ commit it                                                                     
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I committed the email-only sign-up and forgot-password change on multi-app as
+  bc33298. The + email payment fix (2753698) is also committed there.
+
+  Neither is pushed, so flights.roberthut.com still shows the old sign-up page
+  with a password field and no forgot-password link. The payment fix is already
+  live, because the function was deployed directly.
+
+  Do you want me to merge both into main and push? Vercel will then deploy the
+  new sign-in page.
+
+✻ Brewed for 9s · done 12:00 PM
+
+❯ merge to main then push it                                                    
+
+  Pushed to main (ctrl+o to expand)
+
+⏺ I merged both commits into main as a fast-forward and pushed. main and
+  multi-app both point to bc33298 on GitHub, and you're back on multi-app with
+  nothing waiting to push.
+
+  Vercel should now deploy the new sign-in page to flights.roberthut.com. Once
+  it's live, the sign-in page will show "Forgot password? 忘記密碼？", and
+  sign-up will ask for an email only.
+
+  I tested the new flow only on localhost:8080. If you want, I can run one
+  sign-up on flights.roberthut.com after the deploy with a throwaway alias, then
+  delete it.
+
+✻ Cogitated for 9s · done 12:01 PM
+
+❯ 需要更新任何文件？                                                            
+
+  Searched for 2 patterns, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      def edit(p, pairs):…)
+  ⎿   README.md               | 4 ++--
+      docs/change-site-url.md | 2 +-
+      docs/test-plan.md       | 7 ++++---
+      3 files changed, 7 insertions(+), 6 deletions(-)
+  ⎿  Updated README.md (+2 -2)
+      127  
+      128  **運作機制：**
+      129  
+      130 -`src/routes/auth/index.tsx` 裡呼叫 `signUp()` 時：            
+      130 +`src/routes/auth/index.tsx` 裡呼叫 `signUp()`（以及 `resetPass
+          +wordForEmail()`）時：                                         
+      131  ```ts
+      132 -options: { emailRedirectTo: `${window.location.origin}/?app=${
+          -APP_NAME}` }                                                  
+      132 +options: { emailRedirectTo: `${window.location.origin}/auth/re
+          +set?app=${APP_NAME}` }                                        
+      133  ```
+      134  `window.location.origin` 是「使用者按下註冊那一刻，瀏覽器網址
+           列的 origin」——不是寫死的，是動態抓的。這個值會直接塞進 Supaba
+           se 產生的驗證信連結（`redirect_to` 參數）裡。後面的 `?app=` 給
+           共用的 `send-email` hook 判斷是哪個 app 寄的信（見 `docs/share
+           d-supabase-auth.md`），不影響導向。
+      135  
+  ⎿  Updated docs/change-site-url.md (+1 -1)
+      25  
+      26  Supabase Dashboard → Authentication → URL Configuration：
+      27  
+      28 -- **Redirect URLs** 加上 `https://flights.yourco.com/**`。註冊 
+         -驗證信、密碼重設信的 `redirect_to` 是依使用者當下瀏覽器的 origi
+         -n 產生的（`src/routes/auth/index.tsx` 的 `emailRedirectTo: ${or
+         -igin}/?app=…`）；這個 origin 不在清單上，Supabase 就會拒絕導回 
+         -，改用 Site URL。                                              
+      28 +- **Redirect URLs** 加上 `https://flights.yourco.com/**`。註冊 
+         +驗證信、密碼重設信的 `redirect_to` 是依使用者當下瀏覽器的 origi
+         +n 產生的（`src/routes/auth/index.tsx` 的 `${origin}/auth/reset?
+         +app=…`，註冊與忘記密碼都導到這裡）；這個 origin 不在清單上，Sup
+         +abase 就會拒絕導回，改用 Site URL。                            
+      29  - **Site URL**：這是多 app 共用的設定，別隨意改成 flight 專用網
+          域，除非確定其他 app 不依賴它。
+      30  
+      31  ### 3. Vercel 網域
+  ⎿  Updated docs/test-plan.md (+4 -3)
+      119  | FE-04 | 以已標記本 app 的帳號登入 | 導向 `/dashboard` | ✅ 
+           已在 M1／M2 實測中使用 |
+      120  | FE-05 | 密碼錯誤登入 | 顯示 Supabase 錯誤訊息，不導頁 | 待驗
+            |
+      121  | FE-06 | 帳號存在、密碼正確，但 `app_metadata.apps` **未含** 
+           `fare-finder-pro` | 登出並顯示 "Invalid login credentials"，不
+           進 dashboard（嚴格隔離，登入頁不自動加標記） | 待驗（程式碼已
+           實作） |
+      122 -| FE-07 | 全新 email 註冊 | 帶 `data.app = fare-finder-pro`； 
+          -需信箱驗證時顯示確認提示並切回登入模式 | 待驗 |               
+      123 -| FE-08 | 註冊時 email 已被別的 app 使用、且密碼**相符** | 依 
+          -現行程式碼：登入後 `updateUser({data:{app}})` 補標記並導向 das
+          -hboard | 已於 2026-09-21 執行，見測試報告。原本與 `docs/shared
+          --supabase-auth.md`、README 的描述有出入，兩份文件已於同日改成 
+          -描述實際行為 |                                                
+      124 -| FE-09 | 註冊時 email 已被別的 app 使用、密碼**不符** | 寄出 
+          -密碼重設信，顯示說明訊息並切回登入模式；點連結至 `/auth/reset`
+          - 設定新密碼後才補標記 | 待驗 |                                
+      122 +| FE-07 | 全新 email 註冊（只輸入 email） | 帶 `data.app = far
+          +e-finder-pro`、隨機密碼；顯示「請到信箱點擊連結設定密碼」並切 
+          +回登入模式；確認信連結導到 `/auth/reset`，設定密碼後進 dashboa
+          +rd，之後可用該密碼登入 | 2026-09-25 於 localhost 通過（新流程 
+          +） |                                                          
+      123 +| FE-08 | 註冊時 email 已有帳號（本 app 或別的 app） | 不動原 
+          +密碼；改寄重設信，畫面訊息與 FE-07 相同（不透露帳號是否存在） 
+          +；在 `/auth/reset` 設定密碼後才補標記 | 2026-09-25 於 localhos
+          +t 以本 app 既有帳號通過；別的 app 帳號走同一條程式路徑，未另測
+          +。（2026-09-25 前的「密碼相符直接加入」已移除） |             
+      124 +| FE-09 | 忘記密碼 | 登入頁「忘記密碼？」只輸入 email → 重設信
+          + → `/auth/reset` 設定新密碼 → dashboard | 2026-09-25 於 localh
+          +ost 通過 |                                                    
+      125  | FE-10 | 未登入直接開 `/dashboard` | 導向 `/auth` | 待驗 |
+      126  | FE-11 | 驗證信／重設信連結導向 | 導回 `localhost:8080`，不出
+           現 `otp_expired` 或導到無法開啟的網址 | 待驗（依 Redirect URLs
+            設定） |
+      127 +| FE-13 | 用密碼登入後直接開 `/auth/reset` | 不顯示設定密碼表 
+          +單（只接受信中連結 15 分鐘內建立的 session） | 2026-09-25 於 l
+          +ocalhost 通過 |                                               
+      128  | FE-12 | 登出 | 導向首頁 `/`（`handleSignOut` 的設計）、sessi
+           on 從 storage 清除；之後再開 `/dashboard` 被導到 `/auth` | 待
+           驗（程式碼有 `signOut`，handoff 無專門測試記錄） |
+      129  
+      130  ---
+
+⏺ Fixing the out-of-order FE-13 row in the test plan, then adding the sign-up
+  change to the handoff doc.
+
+⏺ Bash(python3 - <<'EOF'
+      p='docs/test-plan.md'; s=open(p,newline='').read(); crlf='\r\n' in s;
+      s=s.replace('\r\n','\n')…)
+  ⎿  127:| FE-12 | 登出 | 導向首頁 `/`（`handleSignOut` 的設計）、session
+     從
+      s
+     128:| FE-13 | 用密碼登入後直接開 `/auth/reset` |
+     不顯示設定密碼表單（只
+     接受信中連結 15
+  ⎿  Updated docs/test-plan.md (+1 -1)
+      124  | FE-09 | 忘記密碼 | 登入頁「忘記密碼？」只輸入 email → 重設信
+            → `/auth/reset` 設定新密碼 → dashboard | 2026-09-25 於 localh
+           ost 通過 |
+      125  | FE-10 | 未登入直接開 `/dashboard` | 導向 `/auth` | 待驗 |
+      126  | FE-11 | 驗證信／重設信連結導向 | 導回 `localhost:8080`，不出
+           現 `otp_expired` 或導到無法開啟的網址 | 待驗（依 Redirect URLs
+            設定） |
+      127 -| FE-13 | 用密碼登入後直接開 `/auth/reset` | 不顯示設定密碼表 
+          -單（只接受信中連結 15 分鐘內建立的 session） | 2026-09-25 於 l
+          -ocalhost 通過 |                                               
+      127  | FE-12 | 登出 | 導向首頁 `/`（`handleSignOut` 的設計）、sessi
+           on 從 storage 清除；之後再開 `/dashboard` 被導到 `/auth` | 待
+           驗（程式碼有 `signOut`，handoff 無專門測試記錄） |
+      128 +| FE-13 | 用密碼登入後直接開 `/auth/reset` | 不顯示設定密碼表 
+          +單（只接受信中連結 15 分鐘內建立的 session） | 2026-09-25 於 l
+          +ocalhost 通過 |                                               
+      129  
+      130  ---
+      131  
+
+⏺ Update(docs/m1-session-handoff.md)
+  ⎿  Added 13 lines
+      508  user, so neither was affected. Cleanup: subscription cancelled
+            through ECPay, `payment_required` back to false
+      509  (settings as before), test account deleted (its subscription r
+           ow went with it).
+      510  
+      511 +### Sign-up and forgot password take an email only (2026-09-25
+          +)                                                             
+      512 +                                                              
+      513 +The password is now always set on `/auth/reset` from an emaile
+          +d link: a new email gets                                      
+      514 +`signUp` with a throwaway random password (confirmation link →
+          + `/auth/reset`), an email                                     
+      515 +that already has an account gets a reset email, and the sign-i
+          +n page has a 忘記密碼 link.                                   
+      516 +All cases show one neutral message. `/auth/reset` opens only f
+          +or a session an email link                                    
+      517 +created (`PASSWORD_RECOVERY`, or an email `amr` under 15 minut
+          +es old). The old "matching                                    
+      518 +password at sign-up joins directly" path (FE-08, K-3) is gone.
+          + Verified on localhost with a                                 
+      519 +throwaway alias (deleted after): new sign-up, forgot password,
+          + sign-up with an existing                                     
+      520 +email (password unchanged), and a password session blocked fro
+          +m `/auth/reset`. Not tested                                   
+      521 +on the live domain, and not with an account that exists only i
+          +n another app. Docs:                                          
+      522 +README, `docs/shared-supabase-auth.md`, `docs/test-plan.md` (F
+          +E-07–09, FE-13).                                              
+      523 +                                                              
+      524  ## Project / environment facts (don't re-derive these)
+      525  
+      526  - **Shared multi-app Supabase project.** Other apps' migration
+           s live in the
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Yes, a few docs still described the old sign-up flow, and I've updated them.
+
+  - README.md: the code example in the Redirect URLs section now uses
+    /auth/reset?app=… instead of /?app=…, and notes that resetPasswordForEmail()
+    uses the same one.
+  - docs/change-site-url.md: the sign-up redirect in the domain-change checklist
+    now points to /auth/reset.
+  - docs/test-plan.md:
+    - FE-07 (new sign-up), FE-08 (email already has an account) and FE-09
+      (forgot password) now describe the new flow and today's localhost results.
+    - The old "password matches → joins directly" case is marked as removed.
+    - A new FE-13 covers "signed in with a password, then opening /auth/reset
+      shows no form".
+  - docs/m1-session-handoff.md: a new section records the sign-up change, what
+    was tested, and what wasn't: the live domain, and an account that exists
+    only in another app.
+
+  Left unchanged on purpose:
+  - docs/test-report.md: it records the 2026-09-21 test run (FE-08/09, K-3), so
+    rewriting it would change history. The handoff doc and test plan now note
+    those items are superseded.
+  - docs/shared-supabase-auth.md: its /?app= sits in a general example of how
+    the ?app= parameter works, not a description of this app's current code.
+  - CLAUDE.md and the auth sections of README and docs/shared-supabase-auth.md:
+    updated in the previous commit.
+  - The .claude/skills/ files: they're course instructions for the original
+    M1/M2 build, not a description of the current app.
+
+  These changes are not committed yet (4 files, docs only). Should I commit them
+  and push them to main like before?
+
+✻ Brewed for 50s · done 12:03 PM
+
+❯ test-report need update ?                                                     
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The report needs updating—it already includes the 2026-09-24 free-mode run but
+  is missing today's three runs (domain move, the + email bug, and the new
+  sign-up flow). I'll now read the sections that need changes.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I'll update the report by adding today's runs to the timeline, new results to
+  the FE table, logging the + email bug as defect D-7, and noting that K-3 is
+  superseded—leaving earlier records untouched.
+
+⏺ Bash(python3 - <<'EOF'
+      p='docs/test-report.md'…)
+  ⎿   docs/test-report.md | 25 +++++++++++++++----------
+      1 file changed, 15 insertions(+), 10 deletions(-)
+  ⎿  Updated docs/test-report.md (+15 -10)
+      1  # Flight Price Notifier 測試報告（Test Report）
+      2  
+      3 -報告日期：2026-09-21                                            
+      3 +報告日期：2026-09-21（最後更新 2026-09-25）                     
+      4  對應測試計畫：`docs/test-plan.md`
+      5  資料來源：`docs/m1-session-handoff.md`（各次測試的實測記錄）、`.
+         claude/skills/*-checklist`、
+      6  `no_1` ～ `no_5` 匯出的 session 記錄、`src/` 與 `supabase/` 程式
+         碼。
+     ...
+      17  | 項目 | 結果 |
+      18  |---|---|
+      19  | 受測版本 | M1（免費通知器）＋ M2（ECPay 付費牆）＋ M2 後續（
+          三種生命週期 email、取消修正、trigger 加固） |
+      20 -| 測試期間 | 2026-09-18（M1 驗收）～ 2026-09-21（補測至 91 個用
+         -例全部有記錄） |                                               
+      20 +| 測試期間 | 2026-09-18（M1 驗收）～ 2026-09-21（補測至 91 個用
+         +例全部有記錄）；2026-09-24 免費模式；2026-09-25 換網域與註冊流 
+         +程改版 |                                                       
+      21  | 測試環境 | `localhost:8080` ＋ 共用 Supabase 專案 `luugfvsraw
+          nuzwpjvddt` ＋ ECPay **stage**（特店 `3002607`） |
+      22  | 測試計畫用例數 | 91 |
+      23  | ✅ 通過 | **88** |
+      24  | 🟡 部分驗證（僅程式碼審查或缺少一環） | **3** |
+      25  | ⬜ 未執行（無測試記錄） | **0** |
+      26  | ❌ 最終失敗 | **0** |
+      27 -| 測試中發現並已修正的缺陷 | 6 項（見第 5 章） |               
+      27 +| 測試中發現並已修正的缺陷 | 7 項（見第 5 章） |               
+      28  | 開放中的已知問題 | 5 項（見第 6 章；K-3、K-7、K-8、K-9 已於 2
+          026-09-21 處理，K-6 已改善） |
+      29  
+      30  **結論：M1 與 M2 的後端功能與安全性驗收通過**（M2 checklist 21
+          ／21，含 ECPay 排程真實續扣 B4）；
+      31  阻擋項 F（使用者不能自我啟用付費）通過。
+      32  2026-09-21 補測後，**沒有任何用例失敗，也沒有用例缺少執行記錄**
+          ；仍有 3 項只驗到一部分（🟡，見第 7 章）。
+      33  2026-09-24 新增免費模式開關（計畫 8.8）10 項，9 項通過；P10（非
+           admin 只讀得到 `payment_required`）尚未實測。
+      34 +2026-09-25 網站改用 `https://flights.roberthut.com`，在新網域實
+         +測註冊與 ECPay 付款，並找到且修正 D-7（email 含 `+` 的使用者付 
+         +款後無法啟用）；同日註冊與忘記密碼改成只輸入 email，FE-07～09  
+         +依新流程重測，並新增 FE-13，皆通過（K-3 描述的路徑已移除）。   
+      35  補測同時找到幾個**需要決定或處理的問題**（K-6～K-9，見第 6 章）
+          ，最值得注意的是：**註冊確認信會進垃圾郵件**（K-6，已改善：範本
+          改版部署後，在另一個信箱進了收件匣；建議再加 DMARC 並持續觀察）
+          、
+      36  **註冊時「密碼相符」即自動補標記（不需驗證信箱）與文件描述不一
+          致**（K-3，已由實測確認，並已於 2026-09-21 把文件改成描述實際行
+          為）。
+      37  此外尚未使用正式 ECPay 特店，因此**可進入 M3 的後端條件已具備，
+          但上線前仍需處理第 6、7 章所列項目**。
+     ...
+      58  | 2026-09-21（再稍後） | **FE-06 重測**：先以唯讀 SQL 確認 `pm3
+          .demo@example.com` 的 `apps` 只有 `project-management`、從未登
+          入過，再由使用者自行輸入密碼登入 | 通過 |
+      59  | 2026-09-21 07:12–07:52Z | **註冊／重設／金流負面案例補測**：
+          建立一次性測試帳號 `k***+fe07a@gmail.com`（id `8b7871c2-…`）。0
+          7:12 FE-07 註冊；07:26 使用者點確認信連結（FE-11）；07:40–07:41
+           G5／G6／C3（自簽回呼）；07:45 E6（測試帳號 JWT 呼叫取消）；07:
+          47 FE-09（錯誤密碼註冊）；07:49 使用者點重設連結並設新密碼（FE-
+          09／FE-11）；07:51 FE-08（密碼相符註冊）。寫入資料庫的動作（測
+          試列、去除標記）皆由使用者以 `supabase db query` 執行 | 全部通
+          過；發現 K-6～K-9 |
+      60  | 2026-09-24 02:23–02:32Z | **免費模式開關（計畫 8.8，P1–P9）**
+          ：部署後在 `localhost:8080` 以 chrome-devtools 由使用者登入 adm
+          in 帳號 `k***@gmail.com` 操作。暫時把該帳號的 TPE-LON 列（原為 
+          ECPay `cancelled`）改成 `expired` 當測試列，測完依備份逐欄還原
+          ；`payment_required` 測完已切回 `true` | 通過（P10 未測） |
+      61 +| 2026-09-25 03:05–03:39Z | **網站改用 `https://flights.roberth
+         +ut.com`**（使用者要求在新網域實測）：`SITE_URL`、`ALLOWED_ORIGI
+         +NS`、Auth Redirect URLs 更新後，`flight-ecpay-result` 以 curl  
+         +測 4 種 origin；一次性帳號 `k***+flights0925@gmail.com` 註冊→確
+         +認信連結導回新網域；暫時開啟 `payment_required` 走 stage 付款：
+         +第 1 次付款成功但訂閱未啟用（**D-7**），修正部署後第 2 次卡片被
+         + ECPay 拒（`10100058`，處理正確），第 3 次啟用並寄歡迎信；之後 
+         +取消訂閱、關回 `payment_required`、刪除測試帳號 | 通過（D-7 已 
+         +修正） |                                                       
+      62 +| 2026-09-25 03:52–03:56Z | **註冊／忘記密碼改成只輸入 email** 
+         +（`localhost:8080`，一次性帳號 `k***+pwlink0925@gmail.com`，測 
+         +完刪除）：FE-07 新註冊、FE-13 密碼 session 開 `/auth/reset`、FE
+         +-09 忘記密碼、FE-08 既有 email 再註冊 | 通過 |                 
+      63  
+      64  ---
+      65  
+     ...
+      67  
+      68  | 章節 | 用例數 | ✅ | 🟡 | ⬜ | ❌ |
+     … 43 more lines (ctrl+o to expand)
+
+⏺ Yes, it needed updating, and I've done it in docs/test-report.md. Earlier test
+  records are kept as they were and marked as old-flow records.
+
+  - Header: the report date now reads "最後更新 2026-09-25".
+  - Summary:
+    - The test period now includes 2026-09-24 and 2026-09-25.
+    - Fixed defects go from 6 to 7.
+    - A new paragraph covers today's work: the domain move, finding and fixing
+      D-7, and the new sign-up flow.
+  - Results table: front-end tests go from 12 to 13 (FE-13 added), and the total
+    from 101 to 102 (98 passed).
+  - Timeline: two rows for 2026-09-25:
+    - The new-domain test: sign-up redirect, the three payment attempts, and
+      cleanup.
+    - The new sign-up flow on localhost.
+  - Front-end results:
+    - FE-07, FE-08 and FE-09 each start with the 2026-09-25 retest under the new
+      flow, followed by the old record marked "以下為舊流程紀錄".
+    - FE-08's note also says the "matching password" path is removed, and that
+      an account existing only in another app wasn't tested.
+    - FE-11 adds the new-domain redirect result.
+    - New FE-13 row: a password session can't open /auth/reset.
+  - New defect D-7: the + email bug, with its cause, the fix, and the post-fix
+    check. The log line confirmed the cause.
+  - K-3: marked as no longer applicable from 2026-09-25, since that path was
+    removed.
+
+  Along with the four doc files from before, that makes 5 uncommitted files, all
+  docs. Should I commit them and push to main?
+✻ Sautéed for 51s · done 12:06 PM
+
+※ recap: You moved the site to flights.roberthut.com and switched sign-up and forgot-password to email-only; both are tested and pushed. Five updated docs, including the test report, still need your go-ahead to commit and push to main.
+
+❯ commit it                                                                     
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I committed the 5 doc files on multi-app as b6c35c8.
+
+  It isn't pushed or merged into main yet. Want me to merge it into main and
+  push, like before? It only changes docs, so the site itself won't change.
+
+✻ Baked for 8s · done 12:47 PM
