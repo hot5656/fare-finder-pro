@@ -24,14 +24,50 @@ export const Route = createFileRoute("/auth/")({
   component: AuthPage,
 });
 
+// Sign-up and "forgot password" take an email only; the password is set on
+// /auth/reset after the emailed link proves the address. Sign-up still has to
+// hand Supabase a password, so it gets a random one nobody ever sees.
+function throwawayPassword(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...bytes));
+}
+
+// Same message whether the email was new, already used by another app, or
+// unknown, so the page never tells a visitor which addresses have accounts.
+const CHECK_EMAIL_NOTICE =
+  "請到信箱點擊連結設定密碼。若此 email 已在其他共用此帳號系統的服務註冊過，" +
+  "設定的密碼也會成為那些服務的登入密碼。 / Check your email for a link to set your password.";
+
+type Mode = "sign-in" | "sign-up" | "forgot";
+
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
+  const [mode, setMode] = useState<Mode>("sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  function switchMode(next: Mode) {
+    setMode(next);
+    setError(null);
+    setNotice(null);
+  }
+
+  // ?app= lets the shared send-email hook pick this app's sender and subject.
+  const setPasswordUrl = () => `${window.location.origin}/auth/reset?app=${APP_NAME}`;
+
+  async function sendResetLink(): Promise<boolean> {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: setPasswordUrl(),
+    });
+    if (error) {
+      setError(error.message);
+      return false;
+    }
+    return true;
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -49,8 +85,8 @@ function AuthPage() {
       if (!hasAppAccess(data.user?.app_metadata)) {
         // Correct password, but this account was never registered for this
         // app specifically — reject here rather than auto-joining. Joining
-        // only happens through the explicit sign-up flow below (matched
-        // password or a verified password reset), never just by signing in.
+        // only happens through a verified email link (sign-up or forgot
+        // password, then /auth/reset), never just by signing in.
         await supabase.auth.signOut();
         setError("Invalid login credentials");
         setLoading(false);
@@ -60,12 +96,22 @@ function AuthPage() {
       return;
     }
 
+    if (mode === "forgot") {
+      const sent = await sendResetLink();
+      setLoading(false);
+      if (sent) {
+        setNotice(CHECK_EMAIL_NOTICE);
+        setMode("sign-in");
+      }
+      return;
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
-      password,
+      password: throwawayPassword(),
       options: {
-        // ?app= lets the shared send-email hook pick this app's sender and subject.
-        emailRedirectTo: `${window.location.origin}/?app=${APP_NAME}`,
+        // The confirmation link lands on the set-password page.
+        emailRedirectTo: setPasswordUrl(),
         data: { app: APP_NAME },
       },
     });
@@ -83,39 +129,25 @@ function AuthPage() {
       return;
     }
 
-    if (alreadyRegistered) {
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (!signInError && signInData.user) {
-        await supabase.auth.updateUser({ data: { app: APP_NAME } });
-        await supabase.auth.refreshSession();
-        setLoading(false);
-        navigate({ to: "/dashboard" });
-        return;
-      }
-      // Password didn't match the existing account — only a click on the
-      // emailed link can change it, never an unauthenticated guess.
-      await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset?app=${APP_NAME}`,
-      });
+    if (alreadyRegistered || data.session) {
+      // An existing account (another app's, or already confirmed) keeps its
+      // password until the owner sets a new one from the emailed reset link,
+      // which is also where this app's tag is added. A session here would mean
+      // email confirmation is off; its password is the throwaway one, so drop
+      // it and send the same link.
+      if (data.session) await supabase.auth.signOut();
+      const sent = await sendResetLink();
       setLoading(false);
-      setNotice(
-        "此 email 已有帳號。我們已寄送一封密碼重設信，請至信箱點擊連結設定密碼以啟用本服務。" +
-          "注意：重設後的新密碼將同步成為您在所有共用此帳號系統之服務的登入密碼。",
-      );
-      setMode("sign-in");
+      if (sent) {
+        setNotice(CHECK_EMAIL_NOTICE);
+        setMode("sign-in");
+      }
       return;
     }
 
     setLoading(false);
-    if (!data.session) {
-      setNotice("Check your email to confirm your account, then sign in. 請到信箱收確認信。");
-      setMode("sign-in");
-      return;
-    }
-    navigate({ to: "/dashboard" });
+    setNotice(CHECK_EMAIL_NOTICE);
+    setMode("sign-in");
   }
 
   return (
@@ -124,12 +156,18 @@ function AuthPage() {
       <main className="mx-auto flex max-w-md flex-col justify-center px-4 py-16 sm:py-24">
         <div className="rounded-2xl border border-border bg-card p-8 shadow-xl">
           <h1 className="text-2xl font-bold tracking-tight">
-            {mode === "sign-in" ? "Welcome back．登入" : "Create account．註冊"}
+            {mode === "sign-in"
+              ? "Welcome back．登入"
+              : mode === "sign-up"
+                ? "Create account．註冊"
+                : "Forgot password．忘記密碼"}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {mode === "sign-in"
               ? "Sign in to manage your fare alerts."
-              : "Create an account to start tracking fares."}
+              : mode === "sign-up"
+                ? "輸入 email，我們會寄出連結讓你設定密碼。 / Enter your email and we'll send a link to set your password."
+                : "輸入 email，我們會寄出重設密碼的連結。 / Enter your email and we'll send a link to reset your password."}
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
@@ -148,22 +186,24 @@ function AuthPage() {
                 className="w-full rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
-            <div>
-              <label htmlFor="password" className="mb-1.5 block text-sm font-medium">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                required
-                minLength={6}
-                autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
+            {mode === "sign-in" && (
+              <div>
+                <label htmlFor="password" className="mb-1.5 block text-sm font-medium">
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  required
+                  minLength={6}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            )}
 
             {error && (
               <p role="alert" className="text-sm text-destructive">
@@ -181,22 +221,27 @@ function AuthPage() {
                 ? "Please wait…"
                 : mode === "sign-in"
                   ? "Sign in / 登入"
-                  : "Create account / 註冊"}
+                  : mode === "sign-up"
+                    ? "Send sign-up link / 寄送註冊連結"
+                    : "Send reset link / 寄送重設連結"}
             </button>
           </form>
 
+          {mode === "sign-in" && (
+            <button
+              type="button"
+              onClick={() => switchMode("forgot")}
+              className="mt-4 w-full text-center text-sm text-muted-foreground hover:underline"
+            >
+              Forgot password? 忘記密碼？
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => {
-              setMode(mode === "sign-in" ? "sign-up" : "sign-in");
-              setError(null);
-              setNotice(null);
-            }}
+            onClick={() => switchMode(mode === "sign-in" ? "sign-up" : "sign-in")}
             className="mt-6 w-full text-center text-sm font-medium text-primary hover:underline"
           >
-            {mode === "sign-in"
-              ? "No account yet? Create one"
-              : "Already have an account? Sign in"}
+            {mode === "sign-in" ? "No account yet? Create one" : "Already have an account? Sign in"}
           </button>
         </div>
       </main>

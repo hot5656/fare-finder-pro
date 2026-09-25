@@ -61,26 +61,28 @@ WHERE tgrelid = 'auth.users'::regclass AND NOT tgisinternal;
 
 ### 註冊時 email 已被別的 app 使用：`fare-finder-pro` 的實際行為
 
-`fare-finder-pro` 在註冊頁遇到已存在的 email（Supabase 可能回明確錯誤，也可能回一個 `identities` 為空的假成功，兩種都要處理）時，分兩種情況：
+> 2026-09-25 更新：註冊與忘記密碼改成只輸入 email，「密碼相符直接加入」已移除。
 
-1. **密碼相符**：直接以該密碼登入，補上標記，導向 dashboard。**不需要驗證信箱。**
-2. **密碼不符**：不登入，改寄密碼重設信並顯示說明；使用者點信件連結、在 `/auth/reset` 設定新密碼之後才補標記。
+`fare-finder-pro` 的註冊頁只輸入 email，密碼一律在信中連結導到的 `/auth/reset` 設定：
 
-參考實作：`src/routes/auth/index.tsx`（註冊流程）、`src/routes/auth/reset.tsx`（重設後補標記）。
+1. **全新 email**：以使用者看不到的隨機密碼呼叫 `signUp`（Supabase 一定要密碼），確認信連結導到 `/auth/reset`，使用者在那裡設定真正的密碼。
+2. **已存在的 email**（Supabase 可能回明確錯誤，也可能回一個 `identities` 為空的假成功，兩種都要處理）：不動原密碼、不登入，改寄密碼重設信；使用者點信件連結、在 `/auth/reset` 設定新密碼之後才補標記。
+3. **忘記密碼**：登入頁只輸入 email，寄同一種重設信。
 
-**為什麼密碼相符可以直接加入**：走到這條路徑必須已經知道該帳號的密碼；而知道密碼的人本來就能登入其他 app，再用 `updateUser` 自己加上標籤（見上面「標籤是什麼、不是什麼」）。所以這條路徑沒有給出額外的存取能力，只是省去多餘的信箱驗證。它跟「登入頁自動補標記」的差別在於**意圖**：前者是使用者在註冊頁明確要求加入，後者是登入時的隱含副作用，不是安全強度的差別。
+三種情況畫面都顯示同一段訊息，不透露 email 是否已有帳號。`/auth/reset` 只接受信中連結剛建立的 session（`PASSWORD_RECOVERY` 事件，或 access token 的 `amr` 在 15 分鐘內來自 email 連結），用密碼登入的 session 打不開表單。
 
-新 app 可以沿用這個行為；若想更嚴格（例如密碼相符也一律要求先驗證信箱），也可以，但請在該 app 自己的文件寫清楚，並確保不要在登入頁補標記。
+參考實作：`src/routes/auth/index.tsx`（註冊、忘記密碼）、`src/routes/auth/reset.tsx`（設定密碼並補標記）。
+
+新 app 可以沿用這個行為，或保留「註冊時密碼相符直接加入」（知道密碼的人本來就能登入其他 app 再用 `updateUser` 自己加標籤，所以不會給出額外的存取能力）；不管哪種，請在該 app 自己的文件寫清楚，並確保不要在登入頁補標記。
 
 ### 加入某個 app 的合法路徑
 
-「使用者或管理員明確採取一個動作才加入」實際上有三種：
+「使用者或管理員明確採取一個動作才加入」在 `fare-finder-pro` 有兩種（其他 app 可能還有「註冊時密碼相符」這一種，見上）：
 
-1. **使用者走 signup，且密碼相符**：見上，直接補標記。
-2. **使用者走 signup，但密碼不符**：導去密碼重設流程，使用者驗證過信箱身份、設定新密碼後才補標記。
-3. **管理員在自己 app 後台建帳號時撞到既有帳號**：`auth.admin.createUser()` 對已存在的 email 一定會失敗（`auth.users` 的 email 在整個 project 是唯一的），這時改成「掛靠既有身份」——不建立新帳號、不改密碼，只幫既有帳號補上這個 app 需要的資料，並把自己的 app 名稱**合併**進 `app_metadata.apps`（用 spread 保留其他 app 既有的標記，不要整個覆寫掉）。參考實作：`web_project_management` repo 的 `app/(protected)/users/new/actions.ts` 的 `linkExistingAccountToThisApp()`。
+1. **使用者在本 app 的註冊或忘記密碼流程中點了信中連結**：驗證過信箱身份、在 `/auth/reset` 設定密碼後才補標記。
+2. **管理員在自己 app 後台建帳號時撞到既有帳號**：`auth.admin.createUser()` 對已存在的 email 一定會失敗（`auth.users` 的 email 在整個 project 是唯一的），這時改成「掛靠既有身份」——不建立新帳號、不改密碼，只幫既有帳號補上這個 app 需要的資料，並把自己的 app 名稱**合併**進 `app_metadata.apps`（用 spread 保留其他 app 既有的標記，不要整個覆寫掉）。參考實作：`web_project_management` repo 的 `app/(protected)/users/new/actions.ts` 的 `linkExistingAccountToThisApp()`。
 
-三種都合法，因為都是「透過某個 app 自己的流程、且由使用者本人或管理員明確採取了一個動作才加入」，跟登入頁的隱含自動補標記（上面明文禁止的作法）性質不同。
+兩種都合法，因為都是「透過某個 app 自己的流程、且由使用者本人或管理員明確採取了一個動作才加入」，跟登入頁的隱含自動補標記（上面明文禁止的作法）性質不同。
 
 ## 驗證信的寄件識別：每個 app 在 redirect_to 帶 `?app=`
 

@@ -1,15 +1,38 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { APP_NAME } from "@/integrations/supabase/app-scope";
 import { SiteHeader } from "@/components/SiteHeader";
 
 export const Route = createFileRoute("/auth/reset")({
   head: () => ({
-    meta: [{ title: "Reset password — Flight Price Notifier" }],
+    meta: [{ title: "Set password — Flight Price Notifier" }],
   }),
   component: ResetPasswordPage,
 });
+
+// Both emailed links land here: the password-reset link (PASSWORD_RECOVERY)
+// and the sign-up confirmation link (a plain sign-in, since sign-up no longer
+// takes a password). Accept a session only if an email link created it just
+// now: the token's `amr` records how the user authenticated, so a session
+// from a password sign-in can't open this form.
+const EMAIL_LINK_METHODS = new Set(["otp", "recovery", "magiclink", "email/signup"]);
+const EMAIL_LINK_MAX_AGE_S = 15 * 60;
+
+function fromEmailLink(session: Session | null): boolean {
+  if (!session) return false;
+  try {
+    const b64 = (session.access_token.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/");
+    const claims = JSON.parse(atob(b64)) as { amr?: { method: string; timestamp: number }[] };
+    const now = Date.now() / 1000;
+    return (claims.amr ?? []).some(
+      (a) => EMAIL_LINK_METHODS.has(a.method) && now - a.timestamp < EMAIL_LINK_MAX_AGE_S,
+    );
+  } catch {
+    return false;
+  }
+}
 
 function ResetPasswordPage() {
   const navigate = useNavigate();
@@ -19,8 +42,8 @@ function ResetPasswordPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") setReady(true);
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY" || fromEmailLink(session)) setReady(true);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -49,14 +72,14 @@ function ResetPasswordPage() {
       <SiteHeader />
       <main className="mx-auto flex max-w-md flex-col justify-center px-4 py-16 sm:py-24">
         <div className="rounded-2xl border border-border bg-card p-8 shadow-xl">
-          <h1 className="text-2xl font-bold tracking-tight">Set a new password．設定新密碼</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Set your password．設定密碼</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             注意：這組新密碼將成為您在所有共用此帳號系統之服務的登入密碼。
           </p>
 
           {!ready ? (
             <p className="mt-6 text-sm text-muted-foreground">
-              正在確認重設連結，請稍候…如果這裡卡住，請確認你是從信箱裡的連結點進來的。
+              正在確認連結，請稍候…如果這裡卡住，請確認你是從信箱裡的連結點進來的。
             </p>
           ) : (
             <form onSubmit={handleSubmit} className="mt-8 space-y-4">
