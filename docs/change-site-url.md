@@ -25,7 +25,7 @@ supabase secrets set SITE_URL=https://flights.yourco.com
 
 Supabase Dashboard → Authentication → URL Configuration：
 
-- **Redirect URLs** 加上 `https://flights.yourco.com/**`。註冊驗證信、密碼重設信的 `redirect_to` 是依使用者當下瀏覽器的 origin 產生的（`src/routes/auth/index.tsx` 的 `emailRedirectTo: ${origin}/?app=…`）；這個 origin 不在清單上，Supabase 就會拒絕導回，改用 Site URL。
+- **Redirect URLs** 加上 `https://flights.yourco.com/**`。註冊驗證信、密碼重設信的 `redirect_to` 是依使用者當下瀏覽器的 origin 產生的（`src/routes/auth/index.tsx` 的 `${origin}/auth/reset?app=…`，註冊與忘記密碼都導到這裡）；這個 origin 不在清單上，Supabase 就會拒絕導回，改用 Site URL。
 - **Site URL**：這是多 app 共用的設定，別隨意改成 flight 專用網域，除非確定其他 app 不依賴它。
 
 ### 3. Vercel 網域

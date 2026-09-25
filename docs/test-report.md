@@ -1,6 +1,6 @@
 # Flight Price Notifier 測試報告（Test Report）
 
-報告日期：2026-09-21
+報告日期：2026-09-21（最後更新 2026-09-25）
 對應測試計畫：`docs/test-plan.md`
 資料來源：`docs/m1-session-handoff.md`（各次測試的實測記錄）、`.claude/skills/*-checklist`、
 `no_1` ～ `no_5` 匯出的 session 記錄、`src/` 與 `supabase/` 程式碼。
@@ -17,20 +17,21 @@
 | 項目 | 結果 |
 |---|---|
 | 受測版本 | M1（免費通知器）＋ M2（ECPay 付費牆）＋ M2 後續（三種生命週期 email、取消修正、trigger 加固） |
-| 測試期間 | 2026-09-18（M1 驗收）～ 2026-09-21（補測至 91 個用例全部有記錄） |
+| 測試期間 | 2026-09-18（M1 驗收）～ 2026-09-21（補測至 91 個用例全部有記錄）；2026-09-24 免費模式；2026-09-25 換網域與註冊流程改版 |
 | 測試環境 | `localhost:8080` ＋ 共用 Supabase 專案 `luugfvsrawnuzwpjvddt` ＋ ECPay **stage**（特店 `3002607`） |
 | 測試計畫用例數 | 91 |
 | ✅ 通過 | **88** |
 | 🟡 部分驗證（僅程式碼審查或缺少一環） | **3** |
 | ⬜ 未執行（無測試記錄） | **0** |
 | ❌ 最終失敗 | **0** |
-| 測試中發現並已修正的缺陷 | 6 項（見第 5 章） |
+| 測試中發現並已修正的缺陷 | 7 項（見第 5 章） |
 | 開放中的已知問題 | 5 項（見第 6 章；K-3、K-7、K-8、K-9 已於 2026-09-21 處理，K-6 已改善） |
 
 **結論：M1 與 M2 的後端功能與安全性驗收通過**（M2 checklist 21／21，含 ECPay 排程真實續扣 B4）；
 阻擋項 F（使用者不能自我啟用付費）通過。
 2026-09-21 補測後，**沒有任何用例失敗，也沒有用例缺少執行記錄**；仍有 3 項只驗到一部分（🟡，見第 7 章）。
 2026-09-24 新增免費模式開關（計畫 8.8）10 項，9 項通過；P10（非 admin 只讀得到 `payment_required`）尚未實測。
+2026-09-25 網站改用 `https://flights.roberthut.com`，在新網域實測註冊與 ECPay 付款，並找到且修正 D-7（email 含 `+` 的使用者付款後無法啟用）；同日註冊與忘記密碼改成只輸入 email，FE-07～09 依新流程重測，並新增 FE-13，皆通過（K-3 描述的路徑已移除）。
 補測同時找到幾個**需要決定或處理的問題**（K-6～K-9，見第 6 章），最值得注意的是：**註冊確認信會進垃圾郵件**（K-6，已改善：範本改版部署後，在另一個信箱進了收件匣；建議再加 DMARC 並持續觀察）、
 **註冊時「密碼相符」即自動補標記（不需驗證信箱）與文件描述不一致**（K-3，已由實測確認，並已於 2026-09-21 把文件改成描述實際行為）。
 此外尚未使用正式 ECPay 特店，因此**可進入 M3 的後端條件已具備，但上線前仍需處理第 6、7 章所列項目**。
@@ -57,6 +58,8 @@
 | 2026-09-21（再稍後） | **FE-06 重測**：先以唯讀 SQL 確認 `pm3.demo@example.com` 的 `apps` 只有 `project-management`、從未登入過，再由使用者自行輸入密碼登入 | 通過 |
 | 2026-09-21 07:12–07:52Z | **註冊／重設／金流負面案例補測**：建立一次性測試帳號 `k***+fe07a@gmail.com`（id `8b7871c2-…`）。07:12 FE-07 註冊；07:26 使用者點確認信連結（FE-11）；07:40–07:41 G5／G6／C3（自簽回呼）；07:45 E6（測試帳號 JWT 呼叫取消）；07:47 FE-09（錯誤密碼註冊）；07:49 使用者點重設連結並設新密碼（FE-09／FE-11）；07:51 FE-08（密碼相符註冊）。寫入資料庫的動作（測試列、去除標記）皆由使用者以 `supabase db query` 執行 | 全部通過；發現 K-6～K-9 |
 | 2026-09-24 02:23–02:32Z | **免費模式開關（計畫 8.8，P1–P9）**：部署後在 `localhost:8080` 以 chrome-devtools 由使用者登入 admin 帳號 `k***@gmail.com` 操作。暫時把該帳號的 TPE-LON 列（原為 ECPay `cancelled`）改成 `expired` 當測試列，測完依備份逐欄還原；`payment_required` 測完已切回 `true` | 通過（P10 未測） |
+| 2026-09-25 03:05–03:39Z | **網站改用 `https://flights.roberthut.com`**（使用者要求在新網域實測）：`SITE_URL`、`ALLOWED_ORIGINS`、Auth Redirect URLs 更新後，`flight-ecpay-result` 以 curl 測 4 種 origin；一次性帳號 `k***+flights0925@gmail.com` 註冊→確認信連結導回新網域；暫時開啟 `payment_required` 走 stage 付款：第 1 次付款成功但訂閱未啟用（**D-7**），修正部署後第 2 次卡片被 ECPay 拒（`10100058`，處理正確），第 3 次啟用並寄歡迎信；之後取消訂閱、關回 `payment_required`、刪除測試帳號 | 通過（D-7 已修正） |
+| 2026-09-25 03:52–03:56Z | **註冊／忘記密碼改成只輸入 email**（`localhost:8080`，一次性帳號 `k***+pwlink0925@gmail.com`，測完刪除）：FE-07 新註冊、FE-13 密碼 session 開 `/auth/reset`、FE-09 忘記密碼、FE-08 既有 email 再註冊 | 通過 |
 
 ---
 
@@ -64,13 +67,13 @@
 
 | 章節 | 用例數 | ✅ | 🟡 | ⬜ | ❌ |
 |---|---:|---:|---:|---:|---:|
-| 6 前端與登入（FE） | 12 | 12 | 0 | 0 | 0 |
+| 6 前端與登入（FE） | 13 | 13 | 0 | 0 | 0 |
 | 7 M1（A–L） | 28 | 27 | 1 | 0 | 0 |
 | 8 M2（A–G） | 38 | 38 | 0 | 0 | 0 |
 | 8.8 免費模式開關（P） | 10 | 9 | 0 | 1 | 0 |
 | 9 資料庫與 auth trigger（DB） | 5 | 5 | 0 | 0 | 0 |
 | 10 安全（SEC） | 8 | 6 | 2 | 0 | 0 |
-| **合計** | **101** | **97** | **3** | **1** | **0** |
+| **合計** | **102** | **98** | **3** | **1** | **0** |
 
 圖例：✅ 有實測證據　🟡 僅程式碼審查或只驗證一部分　⬜ 沒有測試記錄
 
@@ -90,10 +93,11 @@
 | FE-10 未登入開 `/dashboard` | ✅ | 導向 `/auth` |
 | FE-12 登出 | ✅ | 2026-09-21：按 Sign out / 登出 → `POST /auth/v1/logout?scope=global` 回 204、session 從 localStorage 清除、導向首頁 `/`（符合 `handleSignOut` 的 `navigate({ to: "/" })`；原測試計畫寫成 `/auth`，已更正計畫）；再開 `/dashboard` → 導向 `/auth` |
 | FE-06 未標記帳號被拒 | ✅ | **重測通過（第二次嘗試）**。2026-09-21 07:01Z，使用者自行輸入密碼，以 `pm3.demo@example.com`（`project-management` 示範帳號，事前以唯讀 SQL 確認 `apps = ["project-management"]`、`user_metadata.app` 為空、信箱已驗證、從未登入）登入：`token?grant_type=password` 回 **200**（密碼正確）、回應 `apps = ["project-management"]`（不含 `fare-finder-pro`）→ 約 0.36 秒後前端呼叫 `logout?scope=global` 回 204 → 畫面顯示 "Invalid login credentials"、停在 `/auth`、localStorage 無 session、未進 `/dashboard`。**事後資料庫查詢**：`apps` 仍為 `["project-management"]`、`user_metadata.app` 仍為空，證明登入頁沒有自動補標記（符合嚴格隔離）。首次嘗試（06:51Z，`pm.demo@example.com`）因該帳號已帶標記而無效，見 4.6 |
-| FE-07 全新 email 註冊 | ✅ | 2026-09-21 07:12Z，用 `k***+fe07a@gmail.com`：`signup?redirect_to=https://fare-finder-pro.vercel.app` 回 200、`hasSession: false`；請求 body 帶 `data: {app: "fare-finder-pro"}`；畫面顯示 "Check your email to confirm your account…" 並切回登入模式；資料庫：帳號建立、`apps = ["fare-finder-pro"]`、`email_confirmed_at` 為空（等待驗證）。`send-email` hook 回 200。**確認信實際進了垃圾郵件匣**（見 K-6） |
-| FE-08 既有 email、密碼相符 | ✅ | 2026-09-21 07:51Z，帳號事前以 SQL 去除標記，用**正確密碼**走註冊流程：`signup` 回 200（`identities: 0`，obfuscated）→ 隨即以該密碼 `token?grant_type=password` 回 200 → `PUT /user` 送 `data: {app: "fare-finder-pro"}` 回 200 → `refresh_token` 換發後 `apps = ["fare-finder-pro"]` → 進入 `/dashboard`；資料庫確認標記已補上。**行為**：密碼相符時**不需驗證信箱**即自動補標記並登入，與 `docs/shared-supabase-auth.md`／README 原本「只走重設流程」的描述不一致（兩份文件已於 2026-09-21 改成描述實際行為），見 K-3 |
-| FE-09 既有 email、密碼不符 | ✅ | 2026-09-21 07:47Z，帳號事前去除標記，用**錯誤密碼**走註冊流程：`signup` 200（`identities: 0`、無 session、`apps` null）→ `token` 400 `invalid_credentials` → `recover?redirect_to=…/auth/reset` 200；畫面顯示「此 email 已有帳號。我們已寄送一封密碼重設信…」並切回登入模式；沒有 session；資料庫 `apps` 仍為空。07:49:19Z 使用者點重設連結、`/auth/reset` 出現設定密碼表單；07:49:26Z 設好新密碼後 `apps` 才變成 `["fare-finder-pro"]`；舊密碼登入 400、新密碼 200。重設流程為 implicit（storage 無 code verifier），連結可在任何瀏覽器開啟 |
-| FE-11 驗證信／重設信連結導向 | ✅ | 註冊確認連結：使用者於 07:26:45Z 點擊，最終網址 `https://fare-finder-pro.vercel.app/#`（token 已被 supabase-js 從網址列清除），無 `otp_expired`／`access_denied`，帳號變為已驗證且已登入。重設連結：導向 `https://fare-finder-pro.vercel.app/auth/reset`，可完成密碼設定並自動登入。**兩者導向皆通過；但確認信進垃圾郵件**（K-6）。重設信的所在資料夾未記錄 |
+| FE-07 全新 email 註冊 | ✅ | **2026-09-25 依新流程重測**（只輸入 email，localhost）：`signup?redirect_to=…/auth/reset?app=fare-finder-pro` 200，帳號建立且 `apps = ["fare-finder-pro"]`；畫面顯示「請到信箱點擊連結設定密碼」；確認信進收件匣，連結開啟 `/auth/reset` 的設定密碼表單，設定後進入 dashboard，之後以該密碼登入成功。**以下為舊流程紀錄**：2026-09-21 07:12Z，用 `k***+fe07a@gmail.com`：`signup?redirect_to=https://fare-finder-pro.vercel.app` 回 200、`hasSession: false`；請求 body 帶 `data: {app: "fare-finder-pro"}`；畫面顯示 "Check your email to confirm your account…" 並切回登入模式；資料庫：帳號建立、`apps = ["fare-finder-pro"]`、`email_confirmed_at` 為空（等待驗證）。`send-email` hook 回 200。**確認信實際進了垃圾郵件匣**（見 K-6） |
+| FE-08 既有 email（原：密碼相符） | ✅ | **2026-09-25 依新流程重測**（註冊頁不再有密碼欄，「密碼相符直接加入」已移除）：以本 app 既有帳號再註冊 → `signup` 200（obfuscated）→ `recover?redirect_to=…/auth/reset` 200，畫面訊息與 FE-07 相同（不透露帳號已存在），原密碼仍可登入。只存在於別的 app 的帳號走同一段程式，未另測。**以下為舊流程紀錄**：2026-09-21 07:51Z，帳號事前以 SQL 去除標記，用**正確密碼**走註冊流程：`signup` 回 200（`identities: 0`，obfuscated）→ 隨即以該密碼 `token?grant_type=password` 回 200 → `PUT /user` 送 `data: {app: "fare-finder-pro"}` 回 200 → `refresh_token` 換發後 `apps = ["fare-finder-pro"]` → 進入 `/dashboard`；資料庫確認標記已補上。**行為**：密碼相符時**不需驗證信箱**即自動補標記並登入，與 `docs/shared-supabase-auth.md`／README 原本「只走重設流程」的描述不一致（兩份文件已於 2026-09-21 改成描述實際行為），見 K-3 |
+| FE-09 忘記密碼（原：既有 email、密碼不符） | ✅ | **2026-09-25 新流程**：登入頁「忘記密碼？」只輸入 email → `recover` 200 → 重設信進收件匣 → 連結開啟 `/auth/reset` 表單 → 設定新密碼後進 dashboard。**以下為舊流程（既有 email 密碼不符）紀錄**：2026-09-21 07:47Z，帳號事前去除標記，用**錯誤密碼**走註冊流程：`signup` 200（`identities: 0`、無 session、`apps` null）→ `token` 400 `invalid_credentials` → `recover?redirect_to=…/auth/reset` 200；畫面顯示「此 email 已有帳號。我們已寄送一封密碼重設信…」並切回登入模式；沒有 session；資料庫 `apps` 仍為空。07:49:19Z 使用者點重設連結、`/auth/reset` 出現設定密碼表單；07:49:26Z 設好新密碼後 `apps` 才變成 `["fare-finder-pro"]`；舊密碼登入 400、新密碼 200。重設流程為 implicit（storage 無 code verifier），連結可在任何瀏覽器開啟 |
+| FE-11 驗證信／重設信連結導向 | ✅ | 註冊確認連結：使用者於 07:26:45Z 點擊，最終網址 `https://fare-finder-pro.vercel.app/#`（token 已被 supabase-js 從網址列清除），無 `otp_expired`／`access_denied`，帳號變為已驗證且已登入。重設連結：導向 `https://fare-finder-pro.vercel.app/auth/reset`，可完成密碼設定並自動登入。**兩者導向皆通過；但確認信進垃圾郵件**（K-6）。重設信的所在資料夾未記錄。**2026-09-25 新網域**：確認信 `redirect_to=https://flights.roberthut.com/?app=fare-finder-pro`，連結導回新網域並已登入 |
+| FE-13 用密碼登入後開 `/auth/reset` | ✅ | 2026-09-25（localhost）：以密碼登入後開 `/auth/reset?app=fare-finder-pro`，4 秒後仍只顯示「正在確認連結」、沒有表單（access token 的 `amr` 為 `password`，不是 15 分鐘內的 email 連結） |
 
 **另外已於瀏覽器確認的前端項目**（不在計畫編號內，來自 handoff）：
 
@@ -303,6 +307,7 @@
 | D-4 | dashboard 按鈕（Tailwind v4）無 pointer 游標，確定取消 無 hover／busy 狀態，看起來像壞掉 | 使用者回報 | 全域 `button:not(:disabled) { cursor: pointer }`；確定取消／保留 重做為真按鈕，含 hover、focus ring、disabled 與 `取消中…`；瀏覽器確認 |
 | D-5 | `flight.tag_app_metadata_on_signup()` 為 SECURITY DEFINER 且 `PUBLIC` 可執行；註解稱 `app_metadata` "tamper-proof" 不準確 | Supabase advisor | 驗證**不可利用**後仍套用 `20260920110000_flight_tag_app_metadata_hardening`（撤銷 PUBLIC／anon／authenticated 的 EXECUTE）；更正 `app-scope.ts` 註解。標籤本身為使用者自訂之設計問題保留為 B-1 |
 | D-6 | 設計缺口：ECPay 6 次失敗後靜默終止，`active` 列會永遠留著並持續被通知；此外使用者在續扣成功、續扣失敗、期滿時沒有任何通知 | M2 後續審視 | parser 新增規則（`active` 逾期超過 `RENEWAL_GRACE_DAYS`=7 → `expired`）；新增 `expired`、`payment_failed`、`renewed` 三種 email，皆以 `update … returning` 或欄位旗標保證每事件只寄一次；皆已驗證 |
+| D-7 | email 含 `+` 的使用者付款成功後訂閱不會啟用：`flight-ecpay-return` 以交易編號**加上** ECPay 回傳的 email（`CustomField1`）找訂閱列，而含 `+` 的 email 回傳後與資料庫不同，於是記錄 `no subscription for trade …` 並回 `1|OK`（ECPay 不會重送），訂閱停在 `pending_payment` | 2026-09-25 在新網域以 `k***+flights0925@gmail.com` 實際付款 | 改成只用交易編號（唯一、由本系統產生、受 CheckMacValue 保護）加 route 查詢，並在 email 不一致時記 log。部署後再付款：log 出現 `echoed email differs from the row's`（證實原因），訂閱轉 `active`、`total_success_times = 1`、歡迎信寄出。`flight-ecpay-period` 本來就只用交易編號，未受影響 |
 
 另有一項付款後畫面問題（未載入完成的查詢造成目標價輸入框空白）已以 `useEffect` 同步修正；
 兩個 a11y 警告（label 未關聯輸入框）已修正並於瀏覽器確認。
@@ -319,7 +324,7 @@
 |---|---|---|---|
 | K-1 | 歡迎信硬編碼「每月扣款 NT$…」；B4 每日測試訂單的歡迎信也寫「每月」 | 目前正式維持月繳，無影響；日後若提供其他週期會出錯 | 屆時由結帳流程把週期傳入 |
 | K-2 | `flight.subscriptions.updated_at` 沒有 trigger；parser 的 lazy `cancelled → expired` 不會更新它 | 僅影響稽核時間戳 | 需要時加 `before update` trigger |
-| K-3 | **已處理（2026-09-21）**。原問題：`docs/shared-supabase-auth.md`／README 寫「已存在 email 一律走密碼重設」，但 `src/routes/auth/index.tsx` 在密碼相符時會直接補標記並登入（FE-08 實測確認：不需驗證信箱，只要知道另一個 app 帳號的密碼就能經註冊流程取得標記） | 取得標記需先知道該帳號密碼，且標記只影響前端路由守衛（見 K-4）；註冊時要求驗證信箱並不會增加實質保護，因為已登入的使用者本來就能自己 `updateUser` 加標籤 | **處理方式：以程式碼為準，改文件。** `docs/shared-supabase-auth.md` 與 `README.md` 已改成描述實際行為（登入頁不補標記；註冊時密碼相符即補、不符走重設），並新增「標籤是什麼、不是什麼」說明。`CLAUDE.md` 同步更新。程式碼未動 |
+| K-3 | **已處理（2026-09-21）；2026-09-25 起不再適用**：註冊改成只輸入 email，「密碼相符直接加入」的路徑已移除（見 FE-08）。原問題：`docs/shared-supabase-auth.md`／README 寫「已存在 email 一律走密碼重設」，但 `src/routes/auth/index.tsx` 在密碼相符時會直接補標記並登入（FE-08 實測確認：不需驗證信箱，只要知道另一個 app 帳號的密碼就能經註冊流程取得標記） | 取得標記需先知道該帳號密碼，且標記只影響前端路由守衛（見 K-4）；註冊時要求驗證信箱並不會增加實質保護，因為已登入的使用者本來就能自己 `updateUser` 加標籤 | **處理方式：以程式碼為準，改文件。** `docs/shared-supabase-auth.md` 與 `README.md` 已改成描述實際行為（登入頁不補標記；註冊時密碼相符即補、不符走重設），並新增「標籤是什麼、不是什麼」說明。`CLAUDE.md` 同步更新。程式碼未動 |
 | K-4 | B-1：`apps` 標籤為使用者自訂，不是權限 | 目前僅影響前端路由守衛；付費保護不依賴它（由 ECPay 驗證的 Edge Function 才能寫 `active`） | 只在 backlog 列出的觸發條件成立時處理 |
 | K-5 | `RENEWAL_GRACE_DAYS = 7` 為推估值 | 若 ECPay 實際重試窗口更長，可能提早把仍在重試的訂閱轉 `expired` | 取得 ECPay 實際重試視窗後調整 |
 | K-6 | **註冊確認信進了垃圾郵件**（FE-07）。Gmail 標示「與先前歸類為垃圾郵件的郵件相似」。同一寄件人 `noreply@roberthut.com` 的生命週期信（G6）與降價信進收件匣。`send-email`（Auth hook）只寄 HTML、無純文字版；`flight-status-notification` 則同時寄 HTML 與純文字。以上為觀察到的差異，**因果未驗證** | 新使用者可能收不到確認信而無法完成註冊；Gmail 也可能因先前的測試信而對此寄件人有既有判斷 | **已改善（收尾中）**。DNS 檢查（2026-09-21）：`send.roberthut.com` 的 SPF（amazonses）、退信 MX、`resend._domainkey` 的 DKIM 都在，**缺 `_dmarc.roberthut.com`（沒有 DMARC 記錄）**。因為同網域的降價信與生命週期信進收件匣，DNS 不是「只有確認信進垃圾郵件」的主因。**已做**：(a) `send-email` 加純文字版，2026-09-21 08:30Z 已部署（v8，`verify_jwt` 仍為 false，線上程式碼已讀回確認）。(b) 部署後用新別名（`k***+fe07b@gmail.com`，經公開 signup API 註冊）再測：`send-email` 回 200，**信仍進垃圾郵件**，Gmail 同樣註明「與先前歸類為垃圾郵件的郵件相似」。此結果**削弱**了「缺純文字版是主因」的假說，但有干擾：第一封確認信已被 Gmail 歸為垃圾郵件，第二封內容幾乎相同，可能只是沿用該判斷，因此**不能證明純文字版有效或無效**。(c) 使用者已對兩封確認信按「回報為非垃圾郵件」。(d) 範本內容改寫：信中寫明產品名稱、收到此信的原因、以及「不是本人請忽略」（HTML 與純文字皆有；原本只有「請點擊以下按鈕完成操作」與長連結，缺產品名稱與原因，內容像典型的釣魚信範本）。本機渲染六種 action type 皆正常，**已於 2026-09-21 08:39Z 由使用者部署（v9，線上程式碼已讀回確認）**。(e) 部署後對 `fe07b` 用 `/auth/v1/resend` 重寄（08:40:09Z，回 200）：**新範本的確認信進了收件匣，並被 Gmail 標為「重要」**（未讀），信件摘要顯示新內文（「你剛剛用這個 email 在 Flight Price Notifier（機票降價通知）註冊了帳號…」），大小 8.5 KB（舊版 7.2 KB）。**限制**：此時前兩封舊信已被使用者按「非垃圾郵件」移回收件匣，三封主旨相同、被歸在同一個對話串，Gmail 對同串同寄件人的新信本來就較寬容，因此**無法區分是範本改動還是使用者的回報造成進收件匣**。(f) **另一個信箱的驗證（2026-09-21 08:44Z）**：對 `k***`（使用者另一個 Gmail 信箱）的 `+` 別名 `r***+k6@…` 註冊（公開 signup API），`send-email` 回 200；**使用者確認新範本的確認信進了收件匣**（測試前未做任何「非垃圾郵件」標記）。**結論**：目前版本（v9：純文字版＋新範本）在一個沒有人為干擾的信箱可正常送達，問題在此信箱**未重現**，範本改動很可能有效。**限制**：沒有對照組（沒有在同一信箱送舊範本），所以無法證明「舊範本在那個信箱也會進垃圾郵件」；樣本只有 1 個信箱，且同為 Gmail；Gmail 判斷含個人化與信譽因素，之後仍可能變動。**待辦**：(1) ~~部署~~ 已完成；(2) ~~重寄看結果~~ 已完成；(3) ~~用乾淨信箱測~~ 已完成（見 (f)），若要更有把握，可再用非 Gmail 信箱（Outlook／Hotmail）測一次；(4) 使用者在 DNS 加 `_dmarc` TXT（例如 `v=DMARC1; p=none; rua=mailto:<信箱>`，`p=none` 只監控）；(5) ~~清除測試帳號~~ 已完成（2026-09-21 由使用者執行清理 SQL，`fe07b` 與 `k6` 兩個一次性帳號已刪除，唯讀查詢確認 `auth.users` 回到 25、標記帳號仍為 5、原本的真實帳號完好） |

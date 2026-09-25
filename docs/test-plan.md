@@ -119,12 +119,13 @@
 | FE-04 | 以已標記本 app 的帳號登入 | 導向 `/dashboard` | ✅ 已在 M1／M2 實測中使用 |
 | FE-05 | 密碼錯誤登入 | 顯示 Supabase 錯誤訊息，不導頁 | 待驗 |
 | FE-06 | 帳號存在、密碼正確，但 `app_metadata.apps` **未含** `fare-finder-pro` | 登出並顯示 "Invalid login credentials"，不進 dashboard（嚴格隔離，登入頁不自動加標記） | 待驗（程式碼已實作） |
-| FE-07 | 全新 email 註冊 | 帶 `data.app = fare-finder-pro`；需信箱驗證時顯示確認提示並切回登入模式 | 待驗 |
-| FE-08 | 註冊時 email 已被別的 app 使用、且密碼**相符** | 依現行程式碼：登入後 `updateUser({data:{app}})` 補標記並導向 dashboard | 已於 2026-09-21 執行，見測試報告。原本與 `docs/shared-supabase-auth.md`、README 的描述有出入，兩份文件已於同日改成描述實際行為 |
-| FE-09 | 註冊時 email 已被別的 app 使用、密碼**不符** | 寄出密碼重設信，顯示說明訊息並切回登入模式；點連結至 `/auth/reset` 設定新密碼後才補標記 | 待驗 |
+| FE-07 | 全新 email 註冊（只輸入 email） | 帶 `data.app = fare-finder-pro`、隨機密碼；顯示「請到信箱點擊連結設定密碼」並切回登入模式；確認信連結導到 `/auth/reset`，設定密碼後進 dashboard，之後可用該密碼登入 | 2026-09-25 於 localhost 通過（新流程） |
+| FE-08 | 註冊時 email 已有帳號（本 app 或別的 app） | 不動原密碼；改寄重設信，畫面訊息與 FE-07 相同（不透露帳號是否存在）；在 `/auth/reset` 設定密碼後才補標記 | 2026-09-25 於 localhost 以本 app 既有帳號通過；別的 app 帳號走同一條程式路徑，未另測。（2026-09-25 前的「密碼相符直接加入」已移除） |
+| FE-09 | 忘記密碼 | 登入頁「忘記密碼？」只輸入 email → 重設信 → `/auth/reset` 設定新密碼 → dashboard | 2026-09-25 於 localhost 通過 |
 | FE-10 | 未登入直接開 `/dashboard` | 導向 `/auth` | 待驗 |
 | FE-11 | 驗證信／重設信連結導向 | 導回 `localhost:8080`，不出現 `otp_expired` 或導到無法開啟的網址 | 待驗（依 Redirect URLs 設定） |
 | FE-12 | 登出 | 導向首頁 `/`（`handleSignOut` 的設計）、session 從 storage 清除；之後再開 `/dashboard` 被導到 `/auth` | 待驗（程式碼有 `signOut`，handoff 無專門測試記錄） |
+| FE-13 | 用密碼登入後直接開 `/auth/reset` | 不顯示設定密碼表單（只接受信中連結 15 分鐘內建立的 session） | 2026-09-25 於 localhost 通過 |
 
 ---
 

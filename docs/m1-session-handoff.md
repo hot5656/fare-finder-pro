@@ -508,6 +508,19 @@ welcome mail. `flight-ecpay-period` matches on trade number only and cancel on t
 user, so neither was affected. Cleanup: subscription cancelled through ECPay, `payment_required` back to false
 (settings as before), test account deleted (its subscription row went with it).
 
+### Sign-up and forgot password take an email only (2026-09-25)
+
+The password is now always set on `/auth/reset` from an emailed link: a new email gets
+`signUp` with a throwaway random password (confirmation link → `/auth/reset`), an email
+that already has an account gets a reset email, and the sign-in page has a 忘記密碼 link.
+All cases show one neutral message. `/auth/reset` opens only for a session an email link
+created (`PASSWORD_RECOVERY`, or an email `amr` under 15 minutes old). The old "matching
+password at sign-up joins directly" path (FE-08, K-3) is gone. Verified on localhost with a
+throwaway alias (deleted after): new sign-up, forgot password, sign-up with an existing
+email (password unchanged), and a password session blocked from `/auth/reset`. Not tested
+on the live domain, and not with an account that exists only in another app. Docs:
+README, `docs/shared-supabase-auth.md`, `docs/test-plan.md` (FE-07–09, FE-13).
+
 ## Project / environment facts (don't re-derive these)
 
 - **Shared multi-app Supabase project.** Other apps' migrations live in the

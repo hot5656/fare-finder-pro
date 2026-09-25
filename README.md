@@ -127,9 +127,9 @@ Vercel Dashboard → 專案 → **Settings** → **Environment Variables**，把
 
 **運作機制：**
 
-`src/routes/auth/index.tsx` 裡呼叫 `signUp()` 時：
+`src/routes/auth/index.tsx` 裡呼叫 `signUp()`（以及 `resetPasswordForEmail()`）時：
 ```ts
-options: { emailRedirectTo: `${window.location.origin}/?app=${APP_NAME}` }
+options: { emailRedirectTo: `${window.location.origin}/auth/reset?app=${APP_NAME}` }
 ```
 `window.location.origin` 是「使用者按下註冊那一刻，瀏覽器網址列的 origin」——不是寫死的，是動態抓的。這個值會直接塞進 Supabase 產生的驗證信連結（`redirect_to` 參數）裡。後面的 `?app=` 給共用的 `send-email` hook 判斷是哪個 app 寄的信（見 `docs/shared-supabase-auth.md`），不影響導向。
 
