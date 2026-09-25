@@ -43,13 +43,15 @@ Deno.serve(async (req) => {
     db: { schema: "flight" },
   });
 
-  // CustomField1/2 (email/route) are the join key ECPay echoes back; the
-  // trade number pins it to this checkout attempt.
+  // The trade number (unique, ours, covered by the verified CheckMacValue) is
+  // the key; CustomField2 (route) is a sanity check. Don't match on the echoed
+  // email (CustomField1): ECPay echoes it back altered for an address with a
+  // "+" (a+b@x.com), so a verified payment found no row and stayed pending
+  // (seen 2026-09-25; the log below confirmed the mismatch).
   const { data: row, error } = await admin
     .from("subscriptions")
     .select("id, email, route, subscription_status")
     .eq("merchant_trade_no", p.MerchantTradeNo)
-    .eq("email", p.CustomField1)
     .eq("route", p.CustomField2)
     .maybeSingle();
   if (error) {
@@ -59,6 +61,9 @@ Deno.serve(async (req) => {
   if (!row) {
     console.error(`no subscription for trade ${p.MerchantTradeNo}`);
     return ok();
+  }
+  if (row.email !== p.CustomField1) {
+    console.log(`echoed email differs from the row's (${p.MerchantTradeNo}); matched on trade number`);
   }
 
   // Idempotent on the trade number + current state (Gwsr is empty on the

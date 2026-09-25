@@ -478,6 +478,36 @@ Verified 2026-09-24 on localhost:8080 as kyp001@gmail.com (admin):
 - Not tested: a non-admin JWT calling `flight-admin-routes` (no second account signed in);
   the check is the same `flight.admins` lookup as `flight-admin-settings`.
 
+### Site moved to https://flights.roberthut.com (2026-09-25)
+
+Vercel domain live; `SITE_URL` secret set to it; new origin added to `ALLOWED_ORIGINS` in
+`_shared/ecpay.ts` (the Vercel URL stays allowed); `flight-subscribe` and
+`flight-ecpay-result` redeployed; Supabase Auth Redirect URLs gained
+`https://flights.roberthut.com/**` (Site URL untouched). Checklist: `docs/change-site-url.md`.
+
+Verified on the new domain (user asked to test on it) with a throwaway account
+`kyp001+flights0925@gmail.com`:
+- Sign-up: `redirect_to=https://flights.roberthut.com/?app=fare-finder-pro`; the confirmation
+  mail reached the inbox and its link landed on the new domain signed in, tagged
+  `fare-finder-pro`.
+- `flight-ecpay-result` by curl: no origin / unlisted origin → `flights.roberthut.com`,
+  Vercel origin → Vercel.
+- Payment (payment switched on for the test, then off again): landed on
+  `https://flights.roberthut.com/dashboard?purchase=success`.
+
+**Bug found and fixed: a `+` in the email blocked activation.** The first payment verified
+(CMV ok, `RtnCode=1`) but `flight-ecpay-return` logged `no subscription for trade …` and the
+row stayed `pending_payment`: it matched the row on trade number **and** the email ECPay
+echoes in `CustomField1`, and that echo differs from the stored address when it has a `+`.
+The lookup is now trade number (unique, ours, covered by the CMV) + route, with a log line
+when the echoed email differs. After redeploying, a second checkout was declined by ECPay
+(`RtnCode=10100058`, card entry; handled correctly: row stayed pending, browser went to
+`?purchase=failed`); the third activated the row (period end +1 month,
+`total_success_times = 1`), logged `echoed email differs from the row's`, and sent the
+welcome mail. `flight-ecpay-period` matches on trade number only and cancel on the signed-in
+user, so neither was affected. Cleanup: subscription cancelled through ECPay, `payment_required` back to false
+(settings as before), test account deleted (its subscription row went with it).
+
 ## Project / environment facts (don't re-derive these)
 
 - **Shared multi-app Supabase project.** Other apps' migrations live in the
