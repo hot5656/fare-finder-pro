@@ -409,7 +409,7 @@ function renderEmail(
       <p style="font-size:22px;font-weight:700;margin:12px 0 0;">NT$${price}</p>
       ${usdLine}
       <p style="color:#666;font-size:13px;margin-top:4px;">你的目標價：NT$${target}</p>
-      <h3 style="font-size:15px;margin:20px 0 6px;">航班詳情（v3 最低價，觸發本通知）</h3>
+      <h3 style="font-size:15px;margin:20px 0 6px;">航班詳情</h3>
       <table style="font-size:14px;border-collapse:collapse;">${rowsHtml(mainRows)}</table>
       <p style="font-size:13px;color:#92400e;background:#fef3c7;border-radius:6px;padding:8px 10px;margin:12px 0 0;">${esc(datesNote)}</p>
       <p style="margin-top:16px;">
@@ -429,7 +429,7 @@ function renderEmail(
   `;
   const text =
     `${subject}\nNT$${price}${usdText}\n你的目標價：NT$${target}` +
-    `\n\n航班詳情（v3 最低價，觸發本通知）\n${rowsText(mainRows)}\n※ ${datesNote}\n立即訂購: ${url}` +
+    `\n\n航班詳情\n${rowsText(mainRows)}\n※ ${datesNote}\n立即訂購: ${url}` +
     `${v1Text}\n\n${note}${checkedAtText}${manualText}`;
 
   return { subject, html, text };

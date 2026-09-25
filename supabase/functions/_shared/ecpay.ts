@@ -29,6 +29,7 @@ export const SITE_URL = (Deno.env.get("SITE_URL") ?? "http://localhost:8080").re
 const ALLOWED_ORIGINS = new Set([
   SITE_URL,
   "http://localhost:8080",
+  "https://flights.roberthut.com",
   "https://fare-finder-pro.vercel.app",
 ]);
 

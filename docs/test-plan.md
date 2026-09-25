@@ -53,7 +53,7 @@
 
 ### 2.1 前置條件
 - `.env` 含 `VITE_SUPABASE_URL`、`VITE_SUPABASE_PUBLISHABLE_KEY`、`SUPABASE_URL`、`SUPABASE_PUBLISHABLE_KEY`（兩組指向同一專案）。
-- Edge secrets 已設定：`RESEND_API_KEY`、`SEND_EMAIL_HOOK_SECRET`、`TRAVELPAYOUTS_TOKEN`、`ECPAY_MERCHANT_ID`、`ECPAY_HASH_KEY`、`ECPAY_HASH_IV`、`ECPAY_ENV`、`ECPAY_AMOUNT`、`SITE_URL`（目前為 Vercel 網址；未設時預設 `http://localhost:8080`，換網域見 `docs/change-site-url.md`）。
+- Edge secrets 已設定：`RESEND_API_KEY`、`SEND_EMAIL_HOOK_SECRET`、`TRAVELPAYOUTS_TOKEN`、`ECPAY_MERCHANT_ID`、`ECPAY_HASH_KEY`、`ECPAY_HASH_IV`、`ECPAY_ENV`、`ECPAY_AMOUNT`、`SITE_URL`（2026-09-25 起為 `https://flights.roberthut.com`；未設時預設 `http://localhost:8080`，換網域見 `docs/change-site-url.md`）。
 - Vault 內有 `flight_service_role_key`（cron 用）。
 - Supabase Auth 的 Redirect URLs 包含 `http://localhost:8080/**`。
 - 三支 ECPay 回呼函式 `verify_jwt = false`；其餘見 `supabase/config.toml`。

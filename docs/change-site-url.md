@@ -2,7 +2,9 @@
 
 把前端從 `https://fare-finder-pro.vercel.app` 換成公司網域（下文以 `https://flights.yourco.com` 代稱）時，**不會自動跟著改**的地方都列在這裡。信件裡的網址、付款後導回的網址都不是從瀏覽器當下的網址抓的，而是來自 Edge Function secret 或程式碼裡的清單。
 
-最後整理：2026-09-24。
+最後整理：2026-09-25。
+
+> **2026-09-25 實際換成 `https://flights.roberthut.com`**：Vercel 網域與 DNS 已生效（CNAME 到 Vercel）；第 4 項已把新網域加進 `ALLOWED_ORIGINS`（舊的 Vercel 網址保留並存）；本專案所有 Edge Function 都是 flight 的，`send-email` 也不讀 `SITE_URL`，改 secret 不影響其他 app。同日已完成：`SITE_URL` 改為新網域、重新部署 `flight-subscribe` 與 `flight-ecpay-result`、Supabase Auth Redirect URLs 加上 `https://flights.roberthut.com/**`（Site URL 未動）。curl 檢查 `flight-ecpay-result`：沒帶 origin 或帶不在清單上的 origin 都導向 `https://flights.roberthut.com/dashboard`，帶 Vercel 網址則導回 Vercel。實際在新網域註冊與付款的驗證尚未做。
 
 ## 必改
 

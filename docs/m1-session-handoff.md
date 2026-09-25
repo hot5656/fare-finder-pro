@@ -514,13 +514,14 @@ Verified 2026-09-24 on localhost:8080 as kyp001@gmail.com (admin):
   `ECPAY_HASH_IV` / `ECPAY_ENV` (`stage`) / `ECPAY_AMOUNT` (`300`), plus
   auto-injected `SUPABASE_*`. `SITE_URL` (fallback landing site
   for ECPay's browser redirect, and the resubscribe link in emails) was set to
-  `https://fare-finder-pro.vercel.app` on 2026-09-21 (unset it defaults to
-  `http://localhost:8080`); change it to the real domain when going live. It is
+  `https://fare-finder-pro.vercel.app` on 2026-09-21 and moves to
+  `https://flights.roberthut.com` with the 2026-09-25 domain change (unset it
+  defaults to `http://localhost:8080`). It is
   not the same thing as the Supabase Auth "Site URL" setting. The redirect itself follows the site the user paid from:
   `flight-subscribe` stores the request `Origin` in ECPay `CustomField3`,
   `flight-ecpay-result` reads it back and redirects there only if it is on the
-  `allowedOrigin()` allowlist in `_shared/ecpay.ts` (localhost:8080, the
-  Vercel site, `SITE_URL`); anything else falls back to `SITE_URL`. Found
+  `allowedOrigin()` allowlist in `_shared/ecpay.ts` (localhost:8080,
+  `flights.roberthut.com`, the Vercel site, `SITE_URL`); anything else falls back to `SITE_URL`. Found
   2026-09-21: paying from the Vercel site landed on localhost before this;
   fixed, and verified by a real stage payment from the Vercel site (landed on
   `/dashboard?purchase=success`, `TPE-SEL` went `active`) plus curl checks

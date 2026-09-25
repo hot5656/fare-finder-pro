@@ -146,6 +146,7 @@ Supabase 收到這個值後只做一件事：**比對白名單**：
 Site URL: https://fare-finder-pro.vercel.app
 
 Redirect URLs:
+https://flights.roberthut.com/**
 https://fare-finder-pro.vercel.app/**
 https://fare-finder-pro-*-roberts-projects-2b1cd09b.vercel.app/**
 http://localhost:8080/**
@@ -154,7 +155,8 @@ http://localhost:8080/**
 | 設定 | 涵蓋場景 | 為什麼需要 |
 |---|---|---|
 | `Site URL: https://fare-finder-pro.vercel.app` | 正式站主網域 + 保底目的地 | 唯一的「預設/保底」網址；沒有明確匹配到任何 Redirect URLs 時，一律退回這裡 |
-| `https://fare-finder-pro.vercel.app/**` | 正式站上任何路徑觸發的驗證 | 只設 Site URL 本身不涵蓋「帶路徑或參數」的情況（例如 `/dashboard`、`?ref=xxx`），`/**` 萬用字元讓同網域下任何路徑都算合法目的地 |
+| `https://flights.roberthut.com/**` | 正式網域（2026-09-25 起）上任何路徑觸發的驗證 | 正式站改用這個網域；前端用當下的 origin 產生 `redirect_to`，不在清單上就會被退回 Site URL |
+| `https://fare-finder-pro.vercel.app/**` | 舊的 Vercel 網址上任何路徑觸發的驗證（與正式網域並存） | 只設 Site URL 本身不涵蓋「帶路徑或參數」的情況（例如 `/dashboard`、`?ref=xxx`），`/**` 萬用字元讓同網域下任何路徑都算合法目的地 |
 | `https://fare-finder-pro-*-roberts-projects-2b1cd09b.vercel.app/**` | Vercel 每次 PR / 分支自動產生的 preview 網址（如 `fare-finder-2r1ppz0jz-roberts-projects-2b1cd09b.vercel.app`） | 這些網址每次部署都不同、帶隨機 hash，不可能一條一條加；用 `*` 卡住中間隨機那段，讓任何 preview 部署上測註冊流程都能正常導回同一個 preview |
 | `http://localhost:8080/**` | 本機開發測試（`npm run dev` 實際跑的 port） | 讓本機開發也能完整測完整個註冊/驗證流程，不用每次都部署到 Vercel 才能測；是 **8080**，不是 Lovable 預覽環境殘留的 **3000**（那個 port 跟這個專案的 vite dev server 無關） |
 
