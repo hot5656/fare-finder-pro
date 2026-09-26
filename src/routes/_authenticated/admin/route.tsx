@@ -6,13 +6,20 @@ import { supabase } from "@/integrations/supabase/client";
 // enforced by flight.is_admin() inside the subscriptions/notification_history
 // policies. Even if this beforeLoad were skipped, the child route's queries would
 // still return only what RLS allows for the signed-in user.
+// The user that last passed is_admin() below. `cause` is also "stay" on the first
+// client load after SSR, so a direct visit to /admin must not be taken as "the
+// check already passed on entry".
+let verifiedAdminId: string | null = null;
+
 export const Route = createFileRoute("/_authenticated/admin")({
   ssr: false,
-  beforeLoad: async ({ cause }) => {
+  beforeLoad: async ({ cause, context }) => {
     // Switching between admin tabs: the check already passed on entry.
-    if (cause === "stay") return;
+    if (cause === "stay" && verifiedAdminId === context.user.id) return;
+    verifiedAdminId = null;
     const { data, error } = await supabase.rpc("is_admin");
     if (error || !data) throw redirect({ to: "/dashboard" });
+    verifiedAdminId = context.user.id;
   },
   component: AdminLayout,
 });
