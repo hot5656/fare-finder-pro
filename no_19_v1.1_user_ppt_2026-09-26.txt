@@ -1,0 +1,1733 @@
+ ▐▛███▛█   Claude Code v2.1.282
+▝▜██████▀  Opus 5.5 · Claude Pro
+ ▝▝   ▝▝   ~/work/claude/fare-finder-pro
+
+  Get to finished work sooner with Opus 5.5. Switch anytime with /model.
+
+❯ 我想要做法 ppt 介紹本 app 功能及操作 請幫我產生 outline md file for the ppt   
+                                                                                
+  1. 對象為一般 user 所以不包含 admin 功能 及技術介紹                           
+  2. 不蓋掉之前內容 file name 含 1.1_user                                       
+  3. 只包含 免費訂閱(不含綠界付款)                                              
+  4. 不含v1 api 相關資訊                                                        
+
+  Searched for 2 patterns, read 3 files, listed 1 directory, ran 2 shell commands (ctrl+o to expand)
+
+⏺ I've read the code; now writing the user-facing outline file.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(docs/ppt-outline_1.1_user.md)
+  ⎿  Wrote 157 lines to docs/ppt-outline_1.1_user.md
+      1 # Flight Price Notifier（機票降價通知）— 使用者簡報大綱 v1.1
+      2 
+      3 > 主題：給一般使用者的功能介紹與操作教學
+      4 > 對象：一般使用者（不含管理員功能、不含技術架構）
+      5 > 範圍：**免費訂閱**（不含綠界付款流程）
+      6 > 建議長度：約 14 張投影片、15–20 分鐘（含 Demo）
+      7 > 語言：中文為主，畫面上的英文字保留原樣
+      8 > 標示說明：**畫面** = 建議放的截圖；**備註** = 講者備註
+      9 > 前一版（含付款與技術介紹）：`docs/ppt-outline.md`，本檔不取代它
+     … +177 lines (ctrl+o to expand)
+
+⏺ I wrote docs/ppt-outline_1.1_user.md, a new file. The old docs/ppt-outline.md
+  is unchanged. The outline covers 14 slides in four parts:
+
+  1. 開場 (Slides 1–3): cover, the problem it solves, and a one-line intro that
+     says it is free for one month at a time.
+  2. 功能 (Slides 4–8): the three main features, which routes you can track,
+     what the price-drop email looks like, how the free subscription works
+     (start → active until a date → ended → subscribe again for free), and a
+     table of the emails users will get.
+  3. 操作教學 (Slides 9–13): an overview of the steps, then sign-up (email only,
+     then set the password from the link), sign-in and forgot password,
+     starting free tracking, and managing a subscription (change the target
+     price, cancel, subscribe again).
+  4. 收尾 (Slide 14): demo, Q&A, and a list of common questions.
+
+  How your four requirements are met:
+  - For general users: there is no admin page, architecture, Supabase or Edge
+    Function content. It also reminds you to take screenshots with a normal
+    account, so the Admin button doesn't show.
+  - Free subscription only: it uses the free-mode button text from the code:
+    「開始免費追蹤（一個月）」, 「免費 · 有效至…」, 「免費重新訂閱」, and the
+    cancel message 「取消後立即停止通知」.
+  - No ECPay: payment, the checkout page and the paid-version emails are all
+    left out.
+  - No v1: the price-drop email slide covers only the main price. It notes that
+    if your screenshot shows the v1 comparison section, you should crop it out.
+
+  The end of the file lists the screenshots you still need. Most of the files in
+  docs/ppt-screenshots/ show paid mode or the old sign-up page, so the
+  free-mode Dashboard, the new sign-up page, the set-password page and the
+  free-version emails all need to be taken. It also lists which old images not
+  to use (08–11 and 13–15).
+
+  One thing to watch: the third feature card on the home page still says
+  「月訂閱制」. I didn't change the site; the slide notes tell you to just say
+  out loud that it is free for now.
+
+✻ Cooked for 1m 13s · done Friday 3:45 PM
+
+※ recap: I wrote a 14-slide outline for a user-facing deck about the free subscription, saved as docs/ppt-outline_1.1_user.md, with the old outline left as is. Next, you need to take the free-mode screenshots listed at the end of the file. (disable recaps in /config)
+
+❯ 幫我加入 內容 for 目前先開四條航線 若有需求可透過 mail 與我聯絡               
+  我可依需求調整航線 , contacj email is robertkao5656@gmail.com my name is      
+  robert, 可加入合適的地方 , 請調整 outline                                     
+
+⏺ I'll check which four routes are live so the slide names them correctly.
+
+  Called Supabase (ctrl+o to expand)
+
+⏺ The four live routes are Taipei→Tokyo, Taipei→Seoul, Taipei→London and
+  Tokyo→New York. The fourth doesn't start in Taipei, so I'll also fix the
+  "台北出發" wording.
+
+⏺ Update(docs/ppt-outline_1.1_user.md)
+  ⎿  Added 7 lines, removed 1 line
+      42  - **備註**：首頁第三張卡片寫的是「月訂閱制…沒有綁約」，免費模式
+          下口頭說明「目前免費」即可
+      43  
+      44  ### Slide 5 — 可以追蹤哪些航線
+      45 -- 台北 ✈ 東京、台北 ✈ 首爾、台北 ✈ 倫敦（以 Dashboard 上實際列 
+         -出的為準，會陸續增加）                                         
+      45 +- 目前先開放 **4 條航線**：                                    
+      46 +  - 台北 ✈ 東京                                                
+      47 +  - 台北 ✈ 首爾                                                
+      48 +  - 台北 ✈ 倫敦                                                
+      49 +  - 東京 ✈ 紐約                                                
+      50 +- 想追蹤其他航線？歡迎來信告訴我，我會依大家的需求調整航線     
+      51 +  - 聯絡：Robert　📧 robertkao5656@gmail.com                   
+      52  - 每條航線**各自**設定目標價、各自訂閱，可以同時追蹤多條
+      53  - 票價以**來回、新台幣**計算，另附約當美金參考
+      54  - 每張航線卡片顯示「最後查詢（來回）」的票價與時間，系統約**每 
+          30 分鐘**更新一次
+
+⏺ Update(docs/ppt-outline_1.1_user.md)
+  ⎿  Added 1 line, removed 1 line
+      26  - **備註**：用「你上次買機票查了幾天？」開場
+      27  
+      28  ### Slide 3 — 一句話介紹
+      29 -- 幫你盯著台北出發的熱門航線，**來回最低價低於你的目標價**，就 
+         -寄 email 通知你                                                
+      29 +- 幫你盯著熱門航線，**來回最低價低於你的目標價**，就寄 email 通
+         +知你                                                           
+      30  - 適合：預算導向、出發日期有彈性的旅客
+      31  - 目前**免費使用**，一次訂閱一個月，到期可再免費續訂
+      32  
+
+⏺ Update(docs/ppt-outline_1.1_user.md)
+  ⎿  Added 2 lines, removed 2 lines
+      35  ## 第二部分：功能介紹
+      36  
+      37  ### Slide 4 — 三大功能
+      38 -- ✈️ **盯緊熱門航線**：自動查詢台北出發航線的來回最低票價      
+      38 +- ✈️ **盯緊熱門航線**：自動查詢熱門航線的來回最低票價          
+      39  - 🔔 **達標自動通知**：低於你設定的目標價，就寄 email，附「立即
+          訂購」連結
+      40  - 🚫 **隨時取消**：不想收了，一鍵取消
+      41  - **畫面**：`ppt-screenshots/02-landing-full.png`（首頁三張功能
+          卡片）
+      42 -- **備註**：首頁第三張卡片寫的是「月訂閱制…沒有綁約」，免費模式
+         -下口頭說明「目前免費」即可                                     
+      42 +- **備註**：首頁第三張卡片寫的是「月訂閱制…沒有綁約」，免費模式
+         +下口頭說明「目前免費」即可；第一張卡片寫「台北出發」，口頭補充 
+         +目前也有東京 ✈ 紐約                                            
+      43  
+      44  ### Slide 5 — 可以追蹤哪些航線
+      45  - 目前先開放 **4 條航線**：
+
+⏺ Update(docs/ppt-outline_1.1_user.md)
+  ⎿  Added 2 lines
+      136    - **價格準嗎？** 來自訂票網站近期查詢，實際以訂購頁為準
+      137    - **一直降價會一直寄嗎？** 不會，同價 24 小時內不重寄，大幅
+           再降才再通知
+      138    - **可以追蹤多條航線嗎？** 可以，每條各自訂閱
+      139 +  - **想要的航線沒有？** 目前先開 4 條，來信告訴我，我會依需求
+          +調整                                                          
+      140  - 謝謝！
+      141 +- 聯絡方式：Robert　📧 robertkao5656@gmail.com（航線需求、問題
+          +與建議都歡迎來信）                                            
+      142  - **備註（Demo 清單）**：
+      143    - 事先確認網站處於免費模式（按鈕文字是「開始免費追蹤（一個月
+           ）」）
+      144    - 事先準備一個已設定好密碼的帳號，避免現場等註冊信
+
+⏺ I updated docs/ppt-outline_1.1_user.md with the four-route note and your
+  contact details. I checked the database for the four routes that are open
+  right now: 台北 ✈ 東京, 台北 ✈ 首爾, 台北 ✈ 倫敦 and 東京 ✈ 紐約.
+
+  What changed:
+  - Slide 5 (可以追蹤哪些航線): now says 4 routes are open for now and lists
+    them. It adds a line that users can email you if they want a different route
+    and you'll adjust based on demand, with "Robert 📧
+    robertkao5656@gmail.com".
+  - Slide 14 (Q&A): a new common question, "想要的航線沒有？", answered with
+    "目前先開 4 條，來信告訴我". Your contact details also go on the closing
+    thank-you page.
+  - Slides 3 and 4: the fourth route (東京 ✈ 紐約) doesn't leave from Taipei, so
+    I changed "台北出發的熱門航線" to "熱門航線".
+  - Slide 4 speaker note: the first feature card on the home page still says
+    "台北出發". The note tells you to mention out loud that Tokyo → New York is
+    also available. I didn't change the site itself.
+
+✻ Sautéed for 25s · done Friday 4:29 PM
+
+※ recap: You asked for a user-facing, free-subscription outline for the app's PPT, and it's done in docs/ppt-outline_1.1_user.md with the four routes and your contact email. Next, take the free-mode screenshots listed at the end of that file. (disable recaps in /config)
+
+❯ ask only: 1. 若符合目標價 即會每個 24hr 送一次, 若不想再收到即                
+  取消或調低目標價                                                              
+  2. 若回程非理想 可調整回程時間 應可選到一個相對便宜的機票                     
+  以上兩點是否合理？                                                            
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ 1. 每 24 小時寄一次，不想收就取消或調低目標價：大致合理，但要補兩點
+
+  依 flight-notification 的
+  shouldSend()（supabase/functions/flight-notification/index.ts:146）：
+  - 只要票價一直低於目標價，距上一封滿 24 
+    小時就會再寄一封，不管價格有沒有變。所以「每 24 小時一次」是對的。
+  - 但 24 小時內也可能多收一封：如果價格又比上一封降了 20% 以上，或少了 NT$2,000
+    以上，會馬上再寄。建議說成「最多約每 24 小時一封，大幅降價時會提早通知」。
+  - 「取消」和「調低目標價」都有效。目標價低於目前最低價，就不會觸發。
+  - 另外，免費訂閱滿一個月到期後也會停止寄送。
+
+  順帶一提，大綱 Slide 6 目前寫「同一個價格 24
+  小時內不重複寄」。實際上是任何價格 24
+  小時內都不重寄（大幅降價除外），建議改成跟上面一致的說法。
+
+  2. 回程不理想可以改日期，應該能選到相對便宜的票：不建議這樣說
+
+  - 通知信上的價格，是系統查到的下個月出發、來回最便宜的那一組日期（fetchCheapes
+    tV3 查整個月後取最低價）。它本來就是最便宜的組合，所以改回程日期通常會變貴，
+    不會更便宜。
+  - 通知信本身也寫著：「此為來回票價，僅適用於這組日期，更改任一日期價格都可能不
+    同」。
+  - 比較準確的說法：「回程時間不適合，可以在訂票頁改日期比價，但價格可能比通知的
+    高；如果想要特定日期的低價，可以把目標價設得實際一點，等下一次通知。」
+
+  要我把這兩點照上面的說法加進大綱（Slide 6 和 Q&A）嗎？
+
+✻ Worked for 23s · done Friday 5:12 PM
+
+❯ 我提1 的原因可能有些人符合要求後                                              
+  若價格無太大變化或許也不希望每天都持續收到的處理方法                          
+
+⏺ 這樣的話，你的處理方法是合理的，兩種做法都有效。
+
+  1. 調低目標價（建議優先講這個）
+  - 把目標價改成低於目前的最低價，例如信上是 NT$6,610，就改成
+    NT$6,000。改完當天就不會再收到信。
+  - 之後價格真的跌到新的目標價，還是會通知。等於「價格沒什麼變化就不打擾，真的再
+    降才告訴我」，最符合這類使用者的需求。
+  - 在 Dashboard 改數字後按「更新目標價」就好，不用重新訂閱。
+
+  2. 取消訂閱
+  - 適合已經買到票、或完全不想再收信的人。
+  - 免費訂閱取消後立即停止。之後想再追蹤，按「免費重新訂閱」即可。
+
+  要注意的一點：目前系統沒有「價格沒變就不重寄」的設定。只要價格還在目標價以下，
+  就會每 24 小時寄一次。所以簡報上要把「調低目標價」講成主要的處理方法，不要讓使
+  用者以為系統會自動判斷。
+
+  建議簡報寫法：
+
+  ▎ 達標後，只要價格仍低於目標價，大約每 24 小時會提醒一次。不想每天收到？把目標
+  ▎ 價調低到你真正想買的價格，價格再降時我們才會通知你；不需要了也可以隨時取消。
+
+  要我把這段加進大綱嗎？我會放在 Slide 6（通知信）和 Slide 13（管理訂閱），Q&A
+  也會加一題「每天都收到信怎麼辦？」。
+
+✻ Worked for 10s · done Friday 5:15 PM
+
+❯ 第一點 ok, 第二點我覺得可以調整看看                                           
+  或許可找到符合預算的價格(當然不可能比原本報出的價格更低)                      
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      p='docs/ppt-outline_1.1_user.md'…)
+  ⎿  Updated docs/ppt-outline_1.1_user.md (+8 -2)
+      60    - 航班詳情：航空公司、去程航班、去回程時間、飛行時間
+      61    - 提醒：票價只適用信中的這組日期，改日期價格可能不同
+      62    - **立即訂購**按鈕：直接帶到該行程的訂票搜尋頁
+      63 -- 不會洗版：同一個價格 24 小時內不重複寄；再大幅下降（降 20% 以
+         -上或少 NT$2,000 以上）才會再通知                               
+      63 +- 通知頻率：只要價格仍低於目標價，**大約每 24 小時提醒一次**；2
+         +4 小時內若再大幅下降（降 20% 以上或少 NT$2,000 以上）會提早通知
+      64 +- 不想每天收到？把目標價**調低到你真正想買的價格**（低於目前最 
+         +低價），價格再降時才會通知你；不需要了也可以隨時取消           
+      65 +- 回程日期不理想？在訂票頁**調整回程日期比價**，有機會找到仍在 
+         +預算內的組合                                                   
+      66 +  - 通知價已是查到的最便宜日期組合，改日期通常不會比它更低，但 
+         +可能仍低於你的預算                                             
+      67  - **畫面**：`ppt-screenshots/12-alert-email.png`（實際通知信；
+          若信中有對照資料區塊，請裁掉只留上半）
+      68  - **備註**：信中票價是訂票網站近期的查詢結果，實際價格以訂購頁
+          為準
+      69  
+     ...
+      123  
+      124  ### Slide 13 — Step 4：管理訂閱
+      125  - **調整目標價**：改數字後按「更新目標價」，立即生效
+      126 +  - 小技巧：達標後不想每天收到提醒，就把目標價調低到低於目前最
+          +低價，等真的再降才通知                                        
+      127  - **取消訂閱**：點「取消訂閱」→ 確認訊息「確定要取消訂閱？取消
+           後立即停止通知。」→「確定取消」或「保留」
+      128  - **重新訂閱**：到期或取消後，卡片標籤顯示「已結束」，按「**免
+           費重新訂閱**」再開始一個月
+      129  - **畫面**：免費版取消確認畫面、「已結束」＋「免費重新訂閱」卡
+           片（皆待補拍）
+     ...
+      138    - **要錢嗎？** 目前免費，一次一個月，到期可無限次免費重新訂
+           閱
+      139    - **多久查一次價？** 約每 30 分鐘
+      140    - **價格準嗎？** 來自訂票網站近期查詢，實際以訂購頁為準
+      137 -  - **一直降價會一直寄嗎？** 不會，同價 24 小時內不重寄，大幅 
+          -再降才再通知                                                  
+      141 +  - **一直降價會一直寄嗎？** 不會，最多約 24 小時一封；只有大 
+          +幅再降（20% 以上或 NT$2,000 以上）才會提早通知                
+      142 +  - **達標後每天都收到信怎麼辦？** 把目標價調低到你真正想買的 
+          +價格，價格再降才通知；或直接取消                              
+      143 +  - **信上的日期不適合？** 可在訂票頁調整日期（例如回程）比價 
+          +，有機會找到仍在預算內的票，但通常不會比通知價更低            
+      144    - **可以追蹤多條航線嗎？** 可以，每條各自訂閱
+      145    - **想要的航線沒有？** 目前先開 4 條，來信告訴我，我會依需求
+           調整
+      146  - 謝謝！
+
+⏺ I added both points to docs/ppt-outline_1.1_user.md:
+
+  Slide 6 (降價通知信)
+  - I replaced the old line 「同一個價格 24 小時內不重複寄」 with:
+    「只要價格仍低於目標價，大約每 24 小時提醒一次；24 小時內若再大幅下降（降
+    20% 以上或少 NT$2,000 以上）會提早通知」.
+  - New tip: 「不想每天收到？把目標價調低到你真正想買的價格（低於目前最低價），
+    價格再降時才會通知你；不需要了也可以隨時取消」.
+  - New tip:
+    「回程日期不理想？在訂票頁調整回程日期比價，有機會找到仍在預算內的組合」.
+    - With the note: 「通知價已是查到的最便宜日期組合，改日期通常不會比它更低，
+      但可能仍低於你的預算」.
+
+  Slide 13 (管理訂閱)
+  - Under 「調整目標價」 I added a tip: once the target is met, lower the target
+    price to stop the daily emails.
+
+  Slide 14 (Q&A)
+  - I changed the answer to 「一直降價會一直寄嗎？」 so it matches the 24-hour
+    rule above.
+  - New question: 「達標後每天都收到信怎麼辦？」
+  - New question: 「信上的日期不適合？」
+
+  On the second point I wrote 「通常不會比通知價更低」 rather than "cannot be
+  lower". The price in the email comes from the booking site's recent searches,
+  and the live price can drift a little, so "通常" is the safer promise.
+
+✻ Sautéed for 23s · done Friday 5:20 PM
+
+※ recap: You're building a user-facing slide outline for the free subscription in docs/ppt-outline_1.1_user.md, and the contact details, four routes, email-frequency tips and date-change tips are all in. Next, take the free-mode screenshots listed at the end of the file. (disable recaps in /config)
+❯ 要不要給 url https://flights.roberthut.com/                                   
+
+⏺ 建議要放。這份簡報是給一般使用者看的，他們看完要能馬上打開網站註冊，沒有網址就
+  少了這一步。
+
+  建議放在三個地方：
+  - Slide 1（封面）：副標下面放 flights.roberthut.com，一開場就知道網站在哪。
+  - Slide 10（Step 1：註冊）：寫「打開 https://flights.roberthut.com/ →
+    點右上角登入 → 切到註冊」，讓操作步驟從打開網站開始。
+  - Slide 14（結尾）：網址和你的聯絡 email 放在一起，另外放一個網址的 QR 
+    code，現場用手機掃就能打開。
+
+  要我照這樣加進大綱嗎？
+
+✻ Cogitated for 6s · done Friday 8:05 PM
+
+❯ 更新 outline                                                                  
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(python3 - <<'EOF'
+      p='docs/ppt-outline_1.1_user.md'…)
+  ⎿  19:- 網址：**https://flights.roberthut.com/**
+     101:- 打開 **https://flights.roberthut.com/**，點右上角「Sign in /
+     登入
+     」
+     … +4 lines (ctrl+o to expand)
+  ⎿  Updated docs/ppt-outline_1.1_user.md (+5 -1)
+      16  - 標題：Flight Price Notifier　機票降價通知
+      17  - 副標：設定航線與目標價，機票降價就通知你
+      18  - 英文副標：Set a route and a target price — we email you when 
+          the fare drops.
+      19 +- 網址：**https://flights.roberthut.com/**                     
+      20  - 講者姓名／日期
+      21  - **畫面**：`ppt-screenshots/01-landing-hero.png`（首頁 hero）
+      22  
+     ...
+       98  - **畫面**：5 步驟橫向流程圖
+       99  
+      100  ### Slide 10 — Step 1：註冊與設定密碼
+      100 -- 到登入頁，點「No account yet? Create one」切到「Create accou
+          -nt．註冊」                                                    
+      101 +- 打開 **https://flights.roberthut.com/**，點右上角「Sign in /
+          + 登入」                                                       
+      102 +- 在登入頁點「No account yet? Create one」切到「Create account
+          +．註冊」                                                      
+      103  - **只需輸入 Email**，按「Send sign-up link / 寄送註冊連結」
+      104  - 到信箱點連結 → 開啟「Set your password．設定密碼」頁，設定密
+           碼（至少 6 碼）
+      105  - 設定完成即可登入使用
+     ...
+      146    - **可以追蹤多條航線嗎？** 可以，每條各自訂閱
+      147    - **想要的航線沒有？** 目前先開 4 條，來信告訴我，我會依需求
+           調整
+      148  - 謝謝！
+      149 +- 立即試用：**https://flights.roberthut.com/**（附網址 QR code
+          +，現場手機掃描即可開啟）                                      
+      150  - 聯絡方式：Robert　📧 robertkao5656@gmail.com（航線需求、問題
+           與建議都歡迎來信）
+      151  - **備註（Demo 清單）**：
+      152    - 事先確認網站處於免費模式（按鈕文字是「開始免費追蹤（一個月
+           ）」）
+     ...
+      168  - **不要使用**：`08`–`11`、`13`–`15`（綠界收銀台、付費版訂閱／
+           取消信與畫面）
+      169  
+      170  ## 製作提醒
+      171 +- 產生 `https://flights.roberthut.com/` 的 QR code 放在結尾頁 
+          +，製作後用手機實際掃一次確認可開啟                            
+      172  - 風格：深青綠底、紅色強調，與網站配色一致
+      173  - 截圖上的 email 一律遮蔽；不放任何訂單編號或內部設定畫面
+      174  - 不提管理員頁面（Admin 按鈕只有管理員看得到，截圖時用一般帳號
+           ）
+
+⏺ I added the site URL https://flights.roberthut.com/ to
+  docs/ppt-outline_1.1_user.md in these places:
+
+  - Slide 1 (封面): the URL now sits under the subtitles.
+  - Slide 10 (Step 1: 註冊): the steps now start with opening the site and
+    clicking 「Sign in / 登入」 at the top right. I checked the code, and that
+    is the button text in both the site header and on the home page. From there
+    the user switches to sign-up.
+  - Slide 14 (結尾): a 「立即試用」 line gives the URL plus a QR code, placed
+    just above your contact email.
+  - 製作提醒: a new reminder to make the QR code and scan it once with a phone
+    to confirm it opens.
+
+✻ Churned for 16s · done Friday 8:07 PM
+
+❯ 要不要先截圖？ 若有需要 email 截圖在適當時間跟我說                            
+
+  Called Supabase (ctrl+o to expand)
+
+⏺ 建議先截圖。這些畫面做投影片一定要用，而且現在正好適合拍：我查了設定，網站已經
+  是免費模式（payment_required = false），v1 對照也已關閉，所以新的通知信不會有
+  v1 區塊。
+
+  分工
+  - 網頁畫面由我來截：用瀏覽器依序操作並存到 docs/ppt-screenshots/，檔名從 16-
+    開始，不會蓋掉舊檔。
+  - Email 由你來截：我操作到會寄信的那一步就停下來，告訴你「現在去收哪一封信」，
+    你截好、放進資料夾，我再繼續。
+
+  截圖順序（標 📧 的地方會暫停請你截信）
+  1. 首頁、註冊頁（只有 Email 欄位）
+  2. 送出註冊 → 📧 註冊確認信（信裡的「設定密碼」連結要由你點開）
+  3. 設定密碼頁
+  4. 登入頁（含 Forgot password）
+  5. Dashboard 免費模式，包含桌面版和手機版，按鈕是「開始免費追蹤（一個月）」
+  6. 輸入目標價、按下開始追蹤 → 卡片出現「免費 · 有效至…」→ 📧 免費訂閱成功信
+  7. 取消確認畫面 → 確定取消 → 「已結束」＋「免費重新訂閱」卡片 → 📧
+     免費訂閱取消信
+  8. 降價通知信：只要目標價設得比目前價格高，下一次排程（最多 30 分鐘）就會寄出
+     → 📧 新版降價通知信，沒有 v1 區塊
+
+  開始前請你決定兩件事
+  1. 截哪個網站？ 平常我只在 localhost:8080 測試，但簡報上寫的是
+     flights.roberthut.com，網址列用正式站會比較一致。不過正式站的程式碼不一定是
+     最新的，所以請你指定其中一個。
+  2. 用哪個帳號？ 如果要拍註冊流程，需要一個沒在這個系統註冊過的
+     email，而且你收得到信，例如 Gmail 加上 +ppt 的別名。截圖時我會把 email
+     遮掉。
+
+  另外要先說：訂閱和取消都會寫進正式資料庫、也會真的寄信，截完後這個 Demo
+  帳號會留下一筆「已結束」的訂閱紀錄。
+
+  確定這兩件事之後，我就開始截。
+
+✻ Crunched for 22s · done Friday 8:11 PM
+
+❯ 用 flights.roberthut.com, 2. kyp741@gmail.com +ppt                            
+
+  Read 1 file, called Supabase, chrome-devtools 2 times, ran 1 shell command (ctrl+o to expand)
+
+⏺ I haven't taken any screenshots yet. The automation browser won't start
+  because an automation Chrome left over from an earlier session is still
+  holding its profile. It's been running for about 9 hours as process 19879.
+
+  Can I close it? You have two options:
+  - Reply "ok" and I'll run kill 19879, then open a fresh browser. It doesn't
+    matter if that browser's saved sign-in is lost: I'm shooting the new account
+    kyp741+ppt@gmail.com in a separate, clean session anyway. I checked, and
+    that address isn't registered yet, so it can go through the full sign-up
+    flow.
+  - Or close that Chrome window yourself, then tell me.
+
+  Once it's closed, I'll start with the home page and the sign-up page. I'll
+  stop and let you know at the first 📧 step (the sign-up confirmation email).
+
+✻ Baked for 28s · done Friday 8:15 PM
+
+❯ ok                                                                            
+
+  Called chrome-devtools 11 times, ran 1 shell command (ctrl+o to expand)
+
+⏺ I've saved the home page, sign-in and forgot-password shots. Next is the
+  sign-up page.
+
+  Called chrome-devtools 5 times (ctrl+o to expand)
+
+⏺ Now submitting the sign-up with kyp741+ppt@gmail.com (this sends the sign-up
+  email).
+
+  Called chrome-devtools 4 times (ctrl+o to expand)
+
+⏺ I've saved six screenshots to docs/ppt-screenshots/:
+  - 16-landing-hero.png home page, top section
+  - 17-landing-full.png home page, full length
+  - 18-auth-signin.png sign-in page
+  - 19-auth-forgot.png forgot password
+  - 20-auth-signup.png sign-up page (Email field only)
+  - 21-auth-signup-sent.png the "check your email" notice after sending. The
+    email address shows in the field, so blur it before using this one.
+
+  📧 Your turn: screenshot the sign-up email
+
+  A sign-up email just went to the kyp741@gmail.com inbox (it arrives addressed
+  to the +ppt alias). If it's not in the inbox, check spam.
+
+  1. Take a screenshot of the email and save it as
+     docs/ppt-screenshots/22-email-signup.png, blurring the email address.
+  2. Don't click the link in the email yet. Right-click the link and copy its
+     URL, then paste it to me. The set-password page needs to open in my
+     automation browser so the rest of the flow stays in the same session.
+     - The link only works once, so don't open it in your own browser first.
+  3. When you paste the link, also give me the password you want for this demo 
+     account, at least 6 characters, just for this deck. Or if you'd rather type
+     it yourself, say so. After I open the page, I'll take a screenshot and
+     stop, and you type the password into the automation Chrome window.
+
+✻ Baked for 51s · done Friday 8:16 PM
+
+※ recap: We're capturing free-mode screenshots from flights.roberthut.com for the user-guide deck, and the first six pages are saved. Next, screenshot the sign-up email, then paste me its link (unclicked) plus the demo password.
+
+❯ https://luugfvsrawnuzwpjvddt.supabase.co/auth/v1/verify?token=[REDACTED] 
+  &type=signup&redirect_to=https%3A%2F 
+  %2Fflights.roberthut.com%2Fauth%2Freset%3Fapp%3Dfare-finder-pro&apikey=sb_pub 
+  lishable_XRb6Mb3nc9xbeGdxKVTzkA_QIl2h4kF password:[REDACTED]                    
+
+  Called chrome-devtools 8 times (ctrl+o to expand)
+
+⏺ Signed in, and the Dashboard is showing the four routes. Before taking
+  screenshots I'll swap the email on the page for a placeholder.
+
+  Read 1 file, called chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ The desktop shot is good. Next, the mobile version.
+
+  Read 1 file, called chrome-devtools 3 times (ctrl+o to expand)
+
+⏺ The mobile shot came out blank because the page hadn't redrawn yet. Retaking
+  it.
+
+  Read 1 file, called chrome-devtools 2 times (ctrl+o to expand)
+
+⏺ The email reappeared after the page redrew, so I'll mask it again and retake.
+
+  Read 2 files, called chrome-devtools 2 times, ran 1 shell command (ctrl+o to expand)
+
+⏺ Both Dashboard shots are done. Next I'll subscribe to Tokyo with a NT$10,000
+  target. The current price is NT$6,938, so the next scheduled check will
+  trigger a price-drop email.
+
+  Called chrome-devtools 4 times (ctrl+o to expand)
+
+⏺ The buttons now read 「開始追蹤」 (the paid-mode label). I'll check whether
+  the free-mode setting just changed.
+
+  Called Supabase, chrome-devtools 2 times (ctrl+o to expand)
+⏺ That was just the setting still loading; the free-mode labels are back.
+  Entering the Tokyo target price now.
+
+  Read 1 file, called chrome-devtools 6 times (ctrl+o to expand)
+
+⏺ Subscribed. The Tokyo card now shows 「免費 · 有效至 2026/10/25」, with
+  「更新目標價」 and 「取消訂閱」 below it.
+
+  Saved so far (16–27):
+  - 16 and 17: home page, top section and full length
+  - 18: sign-in
+  - 19: forgot password
+  - 20: sign-up
+  - 21: "email sent" notice. The email address shows here, so blur it before
+    using this one.
+  - 23: set-password page
+  - 24: Dashboard in free mode, desktop
+  - 25: Dashboard in free mode, mobile
+  - 26: target price entered
+  - 27: after subscribing
+
+  The email address on the Dashboard shots (24–27) has been replaced with
+  demo@example.com.
+
+  📧 Your turn: two emails to screenshot
+
+  1. Free subscription welcome email (should already be in your inbox). Subject:
+     「✈️ 免費訂閱成功！台北 → 東京 降價通知已開始」. Save as
+     28-email-free-welcome.png.
+  2. Price-drop alert email. Tokyo's target is NT$10,000 and the current price
+     is NT$6,938, so the next scheduled check at 20:30 should send it. Allow a
+     minute or two after that. Subject: 「✈️ 台北 → 東京 降價通知！NT$x,xxx
+     已達標」. Save as 29-email-alert.png. The v1 comparison is turned off, so
+     the email won't have that section.
+
+  Also, if you want the sign-up email, save it as 22-email-signup.png.
+
+  Tell me once the alert email has arrived, and I'll continue with cancelling.
+  It has to be in this order: a free subscription stops notifications as soon as
+  it's cancelled, so if I cancelled first, the alert would never be sent. The
+  remaining steps are the cancel confirmation screenshot, the "ended" card with
+  「免費重新訂閱」, and then 📧 the cancellation email.
+
+  A side note: London's last check shows 12:00 noon, while the other three were
+  all updated at 20:00. It looks like London hasn't been refreshed for 8 hours,
+  possibly because of a rate limit (429) from the fare data source or no fare
+  being found. It doesn't affect the screenshots, but if you want, I can check
+  flight.parser_runs later.
+
+✻ Crunched for 2m 0s · done Friday 8:24 PM
+
+※ recap: I'm taking free-mode screenshots for the user deck; web shots 16–27 are saved and the Tokyo demo subscription is active. Next, screenshot the free welcome email and the price-drop alert due after 20:30, then tell me so I can cancel.
+
+❯ alert email has arrived                                                       
+
+  Called chrome-devtools 6 times (ctrl+o to expand)
+
+⏺ Confirmation screen saved. Now clicking 「確定取消」.
+
+  Read 1 file, called chrome-devtools 3 times (ctrl+o to expand)
+
+⏺ I'm done with every screenshot I can take from the site. The cancel went
+  through: the Tokyo card now shows 「已結束」 with a 「免費重新訂閱」 button.
+
+  Saved this round:
+  - 30-dashboard-free-cancel-confirm.png: cancel confirmation
+    (「確定要取消訂閱？取消後立即停止通知。」 with 「確定取消」 and 「保留」)
+  - 31-dashboard-free-ended.png: the 「已結束」 card with 「免費重新訂閱」
+
+  📧 Last one: the cancellation email
+
+  Subject: 「已取消 台北 → 東京 的降價通知訂閱」. It should say the
+  notifications have stopped and you can subscribe again any time. Save it as
+  32-email-free-cancel.png.
+
+  Your emails, for reference:
+  - 22-email-signup.png (optional)
+  - 28-email-free-welcome.png
+  - 29-email-alert.png
+  - 32-email-free-cancel.png
+
+  Blur the recipient address in each one.
+
+  Once they're in the folder, tell me. I'll look at each one to check the email
+  address is hidden. For the alert email, I'll also check there's no v1 section.
+  Then I'll replace the screenshot file names throughout the outline (every
+  畫面 line and the 待補截圖 list) with these new files.
+
+  Worth a look: London is still stuck at 12:00 noon after the 20:30 check, while
+  the other three routes updated normally. That means it has gone 8 hours
+  without a refresh. Do you want me to check flight.parser_runs for the reason
+  once the screenshots are done?
+
+✻ Sautéed for 39s · done Friday 8:33 PM
+
+※ recap: I'm taking free-mode screenshots for your user slide outline, and all the website shots are done (files 16–31). Next, you save the cancellation email as 32-email-free-cancel.png, then I'll check your email screenshots and update the outline's file names.
+
+❯ I update all png already, also check the flight.parser_run                    
+
+  Called Supabase, ran 1 shell command (ctrl+o to expand)
+
+⏺ Four email screenshots are in. I'll look at them now.
+
+  Read 4 files (ctrl+o to expand)
+
+⏺ The alert email has no v1 section, which is what we want. Before I update the
+  outline, let me read it again.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Bash(cd /Users/gaoyiping/work/claude/fare-finder-pro && python3 - <<'EOF'
+      p='docs/ppt-outline_1.1_user.md'…)
+  ⎿  160:## 截圖清單（免費模式，2026-09-25 於 flights.roberthut.com 拍攝）
+  ⎿  Updated docs/ppt-outline_1.1_user.md (+37 -21)
+      18  - 英文副標：Set a route and a target price — we email you when 
+          the fare drops.
+      19  - 網址：**https://flights.roberthut.com/**
+      20  - 講者姓名／日期
+      21 -- **畫面**：`ppt-screenshots/01-landing-hero.png`（首頁 hero） 
+      21 +- **畫面**：`ppt-screenshots/16-landing-hero.png`（首頁上半）  
+      22  
+      23  ### Slide 2 — 你是不是也這樣買機票？
+      24  - 機票價格天天變，要一直手動刷網站
+     ...
+      39  - ✈️ **盯緊熱門航線**：自動查詢熱門航線的來回最低票價
+      40  - 🔔 **達標自動通知**：低於你設定的目標價，就寄 email，附「立即
+          訂購」連結
+      41  - 🚫 **隨時取消**：不想收了，一鍵取消
+      42 -- **畫面**：`ppt-screenshots/02-landing-full.png`（首頁三張功能
+         -卡片）                                                         
+      42 +- **畫面**：`ppt-screenshots/17-landing-full.png`（首頁三張功能
+         +卡片）                                                         
+      43  - **備註**：首頁第三張卡片寫的是「月訂閱制…沒有綁約」，免費模式
+          下口頭說明「目前免費」即可；第一張卡片寫「台北出發」，口頭補充
+          目前也有東京 ✈ 紐約
+      44  
+      45  ### Slide 5 — 可以追蹤哪些航線
+     ...
+      53  - 每條航線**各自**設定目標價、各自訂閱，可以同時追蹤多條
+      54  - 票價以**來回、新台幣**計算，另附約當美金參考
+      55  - 每張航線卡片顯示「最後查詢（來回）」的票價與時間，系統約**每 
+          30 分鐘**更新一次
+      56 +- **畫面**：`ppt-screenshots/24-dashboard-free-desktop.png`（四
+         +條航線卡片）                                                   
+      57  
+      58  ### Slide 6 — 降價通知信長什麼樣
+      58 -- 主旨：`✈️ 台北 → 東京 降價通知！NT$6,610 已達標`             
+      59 +- 主旨：`✈️ 台北 → 東京 降價通知！NT$6,938 已達標`             
+      60  - 內容：
+      61    - 目前最低價 NT$、約當 US$、**你的目標價**
+      62    - 航班詳情：航空公司、去程航班、去回程時間、飛行時間
+     ...
+      66  - 不想每天收到？把目標價**調低到你真正想買的價格**（低於目前最
+          低價），價格再降時才會通知你；不需要了也可以隨時取消
+      67  - 回程日期不理想？在訂票頁**調整回程日期比價**，有機會找到仍在
+          預算內的組合
+      68    - 通知價已是查到的最便宜日期組合，改日期通常不會比它更低，但
+          可能仍低於你的預算
+      68 -- **畫面**：`ppt-screenshots/12-alert-email.png`（實際通知信； 
+         -若信中有對照資料區塊，請裁掉只留上半）                         
+      69 +- **畫面**：`ppt-screenshots/29-email-alert.png`（實際通知信：N
+         +T$6,938、約 US$218、目標價 NT$10,000、樂桃航空 MM628 直飛、去程
+         + 10/29 回程 11/02、黃色日期提醒、紫色「立即訂購」按鈕）        
+      70  - **備註**：信中票價是訂票網站近期的查詢結果，實際價格以訂購頁
+          為準
+      71  
+      72  ### Slide 7 — 免費訂閱怎麼運作
+     ...
+      75  - 服務一個月，期間內只要達標就通知
+      76  - 到期自動結束並寄信告知 → 按「**免費重新訂閱**」即可再用一個月
+          ，次數不限
+      77  - 取消：**立即停止**通知（不會保留到到期日）
+      77 -- **畫面**：狀態流程圖：尚未訂閱 →（開始免費追蹤）→ 免費 · 有效
+         -中 →（到期或取消）→ 已結束 →（免費重新訂閱）→ 免費 · 有效中    
+      78 +- **畫面**：狀態流程圖：尚未訂閱 →（開始免費追蹤）→ 免費 · 有效
+         +中 →（到期或取消）→ 已結束 →（免費重新訂閱）→ 免費 · 有效中；旁
+         +邊放 `27-dashboard-free-subscribed.png`、`31-dashboard-free-end
+         +ed.png` 的東京卡片裁切                                         
+     … 89 more lines (ctrl+o to expand)
+
+⏺ I checked all four email screenshots and updated the outline. The London lag
+  isn't a code error: the fare data source has had no October fare for Taipei →
+  London since this afternoon.
+
+  Email screenshots
+
+  - 29-email-alert.png: no v1 section. It shows NT$6,938, Peach Aviation MM628
+    nonstop, out 10/29 and back 11/02, and the 「立即訂購」 button.
+  - 28-email-free-welcome.png and 32-email-free-cancel.png: the wording is
+    correct.
+  - Two things to fix:
+    - 22-email-signup.png needs cropping. The full link at the bottom shows the
+      Supabase project URL, the token and the publishable key. The link has
+      already been used, so it's harmless, but by the outline's own rule it
+      shouldn't go in the deck. Keep only the heading and the 「繼續 /
+      Continue」 button.
+    - The recipient line on all the emails shows 「kyp741+ppt」. It's not the
+      full address, but blur it if you mind.
+
+  Outline changes (docs/ppt-outline_1.1_user.md)
+
+  - Every 畫面 line on Slides 1, 4–8 and 10–13 now points to the new
+    screenshots, 16–32.
+  - The Slide 6 subject line now uses the real email's NT$6,938, and the
+    screenshot notes list what the email shows.
+  - The 待補截圖 section is now a 截圖清單 table: file name, what it shows, and
+    which slide it's for. It says not to use 01–15, and that the one-month
+    expiry email couldn't be captured because it only arrives when the month
+    ends.
+
+  Why London's price is stuck at 12:00
+
+  flight.parser_runs goes back 10 runs, to 16:05. Every run has status warning
+  with the same issue:
+
+  ▎ no_fare TPE-LON: no v3 TWD fare for 2026-10; no alerts for this route this 
+  ▎ run
+
+  The system checks the fare data source every 30 minutes, but that source has
+  no Taipei → London round-trip fare for next month (October). This data comes
+  from other people's recent searches on the booking site, and long-haul routes
+  often have gaps. When no fare is found, the system keeps the last price, so
+  the card still shows NT$20,345 from 12:00 with nothing marking it as out of
+  date. The other three routes are fine.
+
+  The effect: London subscribers get no alerts until a fare shows up again. The
+  card also doesn't tell users the price is stale.
+
+  This isn't a code error, so I haven't changed anything. Two possible fixes:
+  1. Show a notice on the card when the last check is old, for example
+     「目前暫無最新票價」.
+  2. When there's no fare for next month, also look at the month after.
+
+  Neither is urgent for the deck. 24-dashboard-free-desktop.png does show London
+  at 12:00 while the others show 20:00; if a sharp-eyed viewer asks, you can
+  just say that route's data updates less often.
+
+✻ Sautéed for 58s · done Friday 8:41 PM
+
+※ recap: We're building the free-subscription user deck outline, and all screenshots (16–32) are now taken and linked into docs/ppt-outline_1.1_user.md. Next, crop the link URL out of 22-email-signup.png before using it.
+
+❯ 幫我做第 1 個：卡片顯示暫無最新票價                                           
+
+  Searched for 1 pattern, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Confirmed: last_checked_at only moves when a fare is found, so the card can
+  judge staleness from that timestamp alone. No back-end change needed.
+
+⏺ Update(src/routes/_authenticated/dashboard.tsx)
+  ⎿  Added 5 lines
+      174  
+      175  const fmtDate = (iso: string | null) => (iso ? new Date(iso).t
+           oLocaleDateString("zh-TW") : "");
+      176  
+      177 +// flight-parser runs every 30 min but only moves last_checked
+          +_at when it finds a                                           
+      178 +// fare, so an older timestamp means the source has had no far
+          +e for a while                                                 
+      179 +// (several missed runs, not just one).                       
+      180 +const STALE_PRICE_MS = 2 * 60 * 60 * 1000;                    
+      181 +                                                              
+      182  function PlanCard({
+      183    route,
+      184    subscription,
+
+⏺ Update(src/routes/_authenticated/dashboard.tsx)
+  ⎿  Added 4 lines
+      290    // Disabled by an admin: only an already-paid row may still 
+           change its target.
+      291    const closed = !route.is_active && status !== "active" && st
+           atus !== "cancelled";
+      292  
+      293 +  const priceStale =                                          
+      294 +    route.last_checked_at != null &&                          
+      295 +    Date.now() - new Date(route.last_checked_at).getTime() > S
+          +TALE_PRICE_MS;                                                
+      296 +                                                              
+      297    return (
+      298      <div className="rounded-2xl border border-border bg-card p
+           -6">
+      299        <div className="flex items-start justify-between">
+
+⏺ Update(src/routes/_authenticated/dashboard.tsx)
+  ⎿  Added 6 lines, removed 1 line
+      384            )}
+      385          </div>
+      386        )}
+      387 +      {route.last_price != null && priceStale && (            
+      388 +        <p className="mt-2 text-xs font-medium text-foreground
+          +">                                                            
+      389 +          目前暫無最新票價，系統仍會持續查詢。                
+      390 +        </p>                                                  
+      391 +      )}                                                      
+      392        {route.last_price != null && (
+      393          <p className="mt-2 text-xs text-muted-foreground">
+      389 -          最後查詢（來回）：                                  
+      394 +          {priceStale ? "上次查到（來回）：" : "最後查詢（來回
+          +）："}                                                        
+      395            {route.last_price_currency === "TWD" ? "NT$" : `${ro
+           ute.last_price_currency} `}
+      396            {Number(route.last_price).toLocaleString()}
+      397            {route.last_checked_at && (
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Typecheck is clean, and the lint warning was already there. Checking it on
+  localhost now with the demo account.
+
+  Called Supabase, chrome-devtools 9 times (ctrl+o to expand)
+
+⏺ The London card now says 「目前暫無最新票價」 when the price hasn't been
+  updated for a while. I checked it on http://localhost:8080, signed in as the
+  demo account. London showed the new notice, and the other three routes looked
+  the same as before.
+
+  What the card shows
+  - London's card now has:
+  ▎ 目前暫無最新票價，系統仍會持續查詢。
+  ▎ 上次查到（來回）：NT$20,345 · 2026/9/25 下午12:00:05
+  - Tokyo, Seoul and New York were checked at 11:00 today, so they still show
+    the usual 「最後查詢（來回）」 line.
+
+  How it decides
+  - The card shows the notice when the last price is more than 2 hours old. The
+    system checks every 30 minutes, so that means no fare was found on 4 checks
+    in a row. One or two missed checks won't trigger it, so the card won't
+    flicker between states.
+  - I confirmed the system only updates the "last checked" time when it actually
+    finds a fare, so this could be done on the web page alone. No database,
+    back-end or deploy of the back-end was needed.
+  - If the scheduled checks ever stop entirely, all four cards will show the
+    notice, which is also the correct thing to tell users.
+
+  Changes
+  - Only src/routes/_authenticated/dashboard.tsx: a 2-hour threshold constant
+    plus the display logic.
+  - Typecheck passes. The one lint warning (a useEffect dependency) was already
+    there before this change.
+
+  Not done yet
+  - Not committed and not deployed. flights.roberthut.com still shows the old
+    version. Tell me if you want a commit and a deploy with /deploy_vercel.
+  - It's now 11:00, and London still has no fare. It has gone almost 23 hours
+    without one. If this keeps up, it may be worth doing the other fix (when
+    next month has no fare, also look at the month after), or saying in the deck
+    that London's data comes in less often.
+  - The 「最後查詢」 lines in the deck screenshots were taken before this
+    change, so they don't show the notice. If you want London's card to show it
+    in the deck, I can reshoot after deploying.
+
+✻ Brewed for 1m 15s · done 11:15 AM
+
+※ recap: We're preparing the free-subscription user deck; the outline and screenshots are done, and the Dashboard now shows 「目前暫無最新票價」 when a route's price is stale. Next, tell me whether to commit and deploy that change.
+
+❯  22-email-signup.png  你幫我處理即可？                                        
+
+  Ran 2 shell commands (ctrl+o to expand)
+⏺ I'll use ffmpeg: crop off everything below the button (the link and its token)
+  and cover the recipient address.
+
+⏺ Bash(ffmpeg -loglevel error -y -i
+      /private/tmp/claude-501/-Users-gaoyiping-work-claude-fare-finder-pro/62176
+      180-7ec1-4fa2-b794-a3089c0b78ad/scratchpad/22-email-signu…)
+  ⎿    pixelHeight: 585
+  ⎿  1 file changed (binary, mode only or too large to show)
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update the outline note for 22.
+
+⏺ Bash(cd /Users/gaoyiping/work/claude/fare-finder-pro && python3 - <<'EOF'
+      p='docs/ppt-outline_1.1_user.md'…)
+  ⎿  Updated docs/ppt-outline_1.1_user.md (+2 -2)
+      107  - 提醒：
+      108    - 沒收到信請檢查垃圾郵件匣
+      109    - 若這個 email 曾在同一帳號系統的其他服務註冊過，設定的新密
+           碼也會成為那些服務的密碼（頁面上有提示）
+      110 -- **畫面**：`ppt-screenshots/20-auth-signup.png`（註冊頁）→ `2
+          -2-email-signup.png`（註冊確認信，裁掉連結網址）→ `23-auth-set-
+          -password.png`（設定密碼頁）                                   
+      110 +- **畫面**：`ppt-screenshots/20-auth-signup.png`（註冊頁）→ `2
+          +2-email-signup.png`（註冊確認信）→ `23-auth-set-password.png` 
+          +（設定密碼頁）                                                
+      111  
+      112  ### Slide 11 — Step 2：登入與忘記密碼
+      113  - 登入頁「Welcome back．登入」：輸入 Email、Password，按「Sign
+            in / 登入」
+     ...
+      167  | `19-auth-forgot.png` | 忘記密碼頁 | Slide 11 |
+      168  | `20-auth-signup.png` | 註冊頁（只有 Email 欄位） | Slide 10 
+           |
+      169  | `21-auth-signup-sent.png` | 送出後「請到信箱點擊連結」提示（
+           **email 未遮蔽，使用前要遮**） | Slide 10（備用） |
+      170 -| `22-email-signup.png` | 註冊確認信（**要裁掉下方連結網址**，
+          -只留標題與「繼續 / Continue」按鈕） | Slide 10 |              
+      170 +| `22-email-signup.png` | 註冊確認信（已裁掉連結網址、遮掉收件
+          +人，只留標題與「繼續 / Continue」按鈕） | Slide 10 |          
+      171  | `23-auth-set-password.png` | 設定密碼頁 | Slide 10 |
+      172  | `24-dashboard-free-desktop.png` | Dashboard 四條航線（桌面）
+            | Slide 5、12 |
+      173  | `25-dashboard-free-mobile.png` | Dashboard（手機） | Slide 1
+           2 |
+
+⏺ I've cleaned up 22-email-signup.png and checked the result:
+
+  - Cropped everything below the 「繼續 / Continue」 button, so the full link
+    and its token are gone. Also gone is the last line,
+    「如果這不是你本人的操作…」.
+  - Covered 「kyp741+ppt」 after 「寄給」 with white, so it now reads just
+    「寄給」.
+  - The email heading, the text and the purple button are all intact.
+
+  The original is saved in the scratchpad (22-email-signup.orig.png). In the
+  outline, I removed the "needs cropping" note for 22 from Slide 10 and the
+  screenshot list.
+
+  The other email screenshots, 28, 29 and 32, still show 「kyp741+ppt」 after
+  「寄給」. I can cover those the same way if you want.
+
+✻ Brewed for 39s · done 11:21 AM
+
+※ recap: We're building the v1.1 user slide outline; screenshots are done and the sign-up email image is cleaned, and the stale-price notice on the Dashboard works locally but isn't committed or deployed. Next: say whether I should commit and deploy it.
+
+❯ 其他幾張也幫我遮掉                                                            
+
+⏺ Bash(cd /Users/gaoyiping/work/claude/fare-finder-pro/docs/ppt-screenshots &&
+      S=/private/tmp/claude-501/-Users-gaoyiping-work-claude-fare-finder-pro/621
+      76180-7ec1-4fa…)
+  ⎿  ok
+  ⎿  3 files changed (binary, mode only or too large to show)
+
+  Read 3 files (ctrl+o to expand)
+
+⏺ The three emails are done. 21-auth-signup-sent.png also shows the email in the
+  form field, so I'll handle that one too.
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(S=/private/tmp/claude-501/-Users-gaoyiping-work-claude-fare-finder-pro/62
+      176180-7ec1-4fa2-b794-a3089c0b78ad/scratchpad && cp
+      21-auth-signup-sent.png $S/21-auth-…)
+  ⎿  ok
+  ⎿  1 file changed (binary, mode only or too large to show)
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Good. Updating the outline notes.
+
+⏺ Bash(cd /Users/gaoyiping/work/claude/fare-finder-pro && python3 - <<'EOF'
+      p='docs/ppt-outline_1.1_user.md'…)
+  ⎿  no email left in outline
+  ⎿  Updated docs/ppt-outline_1.1_user.md (+2 -3)
+      158  ---
+      159  
+      160  ## 截圖清單（免費模式，2026-09-25 於 flights.roberthut.com 拍
+           攝）
+      161 -Demo 帳號為 `+ppt` 別名帳號；Dashboard 截圖上的 email 已替換為
+          - `demo@example.com`。                                         
+      161 +Demo 帳號為 `+ppt` 別名帳號；網頁截圖上的 email 已替換為 `demo
+          +@example.com`，信件截圖的收件人已遮掉。                       
+      162  | 檔案 | 內容 | 用於 |
+      163  |---|---|---|
+      164  | `16-landing-hero.png` | 首頁上半 | Slide 1 |
+     ...
+      166  | `18-auth-signin.png` | 登入頁（含 Forgot password） | Slide 
+           11 |
+      167  | `19-auth-forgot.png` | 忘記密碼頁 | Slide 11 |
+      168  | `20-auth-signup.png` | 註冊頁（只有 Email 欄位） | Slide 10 
+           |
+      169 -| `21-auth-signup-sent.png` | 送出後「請到信箱點擊連結」提示（
+          -**email 未遮蔽，使用前要遮**） | Slide 10（備用） |           
+      169 +| `21-auth-signup-sent.png` | 送出後「請到信箱點擊連結」提示（
+          +email 已替換為 demo@example.com） | Slide 10（備用） |        
+      170  | `22-email-signup.png` | 註冊確認信（已裁掉連結網址、遮掉收件
+           人，只留標題與「繼續 / Continue」按鈕） | Slide 10 |
+      171  | `23-auth-set-password.png` | 設定密碼頁 | Slide 10 |
+      172  | `24-dashboard-free-desktop.png` | Dashboard 四條航線（桌面）
+            | Slide 5、12 |
+     ...
+      179  | `31-dashboard-free-ended.png` | 「已結束」＋「免費重新訂閱」
+            | Slide 7、13 |
+      180  | `32-email-free-cancel.png` | 免費訂閱取消信 | Slide 8 |
+      181  
+      182 -- 信件截圖的收件人顯示「kyp741+ppt」，介意的話遮掉            
+      182  - **不要使用** `01`–`15`：舊網址、付費模式或舊版註冊頁（`08`–`
+           11`、`13`–`15` 為綠界收銀台與付費版信件）
+      183  - 仍未截到、以文字帶過：一個月到期的「免費訂閱期已結束」信（要
+           等到期）
+      184  
+
+⏺ I covered the email address on the other three email screenshots, plus one
+  more, and checked each result by eye:
+
+  ┌───────────────────────────┬──────────────────────────────────────────────┐
+  │           File            │                  What I did                  │
+  ├───────────────────────────┼──────────────────────────────────────────────┤
+  │ 28-email-free-welcome.png │ Covered 「kyp741+ppt」 after 「寄給」 with   │
+  │                           │ white                                        │
+  ├───────────────────────────┼──────────────────────────────────────────────┤
+  │ 29-email-alert.png        │ Same                                         │
+  ├───────────────────────────┼──────────────────────────────────────────────┤
+  │ 32-email-free-cancel.png  │ Same                                         │
+  ├───────────────────────────┼──────────────────────────────────────────────┤
+  │                           │ Also covered: the Email field showed the     │
+  │ 21-auth-signup-sent.png   │ full address, so I replaced it with          │
+  │                           │ demo@example.com in a matching background    │
+  │                           │ colour                                       │
+  └───────────────────────────┴──────────────────────────────────────────────┘
+
+  In 21, the replacement demo@example.com is in a slightly different font from
+  the rest of the page. It's fine at normal size, but noticeable if you zoom in.
+
+  The originals are backed up in the scratchpad as *.orig.png.
+
+  Across screenshots 16–32, both the web page shots and the email shots, the
+  email address is no longer visible. I also updated the outline's screenshot
+  list, including removing the reminder that 21 still needed the email covered.
+
+✻ Baked for 48s · done 11:40 AM
+
+❯ /context 
+  ⎿  Context Usage
+     ⛁ ⛁ ⛁ ⛁ ⛀ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁   Opus 5.5
+     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁   claude-opus-5-5
+     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   227.3k/1m tokens (23%)
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ 
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   Estimated usage by category
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ System prompt: 3.8k tokens (0.4%)
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ System tools: 12.4k tokens (1.2%)
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ MCP tools: 4.4k tokens (0.4%)
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ Custom agents: 304 tokens (0.0%)
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛝ ⛝ ⛝ ⛝ ⛝ ⛝ ⛝   ⛁ Memory files: 5.5k tokens (0.5%)
+                                               ⛁ Skills: 10k tokens (1.0%)
+                                               ⛁ Messages: 191.1k tokens (19.1%)
+                                               ⛶ Free space: 739.7k (74.0%)
+                                               ⛝ Autocompact buffer: 33k tokens (3.3%)
+
+     Auto-compact window: 1m tokens
+
+     MCP tools · /mcp (loaded on-demand)
+     └ 389 tools · 4.4k tokens
+
+     Custom agents · .claude/agents/
+     └ 3 agents · 304 tokens
+
+     Memory files · /memory
+     └ 3 files · 5.5k tokens
+
+     Skills · /skills
+     └ 73 skills · 10k tokens
+
+     /context all to expand
+
+      Suggestions
+      ℹ Read results using 1.3m tokens (131%) → save ~392.4k
+        Use offset and limit parameters to read only the sections you need. Avoid re-reading entire files when you only need a few lines.
+
+      ℹ mcp__chrome-devtools__take_screenshot using 240.4k tokens (24%) → save ~48.1k
+        This tool is consuming a significant portion of context.
+
+❯ 現在資料已足夠產生 ppt?                                                       
+
+⏺ Yes, you have enough to make the deck. All the content and screenshots are in
+  place. You only need to fill in a few details, and I can produce everything
+  else myself.
+
+  Ready
+  - All 14 slides in docs/ppt-outline_1.1_user.md have content. The routes,
+    contact details, URL, notification frequency and date-change tips have all
+    been added.
+  - The 17 screenshots 16–32 have their email addresses hidden, and each one is
+    mapped to a slide.
+
+  I can produce these myself while making the deck
+  - The QR code for https://flights.roberthut.com/, for Slide 14.
+  - The free-subscription status flow diagram for Slide 7.
+  - The 5-step flow diagram for Slide 9.
+
+  Need you to confirm
+  1. Presenter name and date on the cover: for example, "Robert Kao /
+     2026-09-26"?
+  2. File format and name: the previous version was .pptx. Should I follow the
+     same naming, for example
+     docs/flight-price-notifier_v1.1_user_2026_0926.pptx?
+  3. Style: should I reuse the design of
+     docs/flight-price-notifier_v1.0_2026_0921.pptx, or make a new one in the
+     website's dark teal and red, as the outline suggests?
+
+  Two minor points to be aware of
+  - In the Dashboard screenshots (24 and 25), London shows 12:00 while the other
+    routes show 20:00. The new 「目前暫無最新票價」 notice isn't deployed yet,
+    so it isn't in them. It doesn't affect the deck; if you want the notice to
+    appear, I'd deploy first, then retake the shots.
+  - Slides 2 and 3 are text only, with no screenshots, as the outline intended.
+
+  Once you've answered those three, I'll start making the deck.
+
+✻ Cooked for 11s · done 11:43 AM
+
+❯ 1. Yes, 2, yes, 3. as outline suggest                                         
+
+⏺ Skill(anthropic-skills:pptx)
+  ⎿  Successfully loaded skill
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ None of the deck tools are installed locally. I'll check what's available
+  before installing anything.
+
+  Listed 1 directory, ran 1 shell command (ctrl+o to expand)
+
+⏺ Keynote is installed, so I can use it to render the slides for QA. Installing
+  pptxgenjs and qrcode into the scratchpad, not the project.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Before building, I'll crop the Tokyo card out of a few Dashboard shots so they
+  can be shown at a readable size. First I'll check the card position in 30.
+
+  Read 2 files, ran 1 shell command (ctrl+o to expand)
+
+⏺ The crops look good. Now I'll write the deck generator script.
+  Made 1 scratchpad edit +458, ran 1 shell command (ctrl+o to expand)
+
+⏺ Rendering the slides through Keynote for visual QA.
+
+  Read 1 file, ran 3 shell commands (ctrl+o to expand)
+
+⏺ Slide 3's headline wraps badly. I'll fix that after reviewing the rest.
+
+  Read 3 files, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Four slides have layout problems: 3, 7, 9 and 10 (plus a spacing tweak on 13).
+  Fixing them.
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ All four fixes look right. Writing the final file into docs/ and running the
+  validator.
+
+⏺ Bash(cd /private/tmp/claude-501/-Users-gaoyiping-work-claude-fare-finder-pro/6
+      2176180-7ec1-4fa2-b794-a3089c0b78ad/scratchpad/deck && node build.js &&
+      SK=/Users/gaoyi…)
+  ⎿  wrote /Users/gaoyiping/work/claude/fare-finder-pro/docs/flight-price-n
+     otifier_v1.1_user_2026_0926.pptx
+     All validations PASSED!
+  ⎿  Shell cwd was reset to /Users/gaoyiping/work/claude/fare-finder-pro
+  ⎿  1 file changed (binary, mode only or too large to show)
+  ⎿  (timeout 4m)
+
+⏺ Bash(python3 - <<'EOF'
+      p='docs/ppt-outline_1.1_user.md'…)
+  ⎿  -rw-r--r--@ 1 gaoyiping  staff  3325238 Sep 26 11:54 docs/flight-price
+     -notifier_v1.1_user_2026_0926.pptx
+  ⎿  Updated docs/ppt-outline_1.1_user.md (+1 -0)
+       7  > 語言：中文為主，畫面上的英文字保留原樣
+       8  > 標示說明：**畫面** = 建議放的截圖；**備註** = 講者備註
+       9  > 前一版（含付款與技術介紹）：`docs/ppt-outline.md`，本檔不取代
+          它
+      10 +> 成品：`docs/flight-price-notifier_v1.1_user_2026_0926.pptx`（
+         +15 張：Slide 14 拆成「Demo 與常見問題」＋「謝謝／QR code」兩張 
+         +）                                                             
+      11  
+      12  ---
+      13  
+
+⏺ I've built the deck as docs/flight-price-notifier_v1.1_user_2026_0926.pptx. It
+  follows the outline's dark teal background with red accents, the cover reads
+  "Robert Kao ｜ 2026-09-26", and all 15 slides are in 16:9. I opened it in
+  Keynote and checked every slide by eye, and it passed the file-format check.
+
+  What's on each slide
+
+  ┌───────┬────────────────────────┬─────────────────────────────────────────┐
+  │   #   │         Title          │              What it shows              │
+  ├───────┼────────────────────────┼─────────────────────────────────────────┤
+  │ 1     │ Cover                  │ Title, subtitles, a red button with the │
+  │       │                        │  site URL, and the home page screenshot │
+  ├───────┼────────────────────────┼─────────────────────────────────────────┤
+  │ 2     │ 你是不是也這樣買機票？ │ Three problem cards, ending with        │
+  │       │                        │ 「你上次買機票，查了幾天？」            │
+  ├───────┼────────────────────────┼─────────────────────────────────────────┤
+  │       │                        │ The main message, with                  │
+  │ 3     │ 一句話介紹             │ 「低於你的目標價」 in red, and three    │
+  │       │                        │ figures: NT$0, 1 個月, 無限次           │
+  ├───────┼────────────────────────┼─────────────────────────────────────────┤
+  │ 4     │ 三大功能               │ Three icon rows next to the full home   │
+  │       │                        │ page screenshot                         │
+  ├───────┼────────────────────────┼─────────────────────────────────────────┤
+  │       │                        │ The four routes as tiles, a             │
+  │ 5     │ 4 條航線               │ red-bordered box with your contact      │
+  │       │                        │ details, and the Dashboard screenshot   │
+  ├───────┼────────────────────────┼─────────────────────────────────────────┤
+  │       │                        │ The price-drop email, plus three        │
+  │ 6     │ 降價通知信             │ explanation cards: how often it's sent, │
+  │       │                        │  what to do if you don't want it daily, │
+  │       │                        │  and changing dates                     │
+  ├───────┼────────────────────────┼─────────────────────────────────────────┤
+  │       │                        │ A status flow diagram with              │
+  │ 7     │ 免費訂閱怎麼運作       │ before-and-after crops of the Tokyo     │
+  │       │                        │ card                                    │
+  ├───────┼────────────────────────┼─────────────────────────────────────────┤
+  │       │                        │ A table of the four emails, next to     │
+  │ 8     │ 你會收到哪些信         │ screenshots of the welcome and          │
+  │       │                        │ cancellation emails                     │
+  ├───────┼────────────────────────┼─────────────────────────────────────────┤
+  │ 9     │ 操作流程總覽           │ Five red numbered steps and the URL     │
+  ├───────┼────────────────────────┼─────────────────────────────────────────┤
+  │       │                        │ Sign up and set password, sign in and   │
+  │ 10–13 │ STEP 1–4               │ forgot password, start free tracking    │
+  │       │                        │ (with the mobile view), managing a      │
+  │       │                        │ subscription                            │
+  ├───────┼────────────────────────┼─────────────────────────────────────────┤
+  │ 14    │ Demo 與常見問題        │ The live demo steps and eight common    │
+  │       │                        │ questions                               │
+  ├───────┼────────────────────────┼─────────────────────────────────────────┤
+  │ 15    │ 謝謝                   │ The URL, your contact details and a QR  │
+  │       │                        │ code                                    │
+  └───────┴────────────────────────┴─────────────────────────────────────────┘
+
+  Things that differ from what you might expect
+  - 15 slides, not 14: the outline's Slide 14 held the demo, eight FAQs and the
+    QR code, which was too crowded for one slide. I split it into "Demo
+    與常見問題" and "謝謝 / QR code". I noted this at the top of the outline.
+  - Speaker notes: each slide's 備註 from the outline is in the slide's speaker
+    notes, not on the slide itself. This includes the demo checklist on slide 14
+    and the reminders on slide 4 about the home page still saying 「月訂閱制」
+    and 「台北出發」.
+  - Cropped cards: on slides 7, 12 and 13, I cropped just the Tokyo card out of
+    the Dashboard screenshots so the text is large enough to read.
+  - Font: I used PingFang TC, which displays correctly in Keynote or PowerPoint
+    on a Mac. On Windows, PowerPoint substitutes another font, so line breaks
+    may shift slightly.
+
+  Not done
+  - The QR code was not tested with a phone. It was generated by a library, so
+    scan it once before you present.
+  - Not committed: the deck, the outline and the screenshots are all still
+    uncommitted, along with the Dashboard 「暫無最新票價」 change from earlier.
+  - Generator script left out of the repo: the script that builds the deck is
+    scratchpad/deck/build.js, not in the repo. Tell me if you want it kept.
+
+✻ Brewed for 5m 59s · done 11:55 AM
+
+※ recap: The user-focused v1.1 deck is built in docs as a 15-slide .pptx, with every screenshot's email address hidden. Next, scan its QR code with your phone, then tell me whether to commit the deck and the Dashboard stale-price change.
+
+❯ QR code test ok, the script that build desk 保留以後會有用？                  
+
+⏺ Yes, it's worth keeping, as long as you'll update this deck again. Likely
+  cases:
+  - Retaking screenshots: after the 「暫無最新票價」 change is deployed, or when
+    routes change (you plan to adjust them based on demand). Replace the images
+    and rerun the script to get a new deck. You don't have to redo the layout
+    by hand.
+  - Changing text or numbers: route names, the contact email, the NT$ amount in
+    the alert example, and so on. Change one line in the script and rebuild.
+  - A future v1.2: for example, a version with payment switched back on. You can
+    copy the same styling and structure.
+
+  It's not worth keeping if this deck is done after this presentation and you'll
+  edit it directly in Keynote from now on.
+
+  If you keep it, I'd need to tidy it up before it goes into the repo. Right now
+  it only runs in the scratchpad:
+  - It relies on pptxgenjs and qrcode installed in the scratchpad. I wouldn't 
+    add these to the app's package.json, since the site doesn't use them. The
+    script should get its own small package.json.
+  - The four cropped card images were made by hand with ffmpeg in the
+    scratchpad. That crop step should go into the script, so it rebuilds them
+    from the original screenshots automatically.
+  - The file paths are hard-coded to scratchpad and absolute paths. They should
+    be changed to paths relative to the repo.
+
+  Suggested location: docs/deck/ (build.js, package.json, and a short README
+  explaining how to run it), with generated files like node_modules and the
+  crops listed in .gitignore.
+
+  Should I tidy it up and put it in docs/deck/?
+
+✻ Cooked for 10s · done 12:37 PM
+
+❯ tidy it up and put it in docs/deck/                                           
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Bash(mkdir -p /Users/gaoyiping/work/claude/fare-finder-pro/docs/deck && cd
+      /Users/gaoyiping/work/claude/fare-finder-pro && python3 - <<'EOF'
+      src='/private/tmp/claude…)
+  ⎿  1 file changed (binary, mode only or too large to show)
+
+⏺ Now the package.json, .gitignore and README.
+
+⏺ Write(docs/deck/package.json)
+  ⎿  Wrote 12 lines to docs/deck/package.json
+       1 {
+       2   "name": "fare-finder-pro-deck",
+       3   "private": true,
+       4   "description": "Builds the user-facing PPT deck from docs/ppt-
+         screenshots. Not part of the app.",
+       6     "build": "node build.js"
+       7   },
+       8   "dependencies": {
+       9     "pptxgenjs": "4.0.1",
+      10     "qrcode": "1.5.4"
+     … +3 lines (ctrl+o to expand)
+
+⏺ Write(docs/deck/.gitignore)
+  ⎿  Wrote 2 lines to docs/deck/.gitignore
+      1 node_modules/
+      2 .build/
+
+⏺ Write(docs/deck/README.md)
+  ⎿  Wrote 32 lines to docs/deck/README.md
+       1 # 使用者簡報產生器
+       3 產生 `docs/flight-price-notifier_v1.1_user_2026_0926.pptx`（給一
+         般使用者、只含免費訂閱的 15 張簡報）。內容對應 `docs/ppt-outline
+         _1.1_user.md`，截圖來自 `docs/ppt-screenshots/` 的 `16`–`32`。
+       5 這是獨立的小專案，不屬於 app：依賴只裝在這個資料夾，不要加進根目
+         錄的 `package.json`。
+       7 ## 需要
+       8 
+       9 - Node.js
+         g`）
+     … +31 lines (ctrl+o to expand)
+
+⏺ Installing, formatting, and checking the tidied script reproduces the same
+  deck.
+
+⏺ Bash(cd /Users/gaoyiping/work/claude/fare-finder-pro/docs/deck && npm install
+      2>&1 | tail -2 && npx --prefix ../.. prettier --write build.js
+      package.json README.md >…)
+  ⎿  Run `npm audit` for details.
+     wrote /private/tmp/claude-501/-Users-gaoyiping-work-claude-fare-finder
+     -pro/62176180-7ec1-4fa2-b794-a3089c0b78ad/scratchpad/check.pptx
+     … +23 lines (ctrl+o to expand)
+  ⎿  2 files changed (binary, mode only or too large to show)
+
+⏺ The slides that differ are exactly the ones using the crop and QR images, so
+  I'll check whether only the image paths changed.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I noticed pptxgenjs is writing full local file paths (including your username)
+  as image alt text, which is bad for privacy and screen readers. I'll replace
+  these with proper descriptive alt text for each image.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ Update(docs/deck/build.js)
+  ⎿  Added 24 lines, removed 1 line
+      104    });
+      105  }
+      106  
+      107 +// Alt text per image. Without it pptxgenjs writes the image's
+          + absolute local                                               
+      108 +// path into the deck (and screen readers read it out).       
+      109 +const ALT = {                                                 
+      110 +  "16-landing-hero.png": "首頁：Flight Price Notifier，設定航 
+          +線與目標價，機票降價就通知你",                                
+      111 +  "17-landing-full.png": "首頁全頁與三張功能卡片",            
+      112 +  "18-auth-signin.png": "登入頁",                             
+      113 +  "19-auth-forgot.png": "忘記密碼頁",                         
+      114 +  "20-auth-signup.png": "註冊頁，只需輸入 Email",             
+      115 +  "22-email-signup.png": "註冊確認信，含「繼續 / Continue」按 
+          +鈕",                                                          
+      116 +  "23-auth-set-password.png": "設定密碼頁",                   
+      117 +  "24-dashboard-free-desktop.png": "Dashboard 上的四條航線卡片
+          +",                                                            
+      118 +  "25-dashboard-free-mobile.png": "手機版 Dashboard",         
+      119 +  "28-email-free-welcome.png": "免費訂閱成功信",              
+      120 +  "29-email-alert.png": "降價通知信：台北到東京 NT$6,938 已達 
+          +標",                                                          
+      121 +  "32-email-free-cancel.png": "訂閱取消信",                   
+      122 +  "card-26.png": "東京航線卡片：已輸入目標價 10000，尚未訂閱",
+      123 +  "card-27.png": "東京航線卡片：免費 · 有效至 2026/10/25",    
+      124 +  "card-30.png": "東京航線卡片：取消訂閱確認",                
+      125 +  "card-31.png": "東京航線卡片：已結束，可免費重新訂閱",      
+      126 +  "qr.png": `網站 QR code：${SITE_URL}`,                      
+      127 +};                                                            
+      128 +const altOf = (file) => ALT[path.basename(file)] || "";       
+      129 +                                                              
+      130  // Screenshot on a floating rounded card: the deck's visual mo
+           tif.
+      131  function framed(s, file, x, y, w, ratio) {
+      132    const h = w / ratio;
+      133    const pad = 0.07;
+      134    card(s, x - pad, y - pad, w + pad * 2, h + pad * 2, { fill: 
+           "0A3F44" });
+      112 -  s.addImage({ path: file, x, y, w, h });                     
+      135 +  s.addImage({ path: file, x, y, w, h, altText: altOf(file) })
+          +;                                                             
+      136    return h + pad;
+      137  }
+      138  
+
+⏺ Update(docs/deck/build.js)
+  ⎿  Added 1 line
+      678      framed(s, shot("20-auth-signup.png"), xs[0], 1.8, w, 1.6);
+      679      card(s, xs[1] - 0.07, 1.73, w + 0.14, w / 1.6 + 0.14, { fi
+           ll: "FFFFFF" });
+      680      s.addImage({
+      681 +      altText: altOf("22-email-signup.png"),                  
+      682        path: shot("22-email-signup.png"),
+      683        x: xs[1],
+      684        y: 1.8 + (w / 1.6 - w / (2366 / 585)) / 2,
+⏺ Update(docs/deck/build.js)
+  ⎿  Added 1 line, removed 1 line
+      922        bold: true,
+      923      });
+      924      card(s, 8.6, 1.45, 3.9, 4.5, { fill: "FFFFFF", line: "FFFF
+           FF" });
+      925 -    s.addImage({ path: local("qr.png"), x: 8.95, y: 1.75, w: 3
+          -.2, h: 3.2 });                                                
+      925 +    s.addImage({ path: local("qr.png"), x: 8.95, y: 1.75, w: 3
+          +.2, h: 3.2, altText: altOf("qr.png") });                      
+      926      txt(s, "手機掃描開啟", {
+      927        x: 8.6,
+      928        y: 5.2,
+
+⏺ Rebuilding the deck and checking that no local paths are left in it.
+
+⏺ Bash(npx --prefix ../.. prettier --write build.js >/dev/null &&
+      S=/private/tmp/claude-501/-Users-gaoyiping-work-claude-fare-finder-pro/621
+      76180-7ec1-4fa2-b794-a3089c…)
+  ⎿  wrote /Users/gaoyiping/work/claude/fare-finder-pro/docs/flight-price-n
+     otifier_v1.1_user_2026_0926.pptx
+     paths left:        0
+     … +4 lines (ctrl+o to expand)
+  ⎿  Updated docs/deck/build.js (+8 -1)
+      922        bold: true,
+      923      });
+      924      card(s, 8.6, 1.45, 3.9, 4.5, { fill: "FFFFFF", line: "FFFF
+           FF" });
+      925 -    s.addImage({ path: local("qr.png"), x: 8.95, y: 1.75, w: 3
+          -.2, h: 3.2, altText: altOf("qr.png") });                      
+      925 +    s.addImage({                                              
+      926 +      path: local("qr.png"),                                  
+      927 +      x: 8.95,                                                
+      928 +      y: 1.75,                                                
+      929 +      w: 3.2,                                                 
+      930 +      h: 3.2,                                                 
+      931 +      altText: altOf("qr.png"),                               
+      932 +    });                                                       
+      933      txt(s, "手機掃描開啟", {
+      934        x: 8.6,
+      935        y: 5.2,
+  ⎿  … 1 more file changed
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ Update(docs/project-files-index.md)
+  ⎿  Added 3 lines
+      23  | `docs/test-plan.md` | 手動測試計畫：把 M1/M2 驗收清單、handof
+          f 記錄整理成可重複執行的測試項目（無自動化測試框架）。 |
+      24  | `docs/test-report.md` | 對應 `test-plan.md` 的測試報告，彙整
+          已執行/未執行的用例結果。 |
+      25  | `docs/ppt-outline.md` | 產品功能介紹簡報的投影片大綱（18 張、
+          20–25 分鐘），含截圖存放路徑與遮蔽帳號的提醒。 |
+      26 +| `docs/ppt-outline_1.1_user.md` | 給一般使用者的簡報大綱 v1.1 
+         +：只含免費訂閱，不含管理員、綠界付款與技術內容；含截圖清單（`pp
+         +t-screenshots/16`–`32`）。 |                                   
+      27 +| `docs/flight-price-notifier_v1.1_user_2026_0926.pptx` | 依 v1
+         +.1 大綱產生的 15 張使用者簡報。 |                              
+      28 +| `docs/deck/` | 產生上述簡報的腳本（`build.js`，獨立的 `packag
+         +e.json`，不屬於 app）；用法見該資料夾的 `README.md`。 |        
+      29  | `docs/project-files-index.md` | 本檔案：專案文件索引。 |
+      30  
+      31  ## 其他
+
+⏺ I've moved the deck script into docs/deck/ and tidied it. It now runs from the
+  repo and produces the same deck. Along the way I found and fixed a privacy
+  problem in the deck file.
+
+  What's in docs/deck/
+  - build.js: the script that builds the deck.
+    - File paths are now relative to the repo.
+    - The four card crops are built automatically from the original screenshots,
+      with the crop coordinates in the CROPS table.
+    - The QR code URL is set in one place, SITE_URL.
+  - package.json and package-lock.json: separate from the app, with pptxgenjs
+    4.0.1 and qrcode 1.5.4 pinned. The root package.json is unchanged.
+  - .gitignore: excludes node_modules/ and .build/, where the crops and QR code
+    are written.
+  - README.md: covers what you need (Node and ffmpeg), how to build (npm install
+    && npm run build), and common changes like swapping screenshots, editing
+    text, changing the URL or starting a new version.
+
+  The privacy problem
+  When I compared the rebuilt deck with the earlier one, I found that the
+  library writes each image's full local path into its alt text. That included
+  your username and scratchpad paths, and screen readers would read them aloud.
+  - Every image (17 in total) now has a proper Chinese description, for example
+    「降價通知信：台北到東京 NT$6,938 已達標」.
+  - I rebuilt docs/flight-price-notifier_v1.1_user_2026_0926.pptx. It now
+    contains no local paths and no empty alt text, and it passes the validator.
+  - The images and layout are identical to the earlier deck; only the alt text
+    changed. This means the file you already have also contains those paths. If 
+    you've already sent it to anyone, send them this new version.
+
+  Other changes
+  - I added the new files to docs/project-files-index.md: the v1.1 outline, the
+    deck, and docs/deck/.
+
+  Not committed
+  - This includes docs/deck/, the deck, the outline, the screenshots and the
+    index.
+  - It also includes the Dashboard 「暫無最新票價」 change from earlier.
+
+  Let me know if you want me to commit, and whether that should be one commit or
+  split into the docs/deck and the Dashboard change.
+
+✻ Sautéed for 1m 59s · done 12:41 PM
+
+❯ 分兩個 commit 提交                                                            
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Committing the Dashboard change first.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Now the docs commit: only the files from this session. The older v1.0 deck and
+  screenshots 01–15 were already untracked before I started, so I'll leave them
+  alone.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I made the two commits on the multi-app branch. Nothing has been pushed.
+
+  1. e552074 Tell users when a route has had no fresh fare for a while
+     - Only src/routes/_authenticated/dashboard.tsx: the 「目前暫無最新票價」
+       notice.
+     - It isn't deployed yet, so flights.roberthut.com doesn't show it.
+  2. 77ce5f6 Add the v1.1 user deck (free subscription only) and its generator
+     - The v1.1 outline, the 15-slide .pptx, and screenshots 16–32.
+     - docs/deck/ (the script, its package files, .gitignore and README) and the
+       updated docs/project-files-index.md.
+
+  Left out: the v1.0 deck docs/flight-price-notifier_v1.0_2026_0921.pptx and
+  screenshots 01–15. They were already untracked when this session started and
+  weren't made in this session, so I didn't touch them. The old
+  docs/ppt-outline.md refers to 01–15, so if you want to keep them, I can put
+  them in a separate commit.
+
+  A few points:
+  - Before you push: per the Lovable sync rules, these two commits can't be
+    changed once pushed. If you want to change the wording, now is the time.
+  - Before a demo: if you want the live site to show the 「暫無最新票價」 notice
+    before you demo, deploy with /deploy_vercel. It will confirm preview vs.
+    production first.
+  - The London route: it still has no fare. The notice just tells users; it
+    doesn't fix the problem. The other fix I suggested earlier (also checking
+    the month after when next month has no fare) hasn't been done.
+
+✻ Sautéed for 33s · done 12:43 PM
+
+❯ commit v1.0 ppt data                                                          
+
+⏺ Before committing, I'll check the older screenshots for anything that
+  shouldn't go into git history, like visible email addresses or tokens.
+  Starting with the Dashboard shots.
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ The Dashboard shots already show a masked address, k***@gmail.com. Next I'll
+  check the mobile shot, the three emails' recipient lines, and the two ECPay
+  checkout shots.
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ The emails only say 「寄給 我」, and the mobile shot is masked too. Last, the
+  two ECPay checkout shots: I'm checking for order numbers.
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ The order number is already covered. The card number is ECPay's public test
+  card, so it isn't sensitive. Last check: the v1.0 .pptx might have the same
+  local-path alt text problem.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I haven't committed anything yet. The v1.0 deck has the same problem I fixed
+  in v1.1: 12 images use local file paths as their alt text. For example:
+
+  /private/tmp/claude-501/-Users-gaoyiping-work-claude-fare-finder-pro/…/scratch
+  pad/build/img/email-alert.png
+
+  That exposes your username and the directory layout. Once committed and pushed
+  (and synced to Lovable), it can't be removed from git history, and screen
+  readers would also read these paths aloud.
+
+  Everything else in v1.0 is fine:
+  - The 15 screenshots 01–15: the Dashboard shows k***@gmail.com, the emails say
+    「寄給 我」, and the ECPay order number is covered.
+  - Card number: the one shown is ECPay's public test card.
+  - Tokens: none found.
+
+  How should I handle it?
+
+  - Fix it, then commit (recommended): I'd replace only the alt text of those 12
+    images with short descriptions derived from each file name, for example
+    「降價通知信」 and 「綠界收銀台」. Layout and content stay exactly the same.
+    I'd validate it afterwards, then commit v1.0 and 01–15 together.
+  - Commit as-is: keep the file exactly as it is, paths included.
+
+✻ Brewed for 1m 1s · done 12:48 PM
+
+❯ 先修正再 commit                                                               
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Validation passed. I'll also confirm Keynote still opens it with all slides.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Keynote opens it with all 20 slides, and it has the same 164 parts as before.
+  Replacing the file and committing.
+
+⏺ Bash(S=/private/tmp/claude-501/-Users-gaoyiping-work-claude-fare-finder-pro/62
+      176180-7ec1-4fa2-b794-a3089c0b78ad/scratchpad && cp $S/v10-fixed.pptx
+      docs/flight-price…)
+  ⎿  b90b250 Add the v1.0 feature deck and its screenshots
+     77ce5f6 Add the v1.1 user deck (free subscription only) and its genera
+     tor
+     e552074 Tell users when a route has had no fresh fare for a while
+  ⎿  1 file changed (binary, mode only or too large to show)
+
+⏺ I fixed the v1.0 deck and committed it on multi-app as b90b250 Add the v1.0 
+  feature deck and its screenshots. The working tree is clean and nothing has
+  been pushed.
+
+  The fix
+  - I replaced the alt text of the 12 images in
+    docs/flight-price-notifier_v1.0_2026_0921.pptx with Chinese descriptions,
+    for example 「綠界收銀台：定期定額 NT$300，每 1 個月扣款 1 次」 and
+    「降價通知信」. The local paths are gone.
+  - Nothing else changed. The validator passes, Keynote opens it with all 20
+    slides, and the file has the same 164 parts as before.
+  - The original is backed up in the scratchpad as v10-orig.pptx.
+
+  What this commit contains
+  - The v1.0 deck.
+  - Screenshots 01–15, the ones docs/ppt-outline.md refers to. I had already
+    checked them: the Dashboard emails are masked, the emails only show 「寄給
+    我」, the order number is covered, and the card is the ECPay public test
+    card.
+
+  Three commits on the branch, not yet pushed
+  1. e552074 The Dashboard 「暫無最新票價」 notice
+  2. 77ce5f6 v1.1 user deck, outline, screenshots 16–32, docs/deck/
+  3. b90b250 v1.0 deck and screenshots 01–15
+
+  Because of the Lovable sync rules, these commits can't be changed once pushed.
+  Push when you're ready, and let me know if you want me to do it.
+
+✻ Churned for 47s · done 12:51 PM
+
+❯ push it                                                                       
+
+  Pushed to multi-app, ran 1 shell command (ctrl+o to expand)
+⏺ I pushed the three commits to origin/multi-app as a normal fast-forward
+  (e818a3b..b90b250), and the local branch now matches the remote:
+
+  1. e552074: the Dashboard 「暫無最新票價」 notice
+  2. 77ce5f6: the v1.1 user deck, its outline and screenshots 16–32, and
+     docs/deck/
+  3. b90b250: the v1.0 deck (with the alt text fixed) and screenshots 01–15
+
+  Pushing didn't deploy anything. flights.roberthut.com doesn't show the
+  「暫無最新票價」 notice yet; deploying it needs /deploy_vercel, which will ask
+  you to confirm preview vs. production first.
+
+✻ Baked for 21s · done 12:55 PM
+
+※ recap: You wanted a free-subscription user deck for the app; the v1.1 deck, its generator, the stale-fare notice and the v1.0 deck are all committed and pushed to multi-app. Next: deploy with /deploy_vercel so the live site shows the notice.
