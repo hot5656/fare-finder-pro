@@ -3,7 +3,8 @@
   "private": true,
   "description": "Builds the user-facing PPT deck from docs/ppt-screenshots. Not part of the app.",
   "scripts": {
-    "build": "node build.js"
+    "build": "node build.js",
+    "build:system": "node build-system.js"
   },
   "dependencies": {
     "pptxgenjs": "4.0.1",
