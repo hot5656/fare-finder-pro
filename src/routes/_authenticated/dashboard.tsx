@@ -174,6 +174,11 @@ function DashboardPage() {
 
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("zh-TW") : "");
 
+// flight-parser runs every 30 min but only moves last_checked_at when it finds a
+// fare, so an older timestamp means the source has had no fare for a while
+// (several missed runs, not just one).
+const STALE_PRICE_MS = 2 * 60 * 60 * 1000;
+
 function PlanCard({
   route,
   subscription,
@@ -285,6 +290,10 @@ function PlanCard({
   // Disabled by an admin: only an already-paid row may still change its target.
   const closed = !route.is_active && status !== "active" && status !== "cancelled";
 
+  const priceStale =
+    route.last_checked_at != null &&
+    Date.now() - new Date(route.last_checked_at).getTime() > STALE_PRICE_MS;
+
   return (
     <div className="rounded-2xl border border-border bg-card p-6">
       <div className="flex items-start justify-between">
@@ -375,9 +384,14 @@ function PlanCard({
           )}
         </div>
       )}
+      {route.last_price != null && priceStale && (
+        <p className="mt-2 text-xs font-medium text-foreground">
+          目前暫無最新票價，系統仍會持續查詢。
+        </p>
+      )}
       {route.last_price != null && (
         <p className="mt-2 text-xs text-muted-foreground">
-          最後查詢（來回）：
+          {priceStale ? "上次查到（來回）：" : "最後查詢（來回）："}
           {route.last_price_currency === "TWD" ? "NT$" : `${route.last_price_currency} `}
           {Number(route.last_price).toLocaleString()}
           {route.last_checked_at && (
