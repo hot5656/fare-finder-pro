@@ -286,17 +286,17 @@
 
 | ID | 用例 | 預期 | 狀態 |
 |---|---|---|---|
-| AD-01 | 非 admin 登入 dashboard；直接開 `/admin` | 沒有 Admin 按鈕；`/admin` 讀不到後台資料（RLS＋`flight.is_admin()`） | 待測（admin 帳號看得到按鈕已確認） |
-| AD-02 | 非 admin 以自己的 JWT 呼叫 `flight-admin-routes`／`flight-admin-expire`／`flight-admin-notify`／`flight-admin-settings` | 全部 `403 not an admin`，不寫入 | 待測（403 分支為程式碼審查） |
+| AD-01 | 非 admin 登入 dashboard；直接開 `/admin` | 沒有 Admin 按鈕；直接開或重新整理 `/admin` 都導回 `/dashboard`；就算畫面被繞過，也讀不到後台資料（RLS＋`flight.is_admin()`） | ✅（2026-09-26，D-8 修正後） |
+| AD-02 | 非 admin 以自己的 JWT 呼叫 `flight-admin-routes`／`flight-admin-expire`／`flight-admin-notify`／`flight-admin-settings` | 全部 `403 not an admin`，不寫入 | ✅（2026-09-26） |
 | AD-03 | 總覽統計 | 有效訂閱、MRR（只算 `active` 且 `ecpay`）、總訂閱數、付款失敗與各狀態筆數，與 `flight.subscriptions` 查詢一致 | ✅（2026-09-26 畫面；MRR 規則同 P8） |
 | AD-04 | 查價健康橫幅 | 最近一輪有 issues → 警告；最近一輪超過 65 分鐘 → 錯誤（排程可能停了）；`running` 超過 10 分鐘 → 錯誤（卡住）；總覽與查價紀錄頁都顯示 | 🟡 警告已看到；65 分鐘與卡住兩種只有程式碼審查（`src/components/admin/shared.ts`） |
 | AD-05 | 查價紀錄頁 | 每輪一列（狀態、耗時、routes、API calls、matches、issues）；「只看異常」只留有 issues 的列；90 天前的列由 parser 自行刪除 | ✅ 列表與篩選；90 天刪除為程式碼審查 |
-| AD-06 | 新增航線：預覽 | 中文城市名或三碼代碼 → 辨識結果＋下個月來回最低價，**不寫入**；未知地名／同地 → `422`；已存在 → `409`；查無票價 → `422 no_fare` | 🟡 成功預覽已測（台北 → 大阪）；422／409 待測 |
-| AD-07 | 新增航線：建立 | 伺服器端重查票價，查得到才寫入 `flight.routes`；使用者 dashboard 立即出現新卡片；下一輪 parser 查這條航線 | 待測（會新增一條正式航線，航線不會被刪除，只能停用） |
-| AD-08 | 停用／啟用（名稱與代碼不可改） | 停用後 `flight-subscribe` 對新訂閱回 `409`、未訂閱者看不到該航線、仍付費的訂閱照常通知直到沒有付費者；`update` 帶 `origin_name`／`destination_name` 回 `400`；新增時名稱取自辨識結果，`create` 帶入的名稱被忽略 | 待測 |
+| AD-06 | 新增航線：預覽 | 中文城市名或三碼代碼 → 辨識結果＋下個月來回最低價，**不寫入**；未知地名／同地 → `422`；已存在 → `409`；查無票價 → `422 no_fare` | 🟡 成功預覽已測；預覽的 422／409 待測 |
+| AD-07 | 新增航線：建立 | 伺服器端重查票價，查得到才寫入 `flight.routes`；使用者 dashboard 立即出現新卡片；下一輪 parser 查這條航線 | ✅（2026-09-26，新增 `TPE-OSA`，測完停用） |
+| AD-08 | 停用／啟用（名稱與代碼不可改） | 停用後 `flight-subscribe` 對新訂閱回 `409`、未訂閱者看不到該航線、仍付費的訂閱照常通知直到沒有付費者；`update` 帶 `origin_name`／`destination_name` 回 `400`；新增時名稱取自辨識結果，`create` 帶入的名稱被忽略；代碼與地名不符 → `422` | ✅（2026-09-26） |
 | AD-09 | 註冊用戶列表 | 只列本 app 帳號；註冊與驗證時間、最後登入、訂閱數、付費中數；admin 標示 Admin；搜尋 email | ✅（2026-09-26 畫面） |
-| AD-10 | 手動發送 | 只對「付費中且目前達標」的訂閱顯示；確認後略過 24 小時去重寄出 1 封；`notification_history` 標記為手動；非達標列由伺服器端擋下 | 🟡 通知紀錄已有 3 筆「手動 Manual」（9/23–9/25），但沒有對應的測試記錄；擋下分支為程式碼審查 |
-| AD-11 | 強制到期 | 開關關閉 → 按鈕不出現，直接呼叫回 `403`；開啟時只能對 `cancelled` 列（其他狀態 `409`）；`expired`＋`current_period_end = now`，到期信只寄一次 | 待測 |
+| AD-10 | 手動發送 | 只對「付費中且目前達標」的訂閱顯示；確認後略過 24 小時去重寄出 1 封；`notification_history` 標記為手動；非達標列由伺服器端擋下 | ✅（2026-09-26；擋下分支為程式碼審查） |
+| AD-11 | 強制到期 | 開關關閉 → 按鈕不出現，直接呼叫回 `403`；開啟時只能對 `cancelled` 列（其他狀態 `409`）；`expired`＋`current_period_end = now`，到期信只寄一次 | ✅（2026-09-26） |
 | AD-12 | dashboard「暫無最新票價」 | `last_checked_at` 超過 2 小時 → 卡片顯示「目前暫無最新票價，系統仍會持續查詢。」，價格改標「上次查到（來回）」；其他航線照常「最後查詢」 | ✅（2026-09-26 正式站，台北 ✈ 倫敦） |
 
 ---
@@ -351,7 +351,7 @@
 - 真實續扣回呼中金額欄位名稱（`Amount` 或 `amount`；程式碼 fallback 至 `ECPAY_AMOUNT`，顯示金額不受影響）。
 - H3（USD 抓取失敗時 TWD-only 交付）。
 - 扣款失敗信的**完整信件內文**（僅見過主旨與摘要；取消信與降價信的內文已見於簡報截圖）；ECPay 廠商後台看到系列已終止（證據為 `RtnCode=1`）。
-- 8.9 中標為待測或 🟡 的 admin 用例（多數會寫入正式資料，需使用者同意後執行）。
+- 8.9 的 AD-04（橫幅兩種錯誤狀態）與 AD-06（預覽的 422／409）。
 
 **風險與注意事項**
 - **文件與程式碼不一致（已處理，2026-09-21）**：`docs/shared-supabase-auth.md` 與 README 原本寫註冊時 email 已存在應一律走密碼重設，但 `src/routes/auth/index.tsx` 在密碼**相符**時會直接 `updateUser` 補標記並登入（FE-08）。已決定以程式碼為準，兩份文件改成描述實際行為（並補充「標籤是使用者自訂、不是權限」的說明）。

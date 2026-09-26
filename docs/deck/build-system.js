@@ -646,7 +646,15 @@ async function main() {
     const s = base();
     header(s, "PART 2 ・ 使用者功能", "訂閱狀態流程");
     const lane = (y, label, states, edges) => {
-      txt(s, label, { x: 0.6, y: y + 0.13, w: 1.3, h: 0.4, fontSize: 15, bold: true, color: C.red });
+      txt(s, label, {
+        x: 0.6,
+        y: y + 0.13,
+        w: 1.3,
+        h: 0.4,
+        fontSize: 15,
+        bold: true,
+        color: C.red,
+      });
       const w = 2.1;
       const gap = 0.8;
       states.forEach(([name, active], i) => stateBox(s, name, 2.0 + i * (w + gap), y, w, active));
@@ -700,7 +708,9 @@ async function main() {
     caption(s, "已結束（免費）", 4.7, 6.46, 3.6);
     crop(s, "card-14.png", 8.85, 4.55, 3.85);
     caption(s, "已取消 · 有效至 2026/10/21（付費）", 8.8, 6.6, 3.9);
-    s.addNotes("紅框的狀態會收到降價通知：免費有效中、付費已訂閱，以及付費已取消但還在已付款期間內。");
+    s.addNotes(
+      "紅框的狀態會收到降價通知：免費有效中、付費已訂閱，以及付費已取消但還在已付款期間內。",
+    );
   }
 
   // 9 — Emails
@@ -972,7 +982,15 @@ async function main() {
     let y = 1.75;
     items.forEach(([head, body], i) => {
       card(s, 0.6, y, 5.2, hs[i]);
-      txt(s, head, { x: 0.85, y: y + 0.15, w: 4.8, h: 0.4, fontSize: 16, bold: true, color: C.red });
+      txt(s, head, {
+        x: 0.85,
+        y: y + 0.15,
+        w: 4.8,
+        h: 0.4,
+        fontSize: 16,
+        bold: true,
+        color: C.red,
+      });
       txt(s, body, {
         x: 0.85,
         y: y + 0.55,
@@ -1133,7 +1151,15 @@ async function main() {
     const col = (x, w, title, sub, lines, line) => {
       card(s, x, 1.9, w, 3.9, { line: line || C.cardLine, lineW: 1.5 });
       txt(s, title, { x: x + 0.3, y: 2.1, w: w - 0.6, h: 0.45, fontSize: 19, bold: true });
-      txt(s, sub, { x: x + 0.3, y: 2.58, w: w - 0.6, h: 0.35, fontSize: 12, color: C.red, bold: true });
+      txt(s, sub, {
+        x: x + 0.3,
+        y: 2.58,
+        w: w - 0.6,
+        h: 0.35,
+        fontSize: 12,
+        color: C.red,
+        bold: true,
+      });
       bullets(s, lines, { x: x + 0.3, y: 3.1, w: w - 0.6, h: 2.6, fontSize: 13 });
     };
     col(0.6, 3.5, "前端", "flights.roberthut.com", [
@@ -1146,7 +1172,11 @@ async function main() {
       3.7,
       "後端 Supabase",
       "沒有自己的伺服器",
-      ["Postgres（schema flight）＋ RLS", "Edge Functions（訂閱、回呼、查價、寄信）", "pg_cron 每 30 分鐘排程"],
+      [
+        "Postgres（schema flight）＋ RLS",
+        "Edge Functions（訂閱、回呼、查價、寄信）",
+        "pg_cron 每 30 分鐘排程",
+      ],
       C.red,
     );
     col(9.3, 3.4, "外部服務", "", ["綠界 ECPay：付款", "Resend：寄信", "Travelpayouts：票價來源"]);
@@ -1220,8 +1250,14 @@ async function main() {
     const s = base();
     header(s, "PART 5 ・ 系統運作", "付款與資料安全");
     const items = [
-      ["只認驗證過的付款", "只有通過檢核碼驗證的綠界回呼，才能把訂閱改成「有效」；測試模擬付款不會啟用。"],
-      ["瀏覽器不能寫訂閱", "使用者沒有寫入訂閱的權限，無法自己改成已付費；所有寫入都經過伺服器函式。"],
+      [
+        "只認驗證過的付款",
+        "只有通過檢核碼驗證的綠界回呼，才能把訂閱改成「有效」；測試模擬付款不會啟用。",
+      ],
+      [
+        "瀏覽器不能寫訂閱",
+        "使用者沒有寫入訂閱的權限，無法自己改成已付費；所有寫入都經過伺服器函式。",
+      ],
       ["先停扣款再取消", "取消時先通知綠界停止扣款，成功才改本地狀態，避免取消了卻還在扣錢。"],
       ["共用帳號系統", "登入頁只接受已註冊本服務的帳號；資料一律以使用者本人為範圍（RLS）。"],
     ];
@@ -1229,7 +1265,15 @@ async function main() {
       const x = 0.6 + (i % 2) * 6.17;
       const y = 1.8 + Math.floor(i / 2) * 2.45;
       card(s, x, y, 5.97, 2.2);
-      txt(s, head, { x: x + 0.3, y: y + 0.25, w: 5.4, h: 0.45, fontSize: 18, bold: true, color: C.red });
+      txt(s, head, {
+        x: x + 0.3,
+        y: y + 0.25,
+        w: 5.4,
+        h: 0.45,
+        fontSize: 18,
+        bold: true,
+        color: C.red,
+      });
       txt(s, body, {
         x: x + 0.3,
         y: y + 0.8,
