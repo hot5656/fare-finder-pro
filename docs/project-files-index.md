@@ -23,6 +23,9 @@
 | `docs/test-plan.md` | 手動測試計畫：把 M1/M2 驗收清單、handoff 記錄整理成可重複執行的測試項目（無自動化測試框架）。 |
 | `docs/test-report.md` | 對應 `test-plan.md` 的測試報告，彙整已執行/未執行的用例結果。 |
 | `docs/ppt-outline.md` | 產品功能介紹簡報的投影片大綱（18 張、20–25 分鐘），含截圖存放路徑與遮蔽帳號的提醒。 |
+| `docs/ppt-outline_1.1_user.md` | 給一般使用者的簡報大綱 v1.1：只含免費訂閱，不含管理員、綠界付款與技術內容；含截圖清單（`ppt-screenshots/16`–`32`）。 |
+| `docs/flight-price-notifier_v1.1_user_2026_0926.pptx` | 依 v1.1 大綱產生的 15 張使用者簡報。 |
+| `docs/deck/` | 產生上述簡報的腳本（`build.js`，獨立的 `package.json`，不屬於 app）；用法見該資料夾的 `README.md`。 |
 | `docs/project-files-index.md` | 本檔案：專案文件索引。 |
 
 ## 其他
