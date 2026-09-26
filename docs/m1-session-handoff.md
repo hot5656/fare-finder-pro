@@ -438,9 +438,15 @@ Routes no longer need a migration. New tab 航線 Routes (`admin/routes.tsx`):
   (`create`) **re-runs the fare query server-side** and inserts only on a hit, with
   `last_price*` / `last_offer_v3` filled so the price shows at once. `plan_name` =
   `tpe-osa` style; `display_name` = `origin_name ✈ destination_name`.
-- **Edit / disable.** `update` changes the Chinese names (display_name rebuilt) and
-  `is_active`. Codes never change (subscriptions / history store the `TPE-XXX` string);
-  a wrong code = disable + add again. Nothing is ever deleted.
+- **Names are fixed (2026-09-26).** `create` re-runs the place search too and takes both
+  Chinese names from the matched places (the codes must still be among them, else 422
+  `place_mismatch`); the client no longer sends names, and the preview has no name inputs.
+  Picking an airport candidate names the route after it (e.g. 臺北松山機場).
+- **Disable only.** `update` accepts only `is_active`; sending `origin_name` /
+  `destination_name` is a 400. Codes and names never change (subscriptions / history store
+  the `TPE-XXX` string, and subscribers signed up under the name they saw); a wrong route =
+  disable it and add one with other codes (the same codes are a 409). Nothing is ever
+  deleted. Before 2026-09-26 `update` could also rename.
 - **Disabled route.** `flight-subscribe` refuses new / re-subscribe with 409 (target-price
   updates on active / cancelled rows still work); the dashboard shows it only to users who
   hold a subscription on it; `flight-parser` keeps checking it while it has paying

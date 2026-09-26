@@ -1,4 +1,4 @@
-// flight-admin-routes: an admin adds, renames, enables or disables a route in
+// flight-admin-routes: an admin adds, enables or disables a route in
 // flight.routes from /admin/routes.
 //
 // Called with the admin's own JWT (verify_jwt = true); the caller must be in
@@ -10,12 +10,16 @@
 //       (next month, round trip, TWD). No write. 422 when a place is unknown
 //       or no fare is found, 409 when the route already exists. The *_code
 //       fields pick another candidate when a name matched several places.
-//   { action: "create", origin_code, destination_code, origin_name, destination_name }
-//       Re-runs the fare query itself (the preview's answer is not trusted) and
-//       only inserts when a fare comes back, with that fare as last_price.
-//   { action: "update", plan_name, origin_name?, destination_name?, is_active? }
-//       Names and the on/off switch only. The codes never change: existing
-//       subscriptions and history store the "TPE-TYO" route string.
+//   { action: "create", origin, destination, origin_code, destination_code }
+//       The same search as the preview, re-run here (its answer is not
+//       trusted): the codes must still be among the matched places, and the
+//       Chinese names are taken from those matches, never from the client. Then
+//       re-runs the fare query and only inserts when a fare comes back, with
+//       that fare as last_price.
+//   { action: "update", plan_name, is_active }
+//       The on/off switch only. Codes and names never change after creation:
+//       existing subscriptions and history store the "TPE-TYO" route string,
+//       and subscribers signed up under the name they saw.
 //
 // Routes are never deleted (subscriptions reference them); disabling one is
 // handled by flight-subscribe (no new sign-ups) and flight-parser (keeps
@@ -47,12 +51,6 @@ const json = (body: unknown, status = 200) =>
     headers: { ...CORS, "Content-Type": "application/json" },
   });
 
-const cleanName = (v: unknown): string | null => {
-  if (typeof v !== "string") return null;
-  const s = v.trim();
-  return s && s.length <= 20 ? s : null;
-};
-
 const displayName = (origin: string, destination: string) => `${origin} ✈ ${destination}`;
 
 type Body = {
@@ -61,8 +59,8 @@ type Body = {
   destination?: string;
   origin_code?: string;
   destination_code?: string;
-  origin_name?: string;
-  destination_name?: string;
+  origin_name?: unknown;
+  destination_name?: unknown;
   plan_name?: string;
   is_active?: unknown;
 };
@@ -104,18 +102,39 @@ Deno.serve(async (req) => {
     return data;
   };
 
+  // What the admin typed -> candidate places, with the one to use picked by
+  // code (or the best match). Preview and create both go through this, so a
+  // route's names always come from the search, never from the client.
+  const resolve = async (
+    originInput: string,
+    destinationInput: string,
+    originCode?: string,
+    destinationCode?: string,
+  ) => {
+    const [originCandidates, destinationCandidates] = await Promise.all([
+      resolvePlace(originInput),
+      resolvePlace(destinationInput),
+    ]);
+    const pick = (list: Place[], code?: string) =>
+      (code && list.find((p) => p.code === code)) || list[0];
+    return {
+      originCandidates,
+      destinationCandidates,
+      origin: pick(originCandidates, originCode) as Place | undefined,
+      destination: pick(destinationCandidates, destinationCode) as Place | undefined,
+    };
+  };
+
   if (body.action === "preview") {
     if (typeof body.origin !== "string" || typeof body.destination !== "string") {
       return json({ error: INVALID }, 400);
     }
-    const [originCandidates, destinationCandidates] = await Promise.all([
-      resolvePlace(body.origin),
-      resolvePlace(body.destination),
-    ]);
-    const pick = (list: Place[], code?: string) =>
-      (code && list.find((p) => p.code === code)) || list[0];
-    const origin = pick(originCandidates, body.origin_code);
-    const destination = pick(destinationCandidates, body.destination_code);
+    const { origin, destination, originCandidates, destinationCandidates } = await resolve(
+      body.origin,
+      body.destination,
+      typeof body.origin_code === "string" ? body.origin_code.toUpperCase() : undefined,
+      typeof body.destination_code === "string" ? body.destination_code.toUpperCase() : undefined,
+    );
     if (!origin || !destination) {
       return json(
         {
@@ -157,17 +176,28 @@ Deno.serve(async (req) => {
   if (body.action === "create") {
     const originCode = String(body.origin_code ?? "").toUpperCase();
     const destinationCode = String(body.destination_code ?? "").toUpperCase();
-    const originName = cleanName(body.origin_name);
-    const destinationName = cleanName(body.destination_name);
     if (
+      typeof body.origin !== "string" ||
+      typeof body.destination !== "string" ||
       !IATA.test(originCode) ||
       !IATA.test(destinationCode) ||
-      originCode === destinationCode ||
-      !originName ||
-      !destinationName
+      originCode === destinationCode
     ) {
       return json({ error: INVALID }, 400);
     }
+    // The codes must still be what the search finds for the typed places; the
+    // names come from that same match.
+    const { origin, destination } = await resolve(
+      body.origin,
+      body.destination,
+      originCode,
+      destinationCode,
+    );
+    if (origin?.code !== originCode || destination?.code !== destinationCode) {
+      return json({ error: INVALID, reason: "place_mismatch" }, 422);
+    }
+    const originName = origin.name;
+    const destinationName = destination.name;
     const existing = await routeExists(originCode, destinationCode);
     if (existing) return json({ error: `此航線已存在：${existing.display_name}` }, 409);
 
@@ -216,32 +246,20 @@ Deno.serve(async (req) => {
 
   if (body.action === "update") {
     if (!body.plan_name) return json({ error: "plan_name is required" }, 400);
+    if (body.origin_name !== undefined || body.destination_name !== undefined) {
+      return json({ error: "航線名稱建立後不可修改 / Route names cannot be changed" }, 400);
+    }
+    if (typeof body.is_active !== "boolean") {
+      return json({ error: "is_active must be a boolean" }, 400);
+    }
     const { data: current } = await admin
       .from("routes")
-      .select("origin_name, destination_name")
+      .select("plan_name")
       .eq("plan_name", body.plan_name)
       .maybeSingle();
     if (!current) return json({ error: "unknown route" }, 404);
 
-    const patch: Record<string, unknown> = {};
-    if (body.is_active !== undefined) {
-      if (typeof body.is_active !== "boolean")
-        return json({ error: "is_active must be a boolean" }, 400);
-      patch.is_active = body.is_active;
-    }
-    if (body.origin_name !== undefined || body.destination_name !== undefined) {
-      const originName =
-        body.origin_name === undefined ? current.origin_name : cleanName(body.origin_name);
-      const destinationName =
-        body.destination_name === undefined
-          ? current.destination_name
-          : cleanName(body.destination_name);
-      if (!originName || !destinationName) return json({ error: "名稱需為 1–20 個字" }, 400);
-      patch.origin_name = originName;
-      patch.destination_name = destinationName;
-      patch.display_name = displayName(originName, destinationName);
-    }
-    if (!Object.keys(patch).length) return json({ error: "nothing to update" }, 400);
+    const patch = { is_active: body.is_active };
 
     const { data, error } = await admin
       .from("routes")

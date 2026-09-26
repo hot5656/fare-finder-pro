@@ -34,8 +34,6 @@ const inputClass =
   "h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 const primaryButton =
   "shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50";
-const outlineButton =
-  "shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-50";
 
 const fmtTwd = (n: number | null | undefined) =>
   n == null ? "—" : `NT$${Math.round(Number(n)).toLocaleString()}`;
@@ -66,7 +64,7 @@ function AdminRoutesPage() {
         <p className="mt-1 text-xs text-muted-foreground">
           停用：不再開放新訂閱，dashboard
           只對仍持有訂閱的使用者顯示；付費中的訂閱照常收到通知直到到期。
-          機場代碼建立後不可修改，代碼錯誤請停用後重新新增。
+          航線的代碼與名稱建立後都不可修改，建立錯誤請停用後改用其他代碼新增。
         </p>
         {routesQuery.isError ? (
           <p className="mt-4 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -104,8 +102,6 @@ function AddRouteForm() {
   const [originInput, setOriginInput] = useState("台北");
   const [destinationInput, setDestinationInput] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [originName, setOriginName] = useState("");
-  const [destinationName, setDestinationName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<string | null>(null);
   const [busy, setBusy] = useState<"preview" | "create" | null>(null);
@@ -137,8 +133,6 @@ function AddRouteForm() {
       // Keep the matched places even on a failed check, so the admin can pick
       // another candidate (e.g. a specific airport) and search again.
       setPreview(p.origin && p.destination ? p : null);
-      if (p.origin) setOriginName(p.origin.name);
-      if (p.destination) setDestinationName(p.destination.name);
       setError(ok && p.offer ? null : (p.error ?? INVALID));
     } catch {
       setPreview(null);
@@ -153,12 +147,13 @@ function AddRouteForm() {
     setBusy("create");
     setError(null);
     try {
+      // The server re-runs the same search and takes the names from it.
       const { ok, data } = await postRoutes({
         action: "create",
+        origin: originInput,
+        destination: destinationInput,
         origin_code: preview.origin.code,
         destination_code: preview.destination.code,
-        origin_name: originName,
-        destination_name: destinationName,
       });
       if (!ok) {
         setError(data.error ?? INVALID);
@@ -255,36 +250,21 @@ function AddRouteForm() {
                   {fmtDay(preview.offer.return_date)} 回
                 </span>
               </p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-                <label className="text-xs">
-                  <span className="text-muted-foreground">出發地顯示名稱</span>
-                  <input
-                    value={originName}
-                    onChange={(e) => setOriginName(e.target.value)}
-                    maxLength={20}
-                    className={`mt-1 ${inputClass}`}
-                  />
-                </label>
-                <label className="text-xs">
-                  <span className="text-muted-foreground">目的地顯示名稱</span>
-                  <input
-                    value={destinationName}
-                    onChange={(e) => setDestinationName(e.target.value)}
-                    maxLength={20}
-                    className={`mt-1 ${inputClass}`}
-                  />
-                </label>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <p>
+                  將顯示為「{preview.origin.name} ✈ {preview.destination.name}」
+                  <span className="block text-xs text-muted-foreground">
+                    名稱取自辨識結果，建立後與代碼一樣不可修改。
+                  </span>
+                </p>
                 <button
                   onClick={handleCreate}
-                  disabled={!ready || !!busy || !originName.trim() || !destinationName.trim()}
+                  disabled={!ready || !!busy}
                   className={primaryButton}
                 >
                   {busy === "create" ? "新增中…" : "確認新增"}
                 </button>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                將顯示為「{originName.trim()} ✈ {destinationName.trim()}」
-              </p>
             </>
           )}
         </div>
@@ -340,21 +320,15 @@ function CandidatePicker({
 
 function RouteRow({ route }: { route: Route_ }) {
   const queryClient = useQueryClient();
-  const [editing, setEditing] = useState(false);
-  const [originName, setOriginName] = useState(route.origin_name);
-  const [destinationName, setDestinationName] = useState(route.destination_name);
   const [error, setError] = useState<string | null>(null);
 
+  // The on/off switch is the only edit: codes and names are fixed at creation.
   const mutation = useMutation({
-    mutationFn: async (patch: {
-      is_active?: boolean;
-      origin_name?: string;
-      destination_name?: string;
-    }) => {
+    mutationFn: async (isActive: boolean) => {
       const { ok, data } = await postRoutes({
         action: "update",
         plan_name: route.plan_name,
-        ...patch,
+        is_active: isActive,
       });
       if (!ok) throw new Error(data.error ?? "update failed");
       return data as Route_;
@@ -365,7 +339,6 @@ function RouteRow({ route }: { route: Route_ }) {
         old?.map((r) => (r.plan_name === row.plan_name ? row : r)),
       );
       queryClient.invalidateQueries({ queryKey: ["flight", "routes"] });
-      setEditing(false);
     },
     onError: (e) => setError(e instanceof Error ? e.message : "儲存失敗 Save failed"),
   });
@@ -375,55 +348,7 @@ function RouteRow({ route }: { route: Route_ }) {
       className={`border-t border-border/60 align-top ${route.is_active ? "" : "text-muted-foreground"}`}
     >
       <td className="px-4 py-2">
-        {editing ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              value={originName}
-              onChange={(e) => setOriginName(e.target.value)}
-              maxLength={20}
-              aria-label="出發地顯示名稱"
-              className={`${inputClass} w-24`}
-            />
-            <span>✈</span>
-            <input
-              value={destinationName}
-              onChange={(e) => setDestinationName(e.target.value)}
-              maxLength={20}
-              aria-label="目的地顯示名稱"
-              className={`${inputClass} w-24`}
-            />
-            <button
-              onClick={() =>
-                mutation.mutate({ origin_name: originName, destination_name: destinationName })
-              }
-              disabled={mutation.isPending || !originName.trim() || !destinationName.trim()}
-              className={outlineButton}
-            >
-              {mutation.isPending ? "儲存中…" : "儲存"}
-            </button>
-            <button
-              onClick={() => {
-                setEditing(false);
-                setOriginName(route.origin_name);
-                setDestinationName(route.destination_name);
-              }}
-              disabled={mutation.isPending}
-              className={outlineButton}
-            >
-              取消
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span>{route.display_name}</span>
-            <button
-              onClick={() => setEditing(true)}
-              className="text-xs text-muted-foreground underline hover:text-foreground"
-            >
-              編輯名稱
-            </button>
-          </div>
-        )}
+        {route.display_name}
         {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
       </td>
       <td className="px-4 py-2 font-mono text-xs">{route.route}</td>
@@ -436,7 +361,7 @@ function RouteRow({ route }: { route: Route_ }) {
           checked={route.is_active}
           aria-label={`${route.display_name} 啟用`}
           onCheckedChange={(checked) => {
-            if (!mutation.isPending) mutation.mutate({ is_active: checked });
+            if (!mutation.isPending) mutation.mutate(checked);
           }}
         />
       </td>

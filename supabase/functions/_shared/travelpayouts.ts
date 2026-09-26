@@ -195,8 +195,8 @@ function rank(places: Place[]): Place[] {
 }
 
 // What the admin typed ("大阪", "臺北", "OSA") -> candidate places, best first.
-// Empty = not a place Travelpayouts knows. The name is a suggestion the admin
-// can still edit before saving.
+// Empty = not a place Travelpayouts knows. The name becomes the route's
+// Chinese name as is (flight-admin-routes never takes one from the client).
 export async function resolvePlace(input: string): Promise<Place[]> {
   const term = input.trim();
   if (!term || term.length > 30) return [];
