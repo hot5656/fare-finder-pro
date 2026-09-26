@@ -51,6 +51,9 @@ async function postRoutes(body: unknown) {
 // check inside); reads go through RLS like the rest of /admin.
 function AdminRoutesPage() {
   const routesQuery = useAdminRoutes();
+  // A failed switch reports here, under the table, so nothing in the table
+  // moves when it appears.
+  const [switchError, setSwitchError] = useState<string | null>(null);
   const routes = [...(routesQuery.data ?? [])].sort((a, b) =>
     (a.created_at ?? "").localeCompare(b.created_at ?? ""),
   );
@@ -74,7 +77,16 @@ function AdminRoutesPage() {
           <p className="mt-4 text-sm text-muted-foreground">Loading…</p>
         ) : (
           <div className="mt-4 overflow-x-auto rounded-2xl border border-border">
-            <table className="w-full text-left text-sm">
+            {/* Fixed column widths: a save, an error or a new price never
+                reflows the other columns. */}
+            <table className="w-full min-w-[44rem] table-fixed text-left text-sm">
+              <colgroup>
+                <col />
+                <col className="w-28" />
+                <col className="w-48" />
+                <col className="w-52" />
+                <col className="w-32" />
+              </colgroup>
               <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                 <tr>
                   <th className="px-4 py-2">航線 Route</th>
@@ -86,11 +98,16 @@ function AdminRoutesPage() {
               </thead>
               <tbody>
                 {routes.map((r) => (
-                  <RouteRow key={r.plan_name} route={r} />
+                  <RouteRow key={r.plan_name} route={r} onError={setSwitchError} />
                 ))}
               </tbody>
             </table>
           </div>
+        )}
+        {switchError && (
+          <p className="mt-3 rounded-lg bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            {switchError}
+          </p>
         )}
       </section>
     </>
@@ -318,9 +335,14 @@ function CandidatePicker({
   );
 }
 
-function RouteRow({ route }: { route: Route_ }) {
+function RouteRow({
+  route,
+  onError,
+}: {
+  route: Route_;
+  onError: (message: string | null) => void;
+}) {
   const queryClient = useQueryClient();
-  const [error, setError] = useState<string | null>(null);
 
   // The on/off switch is the only edit: codes and names are fixed at creation.
   const mutation = useMutation({
@@ -333,33 +355,37 @@ function RouteRow({ route }: { route: Route_ }) {
       if (!ok) throw new Error(data.error ?? "update failed");
       return data as Route_;
     },
-    onMutate: () => setError(null),
+    onMutate: () => onError(null),
     onSuccess: (row) => {
       queryClient.setQueryData<Route_[]>(["admin", "routes"], (old) =>
         old?.map((r) => (r.plan_name === row.plan_name ? row : r)),
       );
       queryClient.invalidateQueries({ queryKey: ["flight", "routes"] });
     },
-    onError: (e) => setError(e instanceof Error ? e.message : "儲存失敗 Save failed"),
+    onError: (e) =>
+      onError(`${route.display_name}：${e instanceof Error ? e.message : "儲存失敗 Save failed"}`),
   });
 
   return (
     <tr
       className={`border-t border-border/60 align-top ${route.is_active ? "" : "text-muted-foreground"}`}
     >
-      <td className="px-4 py-2">
-        {route.display_name}
-        {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
-      </td>
+      <td className="break-words px-4 py-2">{route.display_name}</td>
       <td className="px-4 py-2 font-mono text-xs">{route.route}</td>
       <td className="px-4 py-2">
         {route.last_price != null ? fmtTwd(route.last_price) : "尚無價格"}
       </td>
       <td className="px-4 py-2 text-muted-foreground">{fmtDateTime(route.last_checked_at)}</td>
       <td className="px-4 py-2">
+        {/* Optimistic: the switch flips on click while the save (1-3 s through
+            the Edge Function) runs, and snaps back if it fails. While saving it
+            pulses instead of showing text, so the row keeps its size. Clicks
+            during a save are ignored so two saves can't land out of order. */}
         <Switch
-          checked={route.is_active}
+          checked={mutation.isPending ? mutation.variables : route.is_active}
           aria-label={`${route.display_name} 啟用`}
+          aria-busy={mutation.isPending}
+          className={mutation.isPending ? "animate-pulse opacity-60" : undefined}
           onCheckedChange={(checked) => {
             if (!mutation.isPending) mutation.mutate(checked);
           }}
