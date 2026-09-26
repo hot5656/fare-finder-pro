@@ -8,7 +8,7 @@
 > 相關檔案（本檔不取代它們）：
 > - v1.0 大綱（付費流程＋技術）：`docs/ppt-outline.md` → `docs/flight-price-notifier_v1.0_2026_0921.pptx`
 > - v1.1 使用者版（只有免費訂閱）：`docs/ppt-outline_1.1_user.md` → `docs/flight-price-notifier_v1.1_user_2026_0926.pptx`
-> 預定成品：`docs/flight-price-notifier_v1.1_system_2026_0926.pptx`
+> 成品：`docs/flight-price-notifier_v1.1_system_2026_0926.pptx`（26 張），由 `docs/deck/build-system.js` 產生（`npm run build:system`）
 
 ---
 
@@ -44,7 +44,8 @@
 - **畫面**：`17-landing-full.png`
 
 ### Slide 5 — 可以追蹤哪些航線 〔沿用 v1.1 user，補充 Admin 新增〕
-- 目前 4 條：台北 ✈ 東京、台北 ✈ 首爾、台北 ✈ 倫敦、東京 ✈ 紐約
+- 使用者目前看得到 4 條：台北 ✈ 東京、台北 ✈ 首爾、台北 ✈ 倫敦、東京 ✈ 紐約
+  - 後台另有台北 ✈ 大阪：2026-09-26 測試時新增、測完停用（航線不能刪除，停用後一般使用者看不到）
 - 航線由管理員從後台新增（見 Slide 19），不用改程式
 - 每條航線各自設定目標價、各自訂閱；票價以**來回、新台幣**計算，附約當美金
 - 卡片顯示「最後查詢（來回）」價格與時間，約**每 30 分鐘**更新
@@ -74,7 +75,7 @@
 - 免費：尚未訂閱 → 免費 · 有效中 →（到期或取消）→ 已結束 → 免費重新訂閱
 - 付費：未完成付款 → 已訂閱（有效）→ 已取消（有效至到期日）→ 已結束
   - 續扣失敗：寄扣款失敗信；超過到期日 7 天寬限期仍未續扣 → 已結束
-- **畫面**：雙泳道狀態圖；旁放 `27-dashboard-free-subscribed.png`、`31-dashboard-free-ended.png`、`14-dashboard-cancelled.png` 的卡片裁切
+- **畫面**：雙泳道狀態圖；旁放 `27-dashboard-free-subscribed.png`、`31-dashboard-free-ended.png`、`14-dashboard-cancelled.png` 的卡片裁切（`14` 為舊版卡片文字，見 Slide 14 備註）
 
 ### Slide 9 — 你會收到哪些信（兩種模式合併）
 | 時機 | 免費模式 | 付費模式 |
@@ -121,13 +122,13 @@
 - 付款完成自動導回 Dashboard，顯示「付款完成，訂閱正在生效中…」→ 標籤「已訂閱（有效）」
 - 付款失敗或中途離開：標籤「未完成付款」，按「完成付款」重試
 - **畫面**：`08-ecpay-cashier-top.png`、`10-dashboard-payment-success.png`
-- **備註**：`10` 是舊網址（fare-finder-pro.vercel.app）時拍的，網址列要裁掉，或在 flights.roberthut.com 付費模式下重拍
+- **備註**：`10`、`11`、`14` 是 2026-09-21 拍的（只拍頁面、沒有網址列），但卡片文字是舊版：「目標價 TWD」「最後查詢：」，現在是「來回目標價 TWD」「最後查詢（來回）」；流程與按鈕相同。要完全一致需開啟「使用綠界付款」後重拍（會用到 stage 測試付款）
 
 ### Slide 15 — Step 4：管理訂閱
 - **調整目標價**：改數字 →「更新目標價」，立即生效（付費模式不用重新付款）
 - **取消訂閱**：
   - 免費：「確定要取消訂閱？取消後立即停止通知。」（`30-dashboard-free-cancel-confirm.png`）
-  - 付費：「確定要取消訂閱？已付款的期間內仍會收到通知。」（`11-cancel-confirm.png`）
+  - 付費：「確定要取消訂閱？已付款的期間內仍會收到通知。」（`11-cancel-confirm.png`，舊版卡片文字）
 - **重新訂閱**：已結束後按「免費重新訂閱」／「重新訂閱」（`31-dashboard-free-ended.png`）
 
 ### Slide 16 — Demo（使用者端）
@@ -140,7 +141,7 @@
 
 ### Slide 17 — 誰看得到後台
 - 只有管理員帳號的 Dashboard 右上角會出現「Admin」按鈕
-- 按鈕只是入口；後台資料由資料庫權限（`flight.is_admin()` + RLS）把關，一般帳號直接輸入網址也讀不到
+- 一般帳號直接輸入 `/admin` 會被導回 Dashboard（2026-09-26 修正 D-8）；後台資料另由資料庫權限（`flight.is_admin()` + RLS）把關，就算畫面被繞過也讀不到
 - 後台分頁：總覽、航線、所有訂閱、註冊用戶、通知紀錄、查價紀錄
 - **畫面**：`34-dashboard-admin-button.png`（Dashboard 右上角 Admin 按鈕）
 
@@ -152,23 +153,23 @@
   - **使用綠界付款 / Require ECPay payment**：開＝付費模式；關＝免費模式（Slide 7）
   - **價格對照 / v1 price comparison**：通知信是否附另一個票價來源的對照區塊
   - **測試：強制到期 / Testing: force expire**：僅供測試，開啟後可把已取消的訂閱立即到期
-- **畫面**：`35-admin-overview.png`（橫幅＋統計卡片）、`36-admin-settings.png`（三個開關＋航線最新價格）
+- **畫面**：`35-admin-overview.png`（橫幅＋統計卡片）、`36-admin-settings.png`（三個開關＋航線最新價格；截圖時「強制到期」為開啟，現在已關閉）
 
 ### Slide 19 — 航線管理 Routes
 - 「新增航線 Add route」：輸入中文城市名（例如「台北」「大阪」）或三碼代碼（例如 OSA）
 - 「查詢價格」：系統即時查下個月的來回最低價並顯示辨識結果，**查得到價格才可新增**
-- 「確認新增」後使用者 Dashboard 立即看到新航線
-- 只能切換「啟用 Active」；航線名稱取自辨識結果，與代碼一樣建立後不可修改
+- 預覽顯示「將顯示為「台北 ✈ 福岡」」：航線名稱取自辨識結果，不能自己輸入
+- 「確認新增」時伺服器會再查一次票價與地名，使用者 Dashboard 立即看到新航線
+- 列表只能切換「啟用 Active」；代碼與名稱建立後都不可修改，建立錯誤請停用後改用其他代碼新增（同代碼會回「此航線已存在」）
   - 停用：不再開放新訂閱，只對仍持有訂閱的使用者顯示；付費中的訂閱照常通知到到期
-- 機場代碼建立後不可修改；代碼錯誤請停用後重新新增
-- **畫面**：`37-admin-routes-add.png`（台北 → 大阪：TPE／OSA、2026-10 來回最低 NT$6,992，未按確認新增）、`38-admin-routes-list.png`
+- **畫面**：`37-admin-routes-add.png`（台北 → 福岡：TPE／FUK、2026-10 來回最低 NT$7,928，未按確認新增）、`38-admin-routes-list.png`（台北 ✈ 大阪為停用）
 
 ### Slide 20 — 所有訂閱、註冊用戶、手動發送
 - **所有訂閱**：搜尋 email 或航線；看狀態、付款方式（免費／綠界）、到期日、扣款失敗時間、成功扣款次數
   - **手動發送**：目前已達標的訂閱可按「手動發送」→「確定發送？」立即寄通知信（紀錄標記為 admin 手動觸發）
   - **強制到期**：測試開關開啟時，已取消的訂閱可立即改為已結束並寄到期信
 - **註冊用戶**：本 app 的使用者清單（搜尋 email；註冊時間、email 驗證時間、最後登入、訂閱數、付費中數；管理員帳號有 Admin 標籤）
-- **畫面**：`39-admin-subscriptions.png`、`40-admin-users.png`
+- **畫面**：`39-admin-subscriptions.png`（截圖時強制到期開關為開啟，所以有「強制到期」按鈕）、`40-admin-users.png`
 
 ### Slide 21 — 通知紀錄與查價紀錄
 - **通知紀錄 Notification history**：每封降價通知的時間、航線、價格，區分「自動 Auto／手動 Manual」
@@ -206,11 +207,12 @@
 
 ## 第六部分：品質與收尾
 
-### Slide 25 — 測試結果 〔取自 v1.0，更新到 09-25〕
-- 測試計畫 92 個用例：**90 通過、2 部分驗證、0 失敗**（含綠界排程真實續扣；不含 8.8、8.9）
-- 免費模式開關 10 項全數通過（2026-09-24，P10 於 09-26 補測）
-- 2026-09-25 新網域實測註冊與付款，找到並修正 email 含 `+` 無法啟用的問題
-- **備註**：數字取自 `docs/test-report.md`，製作前再確認一次
+### Slide 25 — 測試結果 〔取自 v1.0，更新到 09-26〕
+- 測試計畫全部 114 個用例：**111 通過、3 部分驗證、0 未執行、0 失敗**
+- 核心功能 92 項：91 通過（含綠界排程真實續扣），H3 僅程式碼審查
+- 免費模式開關 10 項全數通過；管理員後台 12 項：10 通過、2 部分驗證（AD-04、AD-06）
+- 測試中發現並修正 9 個缺陷（D-1～D-9），例如 email 含 `+` 付款後無法啟用（D-7）、非管理員直接開網址會看到後台畫面（D-8，資料受 RLS 保護未外洩）
+- **備註**：數字取自 `docs/test-report.md`，2026-09-26 最後一輪測試後核對。部分驗證的 3 項：H3（USD 取價失敗，只做程式碼審查）、AD-04（查價健康橫幅的兩種錯誤狀態）、AD-06（新增航線預覽的 422／409）
 
 ### Slide 26 — 未來規劃、Q&A 與聯絡
 - 改用正式綠界特店、決定何時從免費模式切回付費
@@ -229,7 +231,7 @@
 |---|---|---|
 | `16`–`32` | v1.1 user（flights.roberthut.com，免費模式，2026-09-25） | Slide 1、4–6、8、9、11–13、15 |
 | `08-ecpay-cashier-top.png` | v1.0（綠界收銀台，網址與網域無關） | Slide 14 |
-| `10-dashboard-payment-success.png`、`11-cancel-confirm.png`、`14-dashboard-cancelled.png` | v1.0（**舊網址**，裁掉網址列或重拍） | Slide 8、14、15 |
+| `10-dashboard-payment-success.png`、`11-cancel-confirm.png`、`14-dashboard-cancelled.png` | v1.0（2026-09-21；沒有網址列，但卡片是舊版文字「目標價 TWD」，要一致需付費模式重拍） | Slide 8、14、15 |
 | `13-welcome-email.png`、`15-cancel-email.png` | v1.0（付費版信件） | Slide 9 |
 
 - 不使用：`01`–`07`（舊首頁、舊註冊頁）、`09`（完整測試卡表單）、`12`（已被 `29` 取代）
@@ -240,16 +242,16 @@
 | `33-dashboard-stale-fare.png` | 卡片「目前暫無最新票價」提示 | Slide 5 |
 | `34-dashboard-admin-button.png` | 管理員 Dashboard 右上角 Admin 按鈕 | Slide 17 |
 | `35-admin-overview.png` | 總覽統計卡片＋查價健康橫幅 | Slide 18 |
-| `36-admin-settings.png` | 三個設定開關 | Slide 18 |
-| `37-admin-routes-add.png` | 新增航線：查詢價格後的辨識結果 | Slide 19 |
-| `38-admin-routes-list.png` | 航線列表（啟用開關；部署後重拍，舊圖有「編輯名稱」） | Slide 19 |
-| `39-admin-subscriptions.png` | 所有訂閱（含手動發送按鈕） | Slide 20 |
+| `36-admin-settings.png` | 三個設定開關（「強制到期」當時為開啟） | Slide 18 |
+| `37-admin-routes-add.png` | 新增航線預覽（台北 → 福岡，名稱取自辨識結果；2026-09-26 名稱鎖定上線後重拍） | Slide 19 |
+| `38-admin-routes-list.png` | 航線列表（只有啟用開關；2026-09-26 名稱鎖定上線後重拍，台北 ✈ 大阪為停用） | Slide 19 |
+| `39-admin-subscriptions.png` | 所有訂閱（含手動發送與強制到期按鈕；強制到期開關當時為開啟） | Slide 20 |
 | `40-admin-users.png` | 註冊用戶 | Slide 20 |
 | `41-admin-notifications.png` | 通知紀錄（自動／手動） | Slide 21 |
 | `42-admin-runs.png` | 查價紀錄（只看異常） | Slide 21 |
 
 ## 製作提醒
-- 成品另存 `docs/flight-price-notifier_v1.1_system_2026_0926.pptx`，**不覆蓋** v1.0 與 v1.1 user 的 pptx、大綱與截圖；產生器沿用 `docs/deck/build.js` 時另開 `build-system.js`（或加參數），不要改掉 user 版的輸出
+- 成品 `docs/flight-price-notifier_v1.1_system_2026_0926.pptx` 由 `docs/deck/build-system.js`（`npm run build:system`）產生，與 user 版的 `build.js` 分開，互不覆蓋；v1.0 與 v1.1 user 的 pptx、大綱與截圖不動
 - 截圖用 localhost:8080 或正式站皆可，Admin 頁的 email 一律遮成 `demo@example.com`；不放訂單編號、金鑰、Supabase 專案識別碼
 - 付費模式截圖若要在正式站重拍，需暫時開啟「使用綠界付款」，拍完記得切回免費模式並取消測試訂閱
 - 風格沿用 v1.1 user：深青綠底、紅色強調
