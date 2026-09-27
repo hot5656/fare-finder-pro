@@ -1,6 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { FadeIn } from "@/components/FadeIn";
 import { SiteHeader } from "@/components/SiteHeader";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -20,10 +21,21 @@ export const Route = createFileRoute("/")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
+  // Admin switch (flight.settings payment_required), read in the loader so SSR
+  // renders the right wording. Only an explicit false means free; missing or
+  // unreadable keeps the paid wording, like the dashboard and flight-subscribe.
+  loader: async () => {
+    const { data, error } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", "payment_required")
+      .maybeSingle();
+    return { paymentRequired: error ? true : data?.value !== false };
+  },
   component: LandingPage,
 });
 
-const features = [
+const features = (paymentRequired: boolean) => [
   {
     icon: "✈️",
     title: "盯緊熱門航線",
@@ -40,11 +52,14 @@ const features = [
     icon: "🚫",
     title: "隨時取消",
     subtitle: "Cancel anytime",
-    description: "月訂閱制，不想用隨時停，沒有綁約。",
+    description: paymentRequired
+      ? "月訂閱制，不想用隨時停，沒有綁約。"
+      : "目前免費使用，不想用隨時停。",
   },
 ];
 
 function LandingPage() {
+  const { paymentRequired } = Route.useLoaderData();
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
@@ -85,7 +100,7 @@ function LandingPage() {
       {/* Features */}
       <section className="mx-auto max-w-6xl px-4 pb-24 sm:px-6">
         <div className="grid gap-6 sm:grid-cols-3">
-          {features.map((f, i) => (
+          {features(paymentRequired).map((f, i) => (
             <FadeIn key={f.title} delay={i * 120}>
               <div className="h-full rounded-2xl border border-border bg-card p-8 transition-colors hover:border-primary/40">
                 <div className="text-3xl" aria-hidden>
