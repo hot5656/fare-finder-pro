@@ -19,7 +19,7 @@ Three feature cards below the hero, each with an icon, a Chinese title, an
 English subtitle, and a one-line Chinese description:
 
 Card 1: ✈️ icon — "盯緊熱門航線" / "Always-on route watching" —
-"持續監控台北出發的熱門航線（東京、首爾），自動抓最低票價。"
+"持續監控熱門航線（東京、首爾、倫敦等），自動抓最低票價。"
 
 Card 2: 🔔 icon — "達標自動通知" / "Target-price email alerts" —
 "低於你設定的目標價，就寄 email 提醒你，附上立即訂購連結。"

@@ -527,7 +527,7 @@ async function main() {
       txt(s, body, { x: 1.75, y: y + 0.47, w: 4.6, h: 0.75, fontSize: 14, color: C.muted });
     });
     framed(s, shot("17-landing-full.png"), 7.0, 1.75, 5.7, 2530 / 2018);
-    s.addNotes("首頁第一張卡片寫「台北出發」，口頭補充目前也有東京 ✈ 紐約。");
+    s.addNotes("首頁第一張卡片不限台北出發，口頭補充目前也有東京 ✈ 紐約。");
   }
 
   // 5 — Routes
