@@ -9,7 +9,7 @@ Flight Price Notifier (機票降價通知): users subscribe to a route (Taipei t
 - **Front-end** (`src/`): TanStack Start (React 19, file-based routing, SSR) + Tailwind v4 + shadcn/Radix UI in `src/components/ui/`. Built with Lovable and synced with it.
 - **Back-end** (`supabase/`): Postgres schema `flight` + Deno Edge Functions on a **shared, multi-app Supabase project** (`luugfvsrawnuzwpjvddt`). There is no application server of our own.
 
-`docs/m1-session-handoff.md` is the living state-of-the-world doc (what is deployed, verified, test data left behind, lessons learned, backlog). Read it before touching payments, cron or the Edge Functions. The M1/M2 build and verification recipes are in `.claude/skills/`.
+`docs/m1-session-handoff.md` is the living state-of-the-world doc (what is deployed, verified, test data left behind, lessons learned, backlog). Read it before touching payments, cron or the Edge Functions. `docs/design-discussions.md` logs design topics (D-1, D-2, …; proposals, evaluations, status) in Traditional Chinese; add new topics there, and once one ships, update the runbook docs and this file with the result. The M1/M2 build and verification recipes are in `.claude/skills/`.
 
 ## Commands
 
