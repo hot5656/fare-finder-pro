@@ -44,6 +44,11 @@ const APPS: Record<string, AppIdentity> = {
     product: "案件管理系統",
     short: "案件管理系統",
   },
+  "video-read": {
+    sender: "Video Speed Reader <noreply@roberthut.com>",
+    product: "Video Speed Reader（影片逐字稿）",
+    short: "影片逐字稿",
+  },
 };
 const DEFAULT_APP: AppIdentity = {
   sender: "System Notification <noreply@roberthut.com>",
