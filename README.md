@@ -369,3 +369,5 @@ Auth 的寄信動作，改成呼叫 Resend 的 API（不是走 SMTP 協定）寄
    - 在 app 用新 email 註冊，確認收到信、Resend Dashboard 的 Logs 有出現這筆寄送紀錄
    - 若失敗，先看 Supabase Dashboard → **Edge Functions** → `send-email` 的 log，
      常見錯誤是 hook secret 沒對上，或 Resend 網域還沒驗證完成
+
+update 2026/10/07 - update to correct email
